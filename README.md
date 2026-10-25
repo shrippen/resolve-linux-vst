@@ -68,15 +68,16 @@ Plugin (eigener Dispatcher und Host-Callback) und teilt `effEditGetRect` und
 Wie groß das Plugin selbst zeichnet, entscheidet das Plugin:
 
 - **Qt-/Linux-Plugins** wie Carla erben die Skalierung aus der Umgebung.
-- **Windows-Plugins über yabridge** zeichnen mit der DPI des Wine-Prefix. Bottles'
-  `custom_dpi` gilt dafür nicht (yabridge startet Wine selbst); die DPI steht in der Registry:
+- **Windows-Plugins über yabridge** zeichnen mit der DPI ihres Wine-Prefix
+  (`HKCU\Control Panel\Desktop\LogPixels`, Standard 96). Bottles' `custom_dpi` gilt dafür
+  nicht, yabridge startet Wine selbst. Der Lader stellt den Wert darum vor dem Laden eines
+  yabridge-Plugins auf `96 × Resolves Faktor` (Prefix über die `.dll` neben der `.so`,
+  `wine reg add` über `$WINELOADER` wie yabridge). Nur in resolve, je Prefix einmal pro
+  Sitzung, und nur wenn der Wert abweicht.
 
-  ```sh
-  WINEPREFIX=~/.local/share/bottles/bottles/Audio \
-    wine reg add 'HKCU\Control Panel\Desktop' /v LogPixels /t REG_DWORD /d 240 /f
-  ```
-
-  `240` = Faktor 2,5 (96 × 2,5); gilt für alle Plugins in diesem Prefix.
+  Wine kennt keine DPI pro Prozess: Der Wert gilt für das ganze Prefix, also auch in anderen
+  Hosts, und ein schon laufender Plugin-Prozess übernimmt ihn erst nach einem Neustart.
+  `RESOLVE_VST_WINE_DPI` legt ihn fest, `0` schaltet das ab.
 
 ## Umgebungsvariablen
 
@@ -85,6 +86,7 @@ Wie groß das Plugin selbst zeichnet, entscheidet das Plugin:
 | `RESOLVE_VST_LOG` | Logdatei (Standard `~/.local/state/resolve-vst/resolve-vst.log`, `-` = stderr) |
 | `RESOLVE_VST_LINKS` | Ordner für die `.vst`-Links (Standard `~/.local/share/resolve-vst/vst`) |
 | `RESOLVE_VST_EDITOR_SCALE` | Skalierung der Editorgröße festlegen (Standard: Faktor von Resolves Fenster; `1` = aus) |
+| `RESOLVE_VST_WINE_DPI` | DPI für yabridge-Prefixe festlegen (Standard: 96 × Faktor; `0` = nicht anfassen) |
 | `RESOLVE_VST_DEEPBIND=1` | Plugins mit `RTLD_DEEPBIND` laden (bei Symbolkonflikten mit Resolve) |
 | `RESOLVE_BIN` | Pfad zu Resolve (Standard `/opt/resolve/bin/resolve`) |
 | `VST_PATH` | Suchpfade für VST2, durch `:` getrennt |

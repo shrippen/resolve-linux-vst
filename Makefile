@@ -1,12 +1,12 @@
 CXX      ?= g++
 CXXFLAGS ?= -O2 -g -Wall -Wextra
 CXXFLAGS += -std=c++17 -fPIC -fvisibility=hidden -fno-exceptions -fno-rtti -fvisibility-inlines-hidden
-LDFLAGS  += -shared -Wl,-z,defs -static-libstdc++ -static-libgcc -Wl,--exclude-libs,ALL
+LDFLAGS  += -shared -Wl,-z,defs -static-libstdc++ -static-libgcc -Wl,--exclude-libs,ALL -Wl,--version-script=src/exports.map
 LDLIBS   += -ldl
 
 BUILD ?= build
 
-$(BUILD)/libresolve-vst.so: src/resolve_vst.cpp
+$(BUILD)/libresolve-vst.so: src/resolve_vst.cpp src/exports.map
 	@mkdir -p $(BUILD)
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $< $(LDLIBS)
 

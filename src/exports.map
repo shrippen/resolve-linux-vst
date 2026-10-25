@@ -1,0 +1,7 @@
+/* Nur die Funktionen exportieren, die Resolves leere Rümpfe ersetzen. */
+{
+    global:
+        _ZN15VSTPluginLoader4LoadEPKwPFlP7AEffectiilPvfERb;
+        _ZN15VSTPluginLoader5CloseEv;
+    local: *;
+};

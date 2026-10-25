@@ -15,6 +15,8 @@
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
+#include <spawn.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 #include <atomic>
@@ -28,6 +30,7 @@
 #include <ctime>
 #include <mutex>
 #include <string>
+#include <vector>
 
 #define EXPORT __attribute__((visibility("default"), used, noinline))
 
@@ -261,6 +264,141 @@ void wrap(AEffect *effect)
     logf("  zu viele Plugin-Instanzen, Editorgröße wird nicht angepasst");
 }
 
+// Wine-DPI: Windows-Plugins über yabridge zeichnen mit der DPI ihres Wine-Prefix
+// (HKCU\Control Panel\Desktop\LogPixels, Standard 96). Wine kennt keine DPI pro Prozess;
+// der Wert gilt für das ganze Prefix und wird beim Start des Plugin-Prozesses gelesen.
+// Darum wird er vor dem Laden eines yabridge-Plugins auf 96 × Resolves Faktor gestellt,
+// nur in resolve selbst (der Scanner zeigt keine Editoren) und je Prefix einmal.
+
+bool isResolveProcess()
+{
+    char exe[4096];
+    ssize_t n = readlink("/proc/self/exe", exe, sizeof exe - 1);
+    if (n <= 0)
+        return false;
+    exe[n] = 0;
+    const char *base = strrchr(exe, '/');
+    return strcmp(base ? base + 1 : exe, "resolve") == 0;
+}
+
+// yabridge legt neben Name.so die Name.dll ab, meist als Symlink in den Prefix.
+std::string winePrefixFor(const std::string &so)
+{
+    if (so.size() < 3 || so.compare(so.size() - 3, 3, ".so") != 0)
+        return {};
+    const std::string dll = so.substr(0, so.size() - 3) + ".dll";
+    char *real = realpath(dll.c_str(), nullptr);
+    if (!real)
+        return {};
+    std::string path = real;
+    free(real);
+    size_t pos = path.find("/drive_c/");
+    return pos == std::string::npos ? std::string() : path.substr(0, pos);
+}
+
+// LogPixels aus user.reg (Textformat von Wine); -1, wenn nicht gesetzt.
+int currentWineDpi(const std::string &prefix)
+{
+    FILE *f = fopen((prefix + "/user.reg").c_str(), "r");
+    if (!f)
+        return -1;
+    int dpi = -1;
+    bool inDesktop = false;
+    char line[1024];
+    while (fgets(line, sizeof line, f)) {
+        if (line[0] == '[') {
+            inDesktop = strncmp(line, "[Control Panel\\\\Desktop]", 24) == 0;
+            continue;
+        }
+        unsigned value;
+        if (inDesktop && sscanf(line, "\"LogPixels\"=dword:%x", &value) == 1) {
+            dpi = int(value);
+            break;
+        }
+    }
+    fclose(f);
+    return dpi;
+}
+
+int wantedWineDpi()
+{
+    if (const char *env = getenv("RESOLVE_VST_WINE_DPI"))
+        return atoi(env); // 0 = nicht anfassen
+    return int(lround(96 * editorScale()));
+}
+
+bool setWineDpi(const std::string &prefix, int dpi)
+{
+    const char *loader = getenv("WINELOADER"); // wie yabridge, z. B. Runner aus bottle.yml
+    std::string wine = loader && *loader ? loader : "wine";
+    std::string dpiArg = std::to_string(dpi);
+    const char *argv[] = {wine.c_str(), "reg", "add", "HKCU\\Control Panel\\Desktop", "/v", "LogPixels",
+                          "/t", "REG_DWORD", "/d", dpiArg.c_str(), "/f", nullptr};
+
+    std::vector<std::string> env;
+    for (char **e = environ; *e; ++e)
+        if (strncmp(*e, "WINEPREFIX=", 11) != 0 && strncmp(*e, "WINEDEBUG=", 10) != 0
+            && strncmp(*e, "LD_PRELOAD=", 11) != 0)
+            env.emplace_back(*e);
+    env.push_back("WINEPREFIX=" + prefix);
+    env.push_back("WINEDEBUG=-all");
+    std::vector<char *> envp;
+    for (auto &e : env)
+        envp.push_back(e.data());
+    envp.push_back(nullptr);
+
+    posix_spawn_file_actions_t actions;
+    posix_spawn_file_actions_init(&actions);
+    posix_spawn_file_actions_addopen(&actions, STDOUT_FILENO, "/dev/null", O_WRONLY, 0);
+    posix_spawn_file_actions_addopen(&actions, STDERR_FILENO, "/dev/null", O_WRONLY, 0);
+    pid_t pid;
+    int err = posix_spawnp(&pid, wine.c_str(), &actions, nullptr, const_cast<char **>(argv), envp.data());
+    posix_spawn_file_actions_destroy(&actions);
+    if (err != 0) {
+        logf("  Wine-DPI: %s nicht startbar: %s", wine.c_str(), strerror(err));
+        return false;
+    }
+    int status = 0;
+    if (waitpid(pid, &status, 0) != pid || !WIFEXITED(status) || WEXITSTATUS(status) != 0) {
+        logf("  Wine-DPI: wine reg add fehlgeschlagen (Status %d)", status);
+        return false;
+    }
+    return true;
+}
+
+void syncWineDpi(const std::string &so)
+{
+    static const bool inResolve = isResolveProcess();
+    static std::mutex mutex;
+    static std::vector<std::string> done;
+    if (!inResolve)
+        return;
+    const std::string prefix = winePrefixFor(so);
+    if (prefix.empty())
+        return;
+    std::lock_guard lock(mutex);
+    for (const auto &p : done)
+        if (p == prefix)
+            return;
+    done.push_back(prefix);
+
+    const int wanted = wantedWineDpi();
+    if (wanted <= 0)
+        return;
+    const int current = currentWineDpi(prefix);
+    if (current == wanted) {
+        logf("  Wine-DPI %s: %d, passt", prefix.c_str(), current);
+        return;
+    }
+    timespec t0, t1;
+    clock_gettime(CLOCK_MONOTONIC, &t0);
+    bool ok = setWineDpi(prefix, wanted);
+    clock_gettime(CLOCK_MONOTONIC, &t1);
+    logf("  Wine-DPI %s: %d → %d %s (%.1f s); laufende Plugin-Prozesse erst nach Neustart",
+         prefix.c_str(), current, wanted, ok ? "gesetzt" : "NICHT gesetzt",
+         double(t1.tv_sec - t0.tv_sec) + (t1.tv_nsec - t0.tv_nsec) / 1e9);
+}
+
 } // namespace
 
 // Gleiche Signatur wie in Resolve, damit der Name (Itanium-Mangling) übereinstimmt:
@@ -298,6 +436,7 @@ AEffect *VSTPluginLoader::Load(const wchar_t *wpath, audioMasterCallback callbac
         if (file != path)
             logf("  → %s", file.c_str());
     }
+    syncWineDpi(file);
 
     int flags = RTLD_NOW | RTLD_LOCAL;
     if (const char *deep = getenv("RESOLVE_VST_DEEPBIND"); deep && *deep == '1')
