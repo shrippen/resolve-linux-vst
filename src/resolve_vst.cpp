@@ -56,17 +56,29 @@ void logf(const char *fmt, ...)
     fflush(gLog);
 }
 
+// $XDG_STATE_HOME/resolve-vst (Standard ~/.local/state/resolve-vst), wird angelegt.
+// Dieselbe Regel steht in resolve-vst.
+std::string stateDir()
+{
+    std::string base;
+    if (const char *xdg = getenv("XDG_STATE_HOME"); xdg && *xdg)
+        base = xdg;
+    else if (const char *home = getenv("HOME"))
+        base = std::string(home) + "/.local/state";
+    else
+        return {};
+    mkdir(base.c_str(), 0755);
+    mkdir((base + "/resolve-vst").c_str(), 0755);
+    return base + "/resolve-vst";
+}
+
 void openLog()
 {
     std::string path;
     if (const char *env = getenv("RESOLVE_VST_LOG"))
         path = env;
-    else if (const char *home = getenv("HOME")) {
-        path = std::string(home) + "/.local/state/resolve-vst";
-        mkdir((std::string(home) + "/.local/state").c_str(), 0755);
-        mkdir(path.c_str(), 0755);
-        path += "/resolve-vst.log";
-    }
+    else if (const std::string dir = stateDir(); !dir.empty())
+        path = dir + "/resolve-vst.log";
     if (!path.empty() && path != "-")
         gLog = fopen(path.c_str(), "a");
     else if (path == "-")
@@ -285,10 +297,12 @@ void wrap(AEffect *effect)
 }
 
 // Wine-DPI: Windows-Plugins über yabridge zeichnen mit der DPI ihres Wine-Prefix
-// (HKCU\Control Panel\Desktop\LogPixels, Standard 96). Wine kennt keine DPI pro Prozess;
-// der Wert gilt für das ganze Prefix und wird beim Start des Plugin-Prozesses gelesen.
-// Darum wird er vor dem Laden eines yabridge-Plugins auf 96 × Resolves Faktor gestellt,
-// nur in resolve selbst (der Scanner zeigt keine Editoren) und je Prefix einmal.
+// (HKCU\Control Panel\Desktop\LogPixels, Standard 96); JUCE-Plugins ignorieren sie (siehe
+// sendContentScale), andere nicht. Wine kennt keine DPI pro Prozess, der Wert gilt für das
+// ganze Prefix und wird beim Start des Plugin-Prozesses gelesen. Darum wird er vor dem
+// Laden eines yabridge-Plugins auf 96 × Resolves Faktor gestellt, nur in resolve selbst
+// (der Scanner zeigt keine Editoren) und je Prefix einmal. Den Vorwert merkt sich
+// stateDir()/wine-dpi-restore; resolve-vst setzt ihn zurück, sobald Resolve beendet ist.
 
 bool isResolveProcess()
 {
@@ -316,50 +330,17 @@ std::string winePrefixFor(const std::string &so)
     return pos == std::string::npos ? std::string() : path.substr(0, pos);
 }
 
-// LogPixels aus user.reg (Textformat von Wine); -1, wenn nicht gesetzt.
-int currentWineDpi(const std::string &prefix)
+// Führt `wine <args>` im Prefix aus, über $WINELOADER wie yabridge (z. B. Runner aus
+// bottle.yml). Mit `out` wird stdout gesammelt. Liefert den Exit-Code, -1 wenn Wine nicht
+// startet.
+int runWine(const std::string &prefix, std::vector<std::string> args, std::string *out = nullptr)
 {
-    FILE *f = fopen((prefix + "/user.reg").c_str(), "r");
-    if (!f)
-        return -1;
-    int dpi = -1;
-    bool inDesktop = false;
-    char line[1024];
-    while (fgets(line, sizeof line, f)) {
-        if (line[0] == '[') {
-            inDesktop = strncmp(line, "[Control Panel\\\\Desktop]", 24) == 0;
-            continue;
-        }
-        unsigned value;
-        if (inDesktop && sscanf(line, "\"LogPixels\"=dword:%x", &value) == 1) {
-            dpi = int(value);
-            break;
-        }
-    }
-    fclose(f);
-    return dpi;
-}
-
-// Standardmäßig aus: JUCE-Plugins (MPC Beats) ignorieren die Wine-DPI und skalieren über
-// sendContentScale, und der Wert gilt für das ganze Prefix, also auch in anderen Hosts.
-// RESOLVE_VST_WINE_DPI=auto nimmt 96 × Resolves Faktor, eine Zahl setzt sie fest.
-int wantedWineDpi()
-{
-    const char *env = getenv("RESOLVE_VST_WINE_DPI");
-    if (!env || !*env)
-        return 0;
-    if (strcmp(env, "auto") == 0)
-        return int(lround(96 * editorScale()));
-    return atoi(env);
-}
-
-bool setWineDpi(const std::string &prefix, int dpi)
-{
-    const char *loader = getenv("WINELOADER"); // wie yabridge, z. B. Runner aus bottle.yml
-    std::string wine = loader && *loader ? loader : "wine";
-    std::string dpiArg = std::to_string(dpi);
-    const char *argv[] = {wine.c_str(), "reg", "add", "HKCU\\Control Panel\\Desktop", "/v", "LogPixels",
-                          "/t", "REG_DWORD", "/d", dpiArg.c_str(), "/f", nullptr};
+    const char *loader = getenv("WINELOADER");
+    args.insert(args.begin(), loader && *loader ? loader : "wine");
+    std::vector<char *> argv;
+    for (auto &a : args)
+        argv.push_back(a.data());
+    argv.push_back(nullptr);
 
     std::vector<std::string> env;
     for (char **e = environ; *e; ++e)
@@ -373,23 +354,82 @@ bool setWineDpi(const std::string &prefix, int dpi)
         envp.push_back(e.data());
     envp.push_back(nullptr);
 
+    int fds[2] = {-1, -1};
+    if (out && pipe2(fds, O_CLOEXEC) != 0)
+        return -1;
     posix_spawn_file_actions_t actions;
     posix_spawn_file_actions_init(&actions);
-    posix_spawn_file_actions_addopen(&actions, STDOUT_FILENO, "/dev/null", O_WRONLY, 0);
+    if (out)
+        posix_spawn_file_actions_adddup2(&actions, fds[1], STDOUT_FILENO);
+    else
+        posix_spawn_file_actions_addopen(&actions, STDOUT_FILENO, "/dev/null", O_WRONLY, 0);
     posix_spawn_file_actions_addopen(&actions, STDERR_FILENO, "/dev/null", O_WRONLY, 0);
     pid_t pid;
-    int err = posix_spawnp(&pid, wine.c_str(), &actions, nullptr, const_cast<char **>(argv), envp.data());
+    int err = posix_spawnp(&pid, argv[0], &actions, nullptr, argv.data(), envp.data());
     posix_spawn_file_actions_destroy(&actions);
+    if (out) {
+        close(fds[1]);
+        char buf[4096];
+        ssize_t n;
+        while (err == 0 && (n = read(fds[0], buf, sizeof buf)) > 0)
+            out->append(buf, n);
+        close(fds[0]);
+    }
     if (err != 0) {
-        logf("  Wine-DPI: %s nicht startbar: %s", wine.c_str(), strerror(err));
-        return false;
+        logf("  Wine-DPI: %s nicht startbar: %s", argv[0], strerror(err));
+        return -1;
     }
     int status = 0;
-    if (waitpid(pid, &status, 0) != pid || !WIFEXITED(status) || WEXITSTATUS(status) != 0) {
-        logf("  Wine-DPI: wine reg add fehlgeschlagen (Status %d)", status);
-        return false;
+    if (waitpid(pid, &status, 0) != pid || !WIFEXITED(status))
+        return -1;
+    return WEXITSTATUS(status);
+}
+
+// Aktueller Wert über `wine reg query`, nicht aus user.reg: wineserver schreibt die Datei
+// verzögert, direkt nach einem Zurücksetzen stünde dort noch der alte Wert.
+// -1 = nicht gesetzt, -2 = Abfrage nicht möglich.
+int queryWineDpi(const std::string &prefix)
+{
+    std::string out;
+    int status = runWine(prefix, {"reg", "query", "HKCU\\Control Panel\\Desktop", "/v", "LogPixels"}, &out);
+    if (status < 0)
+        return -2;
+    unsigned value;
+    size_t pos = out.find("REG_DWORD");
+    if (pos != std::string::npos && sscanf(out.c_str() + pos, "REG_DWORD %x", &value) == 1)
+        return int(value);
+    return -1;
+}
+
+// RESOLVE_VST_WINE_DPI: nicht gesetzt oder `auto` = 96 × Resolves Faktor, `0` = nicht
+// anfassen, sonst der Wert.
+int wantedWineDpi()
+{
+    const char *env = getenv("RESOLVE_VST_WINE_DPI");
+    if (!env || !*env || strcmp(env, "auto") == 0)
+        return int(lround(96 * editorScale()));
+    return atoi(env);
+}
+
+// Merkt sich den Vorwert (Zeile "Prefix<Tab>DPI", -1 = war nicht gesetzt). Steht der Prefix
+// schon drin, bleibt der ältere Eintrag: Er ist der Wert vor Resolve.
+bool rememberWineDpi(const std::string &prefix, int previous)
+{
+    const std::string file = stateDir() + "/wine-dpi-restore";
+    if (FILE *f = fopen(file.c_str(), "r")) {
+        char line[4096];
+        bool known = false;
+        while (!known && fgets(line, sizeof line, f))
+            known = strncmp(line, prefix.c_str(), prefix.size()) == 0 && line[prefix.size()] == '\t';
+        fclose(f);
+        if (known)
+            return true;
     }
-    return true;
+    FILE *f = fopen(file.c_str(), "a");
+    if (!f)
+        return false;
+    bool ok = fprintf(f, "%s\t%d\n", prefix.c_str(), previous) > 0;
+    return fclose(f) == 0 && ok;
 }
 
 void syncWineDpi(const std::string &so)
@@ -411,18 +451,27 @@ void syncWineDpi(const std::string &so)
     const int wanted = wantedWineDpi();
     if (wanted <= 0)
         return;
-    const int current = currentWineDpi(prefix);
+    timespec t0, t1;
+    clock_gettime(CLOCK_MONOTONIC, &t0);
+    const int current = queryWineDpi(prefix);
+    if (current == -2) {
+        logf("  Wine-DPI %s: Abfrage nicht möglich, bleibt", prefix.c_str());
+        return;
+    }
     if (current == wanted) {
         logf("  Wine-DPI %s: %d, passt", prefix.c_str(), current);
         return;
     }
-    timespec t0, t1;
-    clock_gettime(CLOCK_MONOTONIC, &t0);
-    bool ok = setWineDpi(prefix, wanted);
+    // Ohne gemerkten Vorwert kein Ändern, sonst ließe er sich nicht zurücksetzen.
+    if (!rememberWineDpi(prefix, current)) {
+        logf("  Wine-DPI %s: Vorwert nicht speicherbar, bleibt %d", prefix.c_str(), current);
+        return;
+    }
+    bool ok = runWine(prefix, {"reg", "add", "HKCU\\Control Panel\\Desktop", "/v", "LogPixels", "/t", "REG_DWORD",
+                               "/d", std::to_string(wanted), "/f"}) == 0;
     clock_gettime(CLOCK_MONOTONIC, &t1);
-    logf("  Wine-DPI %s: %d → %d %s (%.1f s); laufende Plugin-Prozesse erst nach Neustart",
-         prefix.c_str(), current, wanted, ok ? "gesetzt" : "NICHT gesetzt",
-         double(t1.tv_sec - t0.tv_sec) + (t1.tv_nsec - t0.tv_nsec) / 1e9);
+    logf("  Wine-DPI %s: %d → %d %s (%.1f s); zurück nach Beenden von Resolve", prefix.c_str(), current, wanted,
+         ok ? "gesetzt" : "NICHT gesetzt", double(t1.tv_sec - t0.tv_sec) + (t1.tv_nsec - t0.tv_nsec) / 1e9);
 }
 
 } // namespace

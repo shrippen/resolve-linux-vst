@@ -73,10 +73,14 @@ Wie groß das Plugin selbst zeichnet, entscheidet das Plugin:
   `opt` (wie Bitwig und Ableton). Resolve sendet das nicht; der Lader schickt Resolves
   Faktor vor dem Öffnen des Editors. Getestet mit MPC Beats: 1280×768 → 3200×1920 bei 2,5.
 - **Andere Windows-Plugins über yabridge** zeichnen mit der DPI ihres Wine-Prefix
-  (`HKCU\Control Panel\Desktop\LogPixels`; Bottles' `custom_dpi` schreibt dorthin). Mit
-  `RESOLVE_VST_WINE_DPI=auto` stellt der Lader sie vor dem Laden auf `96 × Resolves Faktor`
-  (über `$WINELOADER` wie yabridge). Standardmäßig aus: Wine kennt keine DPI pro Prozess,
-  der Wert gilt für das ganze Prefix und damit auch in anderen Hosts.
+  (`HKCU\Control Panel\Desktop\LogPixels`; Bottles' `custom_dpi` schreibt dorthin). Der
+  Lader stellt sie vor dem Laden des ersten yabridge-Plugins eines Prefix auf
+  `96 × Resolves Faktor` (über `$WINELOADER` wie yabridge, nur wenn der Wert abweicht).
+  Wine kennt keine DPI pro Prozess, der Wert gilt für das ganze Prefix. Darum merkt sich der
+  Lader den Vorwert in `~/.local/state/resolve-vst/wine-dpi-restore`, und `resolve-vst` setzt
+  ihn zurück, sobald Resolve endet, auch nach einem Absturz. Wurde das Skript selbst
+  abgebrochen, holt es das beim nächsten Start nach (oder von Hand: `resolve-vst restore`).
+  Plugin-Prozesse, die schon vor der Änderung liefen, behalten ihre DPI.
 
 ## Umgebungsvariablen
 
@@ -86,7 +90,7 @@ Wie groß das Plugin selbst zeichnet, entscheidet das Plugin:
 | `RESOLVE_VST_LINKS` | Ordner für die `.vst`-Links (Standard `~/.local/share/resolve-vst/vst`) |
 | `RESOLVE_VST_EDITOR_SCALE` | Skalierung der Editorgröße festlegen (Standard: Faktor von Resolves Fenster; `1` = aus) |
 | `RESOLVE_VST_CONTENT_SCALE` | Faktor für `'PreS'`/`'AeCs'` festlegen (Standard: Resolves Faktor; `0` = nicht senden) |
-| `RESOLVE_VST_WINE_DPI` | DPI für yabridge-Prefixe: `auto` = 96 × Faktor, Zahl = fest (Standard: nicht anfassen) |
+| `RESOLVE_VST_WINE_DPI` | DPI für yabridge-Prefixe: `auto` (Standard) = 96 × Faktor, Zahl = fest, `0` = nicht anfassen |
 | `RESOLVE_VST_DEEPBIND=1` | Plugins mit `RTLD_DEEPBIND` laden (bei Symbolkonflikten mit Resolve) |
 | `RESOLVE_BIN` | Pfad zu Resolve (Standard `/opt/resolve/bin/resolve`) |
 | `VST_PATH` | Suchpfade für VST2, durch `:` getrennt |

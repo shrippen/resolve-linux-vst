@@ -4,6 +4,8 @@
 #   resolve-vst [Resolve-Argumente]   Links auffrischen, Resolve starten
 #   resolve-vst link                  nur die Links auffrischen
 #   resolve-vst list                  gefundene Plugins anzeigen
+#   resolve-vst restore               geänderte Wine-DPI zurücksetzen (geschieht sonst
+#                                     automatisch, wenn Resolve endet)
 #
 # Resolves Scanner nimmt nur Einträge mit der Endung .vst (macOS-Stil). Darum legt das
 # Skript für jede VST2-Bibliothek einen Symlink Name.vst in $RESOLVE_VST_LINKS an; diesen
@@ -17,6 +19,8 @@ for candidate in "$here/build/libresolve-vst.so" "$here/../lib/resolve-vst/libre
 done
 resolve=${RESOLVE_BIN:-/opt/resolve/bin/resolve}
 links=${RESOLVE_VST_LINKS:-${XDG_DATA_HOME:-$HOME/.local/share}/resolve-vst/vst}
+# Vorwerte der Wine-DPI, geschrieben von libresolve-vst.so (stateDir() dort).
+restore=${XDG_STATE_HOME:-$HOME/.local/state}/resolve-vst/wine-dpi-restore
 
 # Suchpfade für VST2 unter Linux, wie bei anderen Hosts üblich; $VST_PATH hat Vorrang.
 if [[ -n ${VST_PATH:-} ]]; then
@@ -56,12 +60,38 @@ link() {
     echo "resolve-vst: $n VST2-Plugins in $links" >&2
 }
 
+# Setzt die Wine-DPI der Prefixe zurück, die der Lader während Resolve geändert hat.
+# Zeilen, die nicht zurückgesetzt werden konnten, bleiben für den nächsten Lauf stehen.
+restore_wine_dpi() {
+    [[ -s $restore ]] || { rm -f "$restore"; return 0; }
+    local prefix dpi args keep="" key='HKCU\Control Panel\Desktop'
+    local wine=${WINELOADER:-wine}
+    while IFS=$'\t' read -r prefix dpi; do
+        [[ -n $prefix && -d $prefix ]] || continue
+        if [[ $dpi == -1 ]]; then
+            args=(reg delete "$key" /v LogPixels /f)
+        else
+            args=(reg add "$key" /v LogPixels /t REG_DWORD /d "$dpi" /f)
+        fi
+        if WINEPREFIX=$prefix WINEDEBUG=-all "$wine" "${args[@]}" >/dev/null 2>&1; then
+            echo "resolve-vst: Wine-DPI in $prefix wieder ${dpi/#-1/Standard}" >&2
+        else
+            echo "resolve-vst: Wine-DPI in $prefix nicht zurückgesetzt" >&2
+            keep+="$prefix"$'\t'"$dpi"$'\n'
+        fi
+    done <"$restore"
+    if [[ -n $keep ]]; then printf '%s' "$keep" >"$restore"; else rm -f "$restore"; fi
+}
+
 case ${1:-} in
 link)
     link
     ;;
 list)
     plugins | cut -f2
+    ;;
+restore)
+    restore_wine_dpi
     ;;
 *)
     [[ -n $lib ]] || { echo "resolve-vst: libresolve-vst.so nicht gefunden (make?)" >&2; exit 1; }
@@ -70,7 +100,14 @@ list)
     # Bildschirm-DPI (Xft.dpi), die Oberfläche wird winzig. Gesetzte Werte haben Vorrang.
     export QT_AUTO_SCREEN_SCALE_FACTOR=${QT_AUTO_SCREEN_SCALE_FACTOR:-1}
     export QT_SCALE_FACTOR=${QT_SCALE_FACTOR:-1.0}
-    export LD_PRELOAD="$lib${LD_PRELOAD:+:$LD_PRELOAD}"
-    exec "$resolve" "$@"
+    # Reste eines abgebrochenen Laufs zuerst, sonst merkt sich der Lader den geänderten
+    # Wert als Vorwert.
+    restore_wine_dpi
+    # Kein exec: Nach dem Ende von Resolve (auch nach einem Absturz) die Wine-DPI
+    # zurücksetzen. LD_PRELOAD nur für Resolve, nicht für die Wine-Aufrufe hier.
+    status=0
+    LD_PRELOAD="$lib${LD_PRELOAD:+:$LD_PRELOAD}" "$resolve" "$@" || status=$?
+    restore_wine_dpi
+    exit "$status"
     ;;
 esac
