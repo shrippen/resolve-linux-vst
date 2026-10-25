@@ -8,6 +8,8 @@
 #                                     automatisch, wenn Resolve endet)
 #   resolve-vst categories            Kategorien neuer Plugins in Resolves Liste eintragen
 #                                     (geschieht sonst bei jedem Start)
+#   resolve-vst rescan                Resolves Plugin-Liste beiseitelegen: Resolve scannt beim
+#                                     nächsten Start alle Plugins neu
 #
 # Resolves Scanner nimmt nur Einträge mit der Endung .vst (macOS-Stil). Darum legt das
 # Skript für jede VST2-Bibliothek einen Symlink Name.vst in $RESOLVE_VST_LINKS an; diesen
@@ -281,6 +283,22 @@ restore)
     ;;
 categories)
     categories
+    ;;
+rescan)
+    # Resolve scannt nur Plugins mit neuer Dateizeit; ohne FXConfiguration.xml alle. Die
+    # Merkliste der Kategorien muss mit weg, sonst blieben die neu gescannten Plugins (gleiche
+    # Zeit) unsortiert.
+    if pgrep -x resolve >/dev/null; then
+        echo "resolve-vst: Resolve läuft, erst beenden" >&2
+        exit 1
+    fi
+    if [[ -f $fx_config ]]; then
+        backup=$fx_config.$(date +%Y%m%d-%H%M%S).bak
+        mv "$fx_config" "$backup"
+        echo "resolve-vst: Plugin-Liste gesichert als $backup" >&2
+    fi
+    rm -f "$categorized"
+    echo "resolve-vst: Resolve scannt beim nächsten Start alle Plugins neu" >&2
     ;;
 *)
     [[ -n $lib ]] || { echo "resolve-vst: libresolve-vst.so nicht gefunden (make?)" >&2; exit 1; }

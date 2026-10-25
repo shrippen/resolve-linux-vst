@@ -57,8 +57,14 @@ Effektbibliothek unter Audio-FX.
 
 Wichtig: Resolve immer über `resolve-vst` (oder den Starter „DaVinci Resolve (VST)“) starten.
 Ohne Preload findet der Scanner nichts und markiert alle Plugins als nicht funktionsfähig;
-dann `~/.local/share/DaVinciResolve/configs/Fairlight/Effects/FXConfiguration.xml` löschen und
-neu scannen.
+dann neu scannen lassen (unten).
+
+**Plugin-Liste neu aufbauen:** Resolve scannt beim Start nur Plugins, deren Datei sich
+geändert hat. Für einen vollständigen Neuscan bei geschlossenem Resolve `resolve-vst rescan`:
+Es legt `FXConfiguration.xml` als `FXConfiguration.xml.<Datum>.bak` beiseite und leert die
+Merkliste der Kategorien (siehe unten). Beim nächsten Start scannt Resolve alle Plugins; die
+Kategorien kommen erst beim Start danach dazu (der Scan läuft nach dem Eintragen). Was man in
+Resolve selbst eingestellt hat (eigene Kategorien), geht dabei verloren.
 
 ## Welche Plugins
 
