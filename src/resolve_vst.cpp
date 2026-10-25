@@ -17,13 +17,16 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include <atomic>
 #include <cerrno>
+#include <cmath>
 #include <cstdarg>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
+#include <mutex>
 #include <string>
 
 #define EXPORT __attribute__((visibility("default"), used, noinline))
@@ -100,13 +103,165 @@ bool isDirectory(const std::string &path)
 
 } // namespace
 
+struct AEffect;
+using audioMasterCallback = long (*)(AEffect *, int, int, long, void *, float);
+using Dispatcher = long (*)(AEffect *, int, int, long, void *, float);
+using VstEntry = AEffect *(*)(audioMasterCallback);
+
 struct AEffect {
     int32_t magic;
+    Dispatcher dispatcher;
     // Rest der Struktur interessiert hier nicht.
 };
 
-using audioMasterCallback = long (*)(AEffect *, int, int, long, void *, float);
-using VstEntry = AEffect *(*)(audioMasterCallback);
+namespace {
+
+// Editorgröße: Plugins melden ihre Größe (effEditGetRect, audioMasterSizeWindow) in
+// Bildschirmpixeln, Resolves Qt nimmt die Zahlen als logische Pixel und multipliziert sie
+// mit dem Skalierungsfaktor. Darum werden die Größen auf dem Weg durch diesen Faktor geteilt.
+// Dazu hängt sich der Lader zwischen Resolve und Plugin: eigener Dispatcher, eigener Callback.
+
+constexpr int effClose = 1;
+constexpr int effEditGetRect = 13;
+constexpr int effEditOpen = 14;
+constexpr int audioMasterSizeWindow = 15;
+
+struct ERect {
+    int16_t top, left, bottom, right;
+};
+
+struct Instance {
+    std::atomic<AEffect *> effect{nullptr};
+    Dispatcher dispatcher = nullptr;
+    double scale = 1.0;
+    ERect rect{};
+};
+
+// Feste Tabelle statt map: der Dispatcher läuft auch im Audio-Thread, Lesen ohne Lock.
+Instance gInstances[512];
+std::mutex gInstancesMutex;
+std::atomic<audioMasterCallback> gHostCallback{nullptr};
+
+Instance *findInstance(AEffect *effect)
+{
+    for (auto &in : gInstances)
+        if (in.effect.load(std::memory_order_acquire) == effect)
+            return &in;
+    return nullptr;
+}
+
+template<typename T>
+T qtFunction(const char *name)
+{
+    return reinterpret_cast<T>(dlsym(RTLD_DEFAULT, name));
+}
+
+// Skalierungsfaktor (devicePixelRatio) des Fensters, in das das Plugin zeichnet; ohne
+// Fenster der des Hauptbildschirms. RESOLVE_VST_EDITOR_SCALE legt ihn fest (1 = aus).
+double editorScale(unsigned long long windowId = 0)
+{
+    if (const char *env = getenv("RESOLVE_VST_EDITOR_SCALE")) {
+        double s = atof(env);
+        if (s > 0)
+            return s;
+    }
+    using Find = void *(*)(unsigned long long);
+    using WidgetFn = void *(*)(const void *);
+    using Ratio = double (*)(const void *);
+    if (windowId) {
+        auto find = qtFunction<Find>("_ZN7QWidget4findEy");
+        auto windowHandle = qtFunction<WidgetFn>("_ZNK7QWidget12windowHandleEv");
+        auto topLevel = qtFunction<WidgetFn>("_ZNK7QWidget6windowEv");
+        auto ratio = qtFunction<Ratio>("_ZNK7QWindow16devicePixelRatioEv");
+        if (find && windowHandle && topLevel && ratio) {
+            if (void *widget = find(windowId)) {
+                void *window = windowHandle(widget);
+                if (!window)
+                    window = windowHandle(topLevel(widget));
+                if (window)
+                    return ratio(window);
+            }
+        }
+    }
+    auto primaryScreen = qtFunction<void *(*)()>("_ZN15QGuiApplication13primaryScreenEv");
+    auto screenRatio = qtFunction<Ratio>("_ZNK7QScreen16devicePixelRatioEv");
+    if (primaryScreen && screenRatio)
+        if (void *screen = primaryScreen())
+            return screenRatio(screen);
+    return 1.0;
+}
+
+short scaled(short v, double s)
+{
+    return static_cast<short>(lround(v / s));
+}
+
+long dispatch(AEffect *effect, int opcode, int index, long value, void *ptr, float opt)
+{
+    Instance *in = findInstance(effect);
+    if (!in)
+        return 0;
+    switch (opcode) {
+    case effEditOpen:
+        in->scale = editorScale(reinterpret_cast<uintptr_t>(ptr));
+        logf("Editor öffnen: Plugin %p, Fenster %#lx, Skalierung %.2f", static_cast<void *>(effect),
+             static_cast<unsigned long>(reinterpret_cast<uintptr_t>(ptr)), in->scale);
+        return in->dispatcher(effect, opcode, index, value, ptr, opt);
+    case effEditGetRect: {
+        long result = in->dispatcher(effect, opcode, index, value, ptr, opt);
+        auto **rect = static_cast<ERect **>(ptr);
+        if (rect && *rect) {
+            const ERect r = **rect;
+            if (in->scale != 1.0) {
+                // Eigene Kopie: Das ERect gehört dem Plugin.
+                in->rect = {scaled(r.top, in->scale), scaled(r.left, in->scale),
+                            scaled(r.bottom, in->scale), scaled(r.right, in->scale)};
+                *rect = &in->rect;
+            }
+            logf("Editorgröße: Plugin %p meldet %dx%d, an Resolve %dx%d", static_cast<void *>(effect),
+                 r.right - r.left, r.bottom - r.top, (*rect)->right - (*rect)->left, (*rect)->bottom - (*rect)->top);
+        }
+        return result;
+    }
+    case effClose: {
+        long result = in->dispatcher(effect, opcode, index, value, ptr, opt);
+        in->effect.store(nullptr, std::memory_order_release);
+        return result;
+    }
+    default:
+        return in->dispatcher(effect, opcode, index, value, ptr, opt);
+    }
+}
+
+long hostCallback(AEffect *effect, int opcode, int index, long value, void *ptr, float opt)
+{
+    if (opcode == audioMasterSizeWindow && effect) {
+        if (Instance *in = findInstance(effect); in && in->scale != 1.0) {
+            logf("Plugin %p will %dx%d, an Resolve %ldx%ld", static_cast<void *>(effect), index, int(value),
+                 lround(index / in->scale), lround(value / in->scale));
+            index = static_cast<int>(lround(index / in->scale));
+            value = lround(value / in->scale);
+        }
+    }
+    return gHostCallback.load(std::memory_order_relaxed)(effect, opcode, index, value, ptr, opt);
+}
+
+void wrap(AEffect *effect)
+{
+    std::lock_guard lock(gInstancesMutex);
+    for (auto &in : gInstances) {
+        if (in.effect.load(std::memory_order_relaxed))
+            continue;
+        in.dispatcher = effect->dispatcher;
+        in.scale = editorScale();
+        in.effect.store(effect, std::memory_order_release);
+        effect->dispatcher = dispatch;
+        return;
+    }
+    logf("  zu viele Plugin-Instanzen, Editorgröße wird nicht angepasst");
+}
+
+} // namespace
 
 // Gleiche Signatur wie in Resolve, damit der Name (Itanium-Mangling) übereinstimmt:
 // _ZN15VSTPluginLoader4LoadEPKwPFlP7AEffectiilPvfERb und _ZN15VSTPluginLoader5CloseEv.
@@ -164,7 +319,9 @@ AEffect *VSTPluginLoader::Load(const wchar_t *wpath, audioMasterCallback callbac
         return nullptr;
     }
 
-    AEffect *effect = entry(callback);
+    // Resolve übergibt immer denselben Callback (VSTHost::HostCallback).
+    gHostCallback.store(callback, std::memory_order_relaxed);
+    AEffect *effect = entry(hostCallback);
     if (!effect || effect->magic != kEffectMagic) {
         logf("  Einstiegspunkt lieferte %p, kein gültiger AEffect", static_cast<void *>(effect));
         // Handle bewusst offen lassen: manche Plugins hinterlassen nach einem
@@ -173,6 +330,7 @@ AEffect *VSTPluginLoader::Load(const wchar_t *wpath, audioMasterCallback callbac
         return nullptr;
     }
 
+    wrap(effect);
     loaded_ = 1;
     logf("  ok, AEffect %p", static_cast<void *>(effect));
     return effect;
