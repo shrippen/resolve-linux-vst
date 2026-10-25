@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+# resolve-vst: DaVinci Resolve mit VST2-Lader starten.
+#
+#   resolve-vst [Resolve-Argumente]   Links auffrischen, Resolve starten
+#   resolve-vst link                  nur die Links auffrischen
+#   resolve-vst list                  gefundene Plugins anzeigen
+#
+# Resolves Scanner nimmt nur Einträge mit der Endung .vst (macOS-Stil). Darum legt das
+# Skript für jede VST2-Bibliothek einen Symlink Name.vst in $RESOLVE_VST_LINKS an; diesen
+# Ordner einmal in Resolve unter Einstellungen → Audio-Plugins als VST-Pfad eintragen.
+set -euo pipefail
+
+here=$(dirname "$(readlink -f "$0")")
+lib=${RESOLVE_VST_LIB:-}
+for candidate in "$here/build/libresolve-vst.so" "$here/../lib/resolve-vst/libresolve-vst.so"; do
+    [[ -z $lib && -f $candidate ]] && lib=$(readlink -f "$candidate")
+done
+resolve=${RESOLVE_BIN:-/opt/resolve/bin/resolve}
+links=${RESOLVE_VST_LINKS:-${XDG_DATA_HOME:-$HOME/.local/share}/resolve-vst/vst}
+
+# Suchpfade für VST2 unter Linux, wie bei anderen Hosts üblich; $VST_PATH hat Vorrang.
+if [[ -n ${VST_PATH:-} ]]; then
+    IFS=: read -ra roots <<<"$VST_PATH"
+else
+    roots=("$HOME/.vst" "$HOME/.lxvst" /usr/local/lib/vst /usr/local/lib/lxvst /usr/lib/vst /usr/lib/lxvst)
+fi
+
+is_vst2() {
+    nm -D --defined-only "$1" 2>/dev/null | grep -qE ' T (VSTPluginMain|main)$'
+}
+
+plugins() {
+    local root file
+    for root in "${roots[@]}"; do
+        [[ -d $root ]] || continue
+        while IFS= read -r -d '' file; do
+            is_vst2 "$file" && printf '%s\t%s\n' "$root" "$file"
+        done < <(find -L "$root" -type f -name '*.so' -print0 2>/dev/null)
+    done
+}
+
+link() {
+    rm -rf "$links"
+    mkdir -p "$links"
+    local root file rel target n=0
+    while IFS=$'\t' read -r root file; do
+        rel=${file#"$root"/}
+        # Ordner auf .vst (z. B. carla.vst/) hält der Scanner selbst für ein Plugin.
+        rel=$(sed -E 's#\.vst(/|$)#\1#g' <<<"${rel%.so}")
+        target="$links/$rel.vst"
+        [[ -e $target ]] && target="$links/$rel ($(basename "$root")).vst"
+        mkdir -p "$(dirname "$target")"
+        ln -s "$file" "$target"
+        n=$((n + 1))
+    done < <(plugins)
+    echo "resolve-vst: $n VST2-Plugins in $links" >&2
+}
+
+case ${1:-} in
+link)
+    link
+    ;;
+list)
+    plugins | cut -f2
+    ;;
+*)
+    [[ -n $lib ]] || { echo "resolve-vst: libresolve-vst.so nicht gefunden (make?)" >&2; exit 1; }
+    link
+    export LD_PRELOAD="$lib${LD_PRELOAD:+:$LD_PRELOAD}"
+    exec "$resolve" "$@"
+    ;;
+esac

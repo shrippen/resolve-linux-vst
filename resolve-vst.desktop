@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=DaVinci Resolve (VST)
+Comment=DaVinci Resolve mit VST2-Plugins
+Exec=resolve-vst %u
+Icon=/opt/resolve/graphics/DV_Resolve.png
+Terminal=false
+Categories=AudioVideo;
+StartupWMClass=resolve
