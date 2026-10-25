@@ -66,6 +66,10 @@ list)
 *)
     [[ -n $lib ]] || { echo "resolve-vst: libresolve-vst.so nicht gefunden (make?)" >&2; exit 1; }
     link
+    # Wie im eigenen DaVinciResolve.desktop: Resolves Qt 5 skaliert sonst nicht nach der
+    # Bildschirm-DPI (Xft.dpi), die Oberfläche wird winzig. Gesetzte Werte haben Vorrang.
+    export QT_AUTO_SCREEN_SCALE_FACTOR=${QT_AUTO_SCREEN_SCALE_FACTOR:-1}
+    export QT_SCALE_FACTOR=${QT_SCALE_FACTOR:-1.0}
     export LD_PRELOAD="$lib${LD_PRELOAD:+:$LD_PRELOAD}"
     exec "$resolve" "$@"
     ;;
