@@ -85,22 +85,28 @@ und in den ersten Sekunden bei `effEditIdle`, und ersetzt die kleinere Größe n
 Über xcb, nicht Xlib (Xlib beendet bei X-Fehlern den Prozess). `RESOLVE_VST_FIX_FRAME=0`
 schaltet das ab.
 
-### Wine-DPI je Plugin
+### Einstellungen je Plugin
 
-Vor dem Laden jedes yabridge-Plugins stellt der Lader die DPI des Prefix ein (über
-`$WINELOADER` wie yabridge, nur wenn sie abweicht). Jedes yabridge-Plugin läuft in einem
+`~/.config/resolve-vst/plugins.conf` (bzw. `$XDG_CONFIG_HOME/resolve-vst/plugins.conf`),
+Abschnitt je Plugin, Name = Dateiname der Plugin-`.so` ohne Endung:
+
+```
+[MPC Beats64]
+wine-dpi = 96       # Zahl, auto (96 × Resolves Faktor), 0 = nicht anfassen
+content-scale = 0   # Zahl, auto (Resolves Faktor), 0 = nicht senden
+```
+
+Ohne Eintrag gelten `RESOLVE_VST_WINE_DPI` und `RESOLVE_VST_CONTENT_SCALE`, sonst `auto`.
+
+**Wine-DPI:** Vor dem Laden jedes yabridge-Plugins stellt der Lader die DPI des Prefix ein
+(über `$WINELOADER` wie yabridge, nur wenn sie abweicht). Jedes yabridge-Plugin läuft in einem
 eigenen Wine-Prozess und liest die DPI bei dessen Start, darum kann sie je Plugin verschieden
-sein (nicht bei yabridge-Plugingruppen). Standard ist `96 × Resolves Faktor`
-(`RESOLVE_VST_WINE_DPI`), einzelne Plugins in `~/.config/resolve-vst/wine-dpi.conf`:
+sein (nicht bei yabridge-Plugingruppen).
 
-```
-# Name = Wert; Name = Dateiname der yabridge-.so ohne Endung,
-# Wert = Zahl, auto (96 × Faktor) oder 0 (nicht anfassen)
-MPC Beats64 = 96
-```
-
-JUCE-Plugins brauchen 96: Sie skalieren über den Faktor vom Host, mit höherer Wine-DPI
-werden sie kleiner oder verschwinden (getestet mit MPC Beats unter Wine 9.21 und 11.11).
+**MPC Beats** (JUCE unter Wine, getestet mit Wine 9.21 und 11.11) braucht beides wie oben:
+Es zeichnet mit dem Faktor des Bildschirms (`Xft.dpi`), nicht mit dem vom Host. Mit höherer
+Wine-DPI wird es kleiner oder verschwindet; mit Faktor vom Host rechnet es nur die
+Fenstergröße damit (4800×2880 statt 3200×1920 bei 3,75), der Rest bleibt schwarz.
 
 Wine kennt keine DPI pro Prozess, der Wert gilt für das ganze Prefix. Der Lader merkt sich
 darum den Wert vor Resolve in `~/.local/state/resolve-vst/wine-dpi-restore`, und
@@ -125,8 +131,8 @@ Die Wine-DPI stellt es nicht ein; die vorher von Hand setzen.
 | `RESOLVE_VST_LOG` | Logdatei (Standard `~/.local/state/resolve-vst/resolve-vst.log`, `-` = stderr) |
 | `RESOLVE_VST_LINKS` | Ordner für die `.vst`-Links (Standard `~/.local/share/resolve-vst/vst`) |
 | `RESOLVE_VST_EDITOR_SCALE` | Skalierung der Editorgröße festlegen (Standard: Faktor von Resolves Fenster; `1` = aus) |
-| `RESOLVE_VST_CONTENT_SCALE` | Faktor für `'PreS'`/`'AeCs'` festlegen (Standard: Resolves Faktor; `0` = nicht senden) |
-| `RESOLVE_VST_WINE_DPI` | DPI für yabridge-Prefixe: `auto` (Standard) = 96 × Faktor, Zahl = fest, `0` = nicht anfassen; je Plugin in `wine-dpi.conf` |
+| `RESOLVE_VST_CONTENT_SCALE` | Faktor für `'PreS'`/`'AeCs'`: `auto` (Standard) = Resolves Faktor, Zahl = fest, `0` = nicht senden; je Plugin in `plugins.conf` |
+| `RESOLVE_VST_WINE_DPI` | DPI für yabridge-Prefixe: `auto` (Standard) = 96 × Faktor, Zahl = fest, `0` = nicht anfassen; je Plugin in `plugins.conf` |
 | `RESOLVE_VST_FIX_FRAME=0` | yabridge-Rahmen nicht anpassen |
 | `RESOLVE_VST_DEEPBIND=1` | Plugins mit `RTLD_DEEPBIND` laden (bei Symbolkonflikten mit Resolve) |
 | `RESOLVE_BIN` | Pfad zu Resolve (Standard `/opt/resolve/bin/resolve`) |
@@ -138,8 +144,9 @@ Die Wine-DPI stellt es nicht ein; die vorher von Hand setzen.
   Kanälen erkannt, defekte Plugins sauber als nicht funktionsfähig markiert.
 - In Resolve: Plugins erscheinen, lassen sich auf Busse legen, Editoren öffnen sich in einem
   eigenen Resolve-Fenster (X11-Fenster über `QWidget::winId()` an `effEditOpen`).
-- Editorgröße unter HiDPI: mit `editor-test` geprüft (MPC Beats über yabridge 3200×1920 bei
-  Faktor 3,75 und Wine-DPI 96, Carla), in Resolve noch nicht bestätigt.
+- Editorgröße unter HiDPI: in Resolve bestätigt, dass MPC Beats groß erscheint; mit
+  `editor-test` geprüft, dass es mit den Einstellungen oben sein Fenster ohne Rand füllt
+  (3200×1920 bei Faktor 3,75). Carla unverändert.
 - Bibliotheken werden nie entladen (`dlclose` fehlt bewusst, siehe Quelltext).
 - Bricht, wenn Blackmagic `VSTPluginLoader` umbenennt oder die Signatur ändert; dann
   meldet das Log, dass nichts umgeleitet wurde.

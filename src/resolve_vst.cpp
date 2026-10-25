@@ -117,6 +117,63 @@ bool isDirectory(const std::string &path)
     return stat(path.c_str(), &st) == 0 && S_ISDIR(st.st_mode);
 }
 
+// Name eines Plugins für die Konfiguration: Dateiname der .so ohne Endung.
+std::string pluginName(const std::string &so)
+{
+    std::string name = so.substr(so.rfind('/') + 1);
+    if (name.size() > 3 && name.compare(name.size() - 3, 3, ".so") == 0)
+        name.resize(name.size() - 3);
+    return name;
+}
+
+std::string trim(const char *begin, const char *end)
+{
+    while (begin < end && (*begin == ' ' || *begin == '\t'))
+        ++begin;
+    while (end > begin && (end[-1] == ' ' || end[-1] == '\t'))
+        --end;
+    return std::string(begin, end);
+}
+
+// Einstellung je Plugin aus $XDG_CONFIG_HOME/resolve-vst/plugins.conf (Standard
+// ~/.config/resolve-vst/plugins.conf), leer wenn nicht gesetzt:
+//
+//   [MPC Beats64]          # pluginName(), also Dateiname der .so ohne Endung
+//   wine-dpi = 96
+//   content-scale = 0
+//
+// Wird bei jedem Aufruf gelesen (klein, selten gebraucht); Änderungen gelten ohne Neustart.
+std::string pluginSetting(const std::string &plugin, const char *key)
+{
+    std::string conf;
+    if (const char *xdg = getenv("XDG_CONFIG_HOME"); xdg && *xdg)
+        conf = xdg;
+    else if (const char *home = getenv("HOME"))
+        conf = std::string(home) + "/.config";
+    FILE *f = fopen((conf + "/resolve-vst/plugins.conf").c_str(), "r");
+    if (!f)
+        return {};
+    std::string value;
+    bool inSection = false;
+    char line[1024];
+    while (fgets(line, sizeof line, f)) {
+        line[strcspn(line, "#\r\n")] = 0;
+        const char *end = line + strlen(line);
+        if (const char *open = strchr(line, '['); open && trim(line, open).empty()) {
+            const char *close = strchr(open, ']');
+            inSection = close && trim(open + 1, close) == plugin;
+            continue;
+        }
+        const char *eq = strchr(line, '=');
+        if (inSection && eq && trim(line, eq) == key) {
+            value = trim(eq + 1, end);
+            break;
+        }
+    }
+    fclose(f);
+    return value;
+}
+
 } // namespace
 
 struct AEffect;
@@ -154,6 +211,7 @@ struct ERect {
 struct Instance {
     std::atomic<AEffect *> effect{nullptr};
     Dispatcher dispatcher = nullptr;
+    std::string name; // pluginName(), für plugins.conf
     double scale = 1.0;
     ERect rect{};
     // Rahmen (siehe fixFrame): Editorfenster von Resolve, Zielgröße in Bildschirmpixeln,
@@ -218,18 +276,25 @@ double editorScale(unsigned long long windowId = 0)
     return 1.0;
 }
 
-// Skalierung für den Inhalt: JUCE-Plugins (und andere) nehmen sie als VST2 nicht vom System,
-// sondern vom Host, über die Erweiterung von Bitwig/Ableton: effVendorSpecific mit
-// index 'PreS', value 'AeCs', Faktor in opt. Resolve sendet sie nicht, darum hier vor dem
-// Öffnen des Editors. Plugins, die sie nicht kennen, ignorieren den Aufruf.
-// RESOLVE_VST_CONTENT_SCALE legt den Faktor fest (0 = nicht senden).
+// Skalierung für den Inhalt: JUCE-Plugins (und andere) nehmen sie als VST2 vom Host, über
+// die Erweiterung von Bitwig/Ableton: effVendorSpecific mit index 'PreS', value 'AeCs',
+// Faktor in opt. Resolve sendet sie nicht, darum hier vor dem Öffnen des Editors. Plugins,
+// die sie nicht kennen, ignorieren den Aufruf. Manche nehmen die Zeichengröße trotzdem vom
+// Bildschirm und rechnen nur die Fenstergröße mit dem Faktor (MPC Beats unter Wine): Dann
+// bleibt ein Rand. Darum je Plugin abschaltbar.
+// content-scale in plugins.conf, sonst RESOLVE_VST_CONTENT_SCALE: auto (Standard) = Resolves
+// Faktor, Zahl = fest, 0 = nicht senden.
 void sendContentScale(Instance *in, AEffect *effect)
 {
-    double scale = in->scale;
-    if (const char *env = getenv("RESOLVE_VST_CONTENT_SCALE"))
-        scale = atof(env);
-    if (scale <= 0)
+    std::string setting = pluginSetting(in->name, "content-scale");
+    if (setting.empty())
+        if (const char *env = getenv("RESOLVE_VST_CONTENT_SCALE"))
+            setting = env;
+    const double scale = setting.empty() || setting == "auto" ? in->scale : atof(setting.c_str());
+    if (scale <= 0) {
+        logf("  Inhaltsskalierung für %s abgeschaltet", in->name.c_str());
         return;
+    }
     long result = in->dispatcher(effect, effVendorSpecific, kPreS, kAeCs, nullptr, float(scale));
     logf("  Inhaltsskalierung %.2f an Plugin %p (Antwort %ld)", scale, static_cast<void *>(effect), result);
 }
@@ -450,13 +515,14 @@ long hostCallback(AEffect *effect, int opcode, int index, long value, void *ptr,
     return gHostCallback.load(std::memory_order_relaxed)(effect, opcode, index, value, ptr, opt);
 }
 
-void wrap(AEffect *effect)
+void wrap(AEffect *effect, const std::string &name)
 {
     std::lock_guard lock(gInstancesMutex);
     for (auto &in : gInstances) {
         if (in.effect.load(std::memory_order_relaxed))
             continue;
         in.dispatcher = effect->dispatcher;
+        in.name = name;
         in.scale = editorScale();
         in.window.store(0);
         in.targetW.store(0);
@@ -588,41 +654,16 @@ int parseWineDpi(const char *v)
     return end != v && n >= 0 ? int(n) : -1;
 }
 
-// DPI für ein Plugin: Zeile "Name = Wert" in $XDG_CONFIG_HOME/resolve-vst/wine-dpi.conf
-// (Name = Dateiname der yabridge-.so ohne Endung), sonst RESOLVE_VST_WINE_DPI, sonst auto.
+// DPI für ein Plugin: wine-dpi in plugins.conf, sonst RESOLVE_VST_WINE_DPI, sonst auto.
 // Jedes yabridge-Plugin läuft in einem eigenen Wine-Prozess und liest die DPI bei dessen
 // Start, darum kann sie je Plugin verschieden sein (nicht bei yabridge-Plugingruppen).
 int wantedWineDpi(const std::string &so)
 {
-    std::string name = so.substr(so.rfind('/') + 1);
-    name.resize(name.size() - 3); // ".so", von winePrefixFor geprüft
-    std::string conf;
-    if (const char *xdg = getenv("XDG_CONFIG_HOME"); xdg && *xdg)
-        conf = xdg;
-    else if (const char *home = getenv("HOME"))
-        conf = std::string(home) + "/.config";
-    if (FILE *f = fopen((conf + "/resolve-vst/wine-dpi.conf").c_str(), "r")) {
-        char line[1024];
-        int found = -1;
-        while (found < 0 && fgets(line, sizeof line, f)) {
-            line[strcspn(line, "#\r\n")] = 0;
-            char *eq = strchr(line, '=');
-            if (!eq)
-                continue;
-            char *key = line, *keyEnd = eq;
-            while (*key == ' ' || *key == '\t')
-                ++key;
-            while (keyEnd > key && (keyEnd[-1] == ' ' || keyEnd[-1] == '\t'))
-                --keyEnd;
-            if (std::string(key, keyEnd) == name)
-                found = parseWineDpi(eq + 1);
-        }
-        fclose(f);
-        if (found >= 0)
-            return found;
-    }
-    const char *env = getenv("RESOLVE_VST_WINE_DPI");
-    int dpi = env && *env ? parseWineDpi(env) : -1;
+    std::string setting = pluginSetting(pluginName(so), "wine-dpi");
+    if (setting.empty())
+        if (const char *env = getenv("RESOLVE_VST_WINE_DPI"))
+            setting = env;
+    int dpi = setting.empty() ? -1 : parseWineDpi(setting.c_str());
     return dpi >= 0 ? dpi : parseWineDpi("auto");
 }
 
@@ -771,7 +812,7 @@ AEffect *VSTPluginLoader::Load(const wchar_t *wpath, audioMasterCallback callbac
         return nullptr;
     }
 
-    wrap(effect);
+    wrap(effect, pluginName(file));
     loaded_ = 1;
     logf("  ok, AEffect %p", static_cast<void *>(effect));
     return effect;
