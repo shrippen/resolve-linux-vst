@@ -37,6 +37,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include <algorithm>
 #include <atomic>
 #include <climits>
 #include <cstdio>
@@ -862,6 +863,7 @@ public:
     std::unique_ptr<std::atomic<float>[]> values;
     int32 bypassIndex = -1;
     Pending toProcessor, toController;
+    std::atomic<int32> restartFlags{0}; // aus restartComponent, für idle()
 
     std::vector<SpeakerArrangement> inArr, outArr;
     std::vector<AudioBusBuffers> inBufs, outBufs;
@@ -911,14 +913,17 @@ Adapter *adapterOf(AEffect *e)
 }
 
 // Lebende Adapter, für die regelmäßige Arbeit im GUI-Thread (Werte an den Controller).
-std::mutex gAdaptersMutex;
+// Rekursiv: idle() ruft Resolve, Resolve kann darin effClose schicken (destroy).
+std::recursive_mutex gAdaptersMutex;
 std::vector<Adapter *> gAdapters;
 
 int idleAll(void *)
 {
     std::lock_guard lock(gAdaptersMutex);
-    for (Adapter *a : gAdapters)
-        a->idle();
+    const std::vector<Adapter *> all = gAdapters;
+    for (Adapter *a : all)
+        if (std::find(gAdapters.begin(), gAdapters.end(), a) != gAdapters.end())
+            a->idle();
     return 1;
 }
 
@@ -949,17 +954,14 @@ tresult ComponentHandler::endEdit(ParamID id)
     return kResultOk;
 }
 
+// Nur vormerken, ausgewertet in idle() im GUI-Thread. Plugins rufen das mitten in setActive
+// oder process auf, über yabridge auch aus anderen Threads; ein Rückruf ins Plugin oder an
+// Resolve von hier aus blockierte Resolve (Neoverb: Latenz geändert während effMainsChanged).
 tresult ComponentHandler::restartComponent(int32 flags)
 {
-    logMessage("VST3 %s: restartComponent %#x", a_->info.name.c_str(), unsigned(flags));
-    if (flags & kParamValuesChanged) {
-        a_->refreshValues();
-        a_->call(audioMasterUpdateDisplay, 0, 0);
-    }
-    if (flags & kLatencyChanged) {
-        a_->effect.initialDelay = int32_t(a_->processor->getLatencySamples());
-        a_->call(audioMasterIOChanged, 0, 0);
-    }
+    logMessage("VST3 %s: restartComponent %#x (%s)", a_->info.name.c_str(), unsigned(flags),
+               a_->onMainThread() ? "GUI-Thread" : "anderer Thread");
+    a_->restartFlags.fetch_or(flags);
     return kResultOk;
 }
 
@@ -1277,10 +1279,26 @@ void Adapter::process(float **in, float **out, int32 frames)
 }
 
 // Im GUI-Thread: Werte aus anderen Threads an den Controller geben.
+// Rückrufe an Resolve stehen am Ende: Resolve kann darin das Plugin schließen (destroy).
 void Adapter::idle()
 {
     if (controller)
         toController.drain([this](ParamID id, ParamValue v) { controller->setParamNormalized(id, v); }, true);
+    const int32 flags = restartFlags.exchange(0);
+    if (!flags)
+        return;
+    if (flags & kParamValuesChanged)
+        refreshValues();
+    if (flags & kLatencyChanged) {
+        effect.initialDelay = int32_t(processor->getLatencySamples());
+        logMessage("VST3 %s: Latenz %d", info.name.c_str(), effect.initialDelay);
+    }
+    AEffect *e = &effect;
+    audioMasterCallback m = master;
+    if (flags & kParamValuesChanged)
+        m(e, audioMasterUpdateDisplay, 0, 0, nullptr, 0);
+    if (flags & kLatencyChanged)
+        m(e, audioMasterIOChanged, 0, 0, nullptr, 0);
 }
 
 long Adapter::editorRect(ERect **out)
@@ -1477,7 +1495,10 @@ long Adapter::dispatch(int opcode, int index, long value, void *ptr, float opt)
         return 1;
     }
     case effMainsChanged:
+        logMessage("VST3 %s: effMainsChanged %ld (%s)", info.name.c_str(), value,
+                   onMainThread() ? "GUI-Thread" : "anderer Thread");
         setActive(value != 0);
+        logMessage("VST3 %s: effMainsChanged %ld fertig", info.name.c_str(), value);
         return 1;
     case effEditGetRect:
         return editorRect(static_cast<ERect **>(ptr));

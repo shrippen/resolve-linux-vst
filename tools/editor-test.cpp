@@ -43,10 +43,23 @@ void resize(int w, int h)
     XFlush(dpy);
 }
 
-long host(AEffect *, int opcode, int index, long value, void *, float)
+long host(AEffect *e, int opcode, int index, long value, void *, float)
 {
     if (opcode == 1) // audioMasterVersion
         return 2400;
+    if (opcode == 13 && e) { // audioMasterIOChanged
+        // Wie ein Host, der darauf das Plugin neu startet (Latenz übernehmen): Das darf nicht
+        // hängen, auch nicht mitten in effMainsChanged.
+        static bool inside = false;
+        printf("audioMasterIOChanged, Latenz %d\n", e->initialDelay);
+        if (!inside) {
+            inside = true;
+            e->dispatcher(e, 12, 0, 0, nullptr, 0);
+            e->dispatcher(e, 12, 0, 1, nullptr, 0);
+            inside = false;
+        }
+        return 1;
+    }
     if (opcode == 15) { // audioMasterSizeWindow
         printf("audioMasterSizeWindow %dx%ld (logisch)\n", index, value);
         resize(index, int(value));

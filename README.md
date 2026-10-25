@@ -121,6 +121,9 @@ VST3-Schnittstellen (`IComponent`, `IAudioProcessor`, `IEditController`, `IPlugV
   Änderungen aus dem Editor gehen als Automation an Resolve, Werte vom Host an Prozessor und
   Controller. Ein Bypass-Parameter dient für `effSetBypass`.
 - **Zustand:** ein Chunk aus Komponenten- und Controller-Zustand (Kennung `R3VS`).
+- **restartComponent** (Latenz, Parameterwerte) merkt der Adapter nur vor und meldet es im
+  GUI-Thread an Resolve. yabridge ruft es aus einem eigenen Thread, oft mitten in
+  `effMainsChanged`; ein sofortiger Rückruf an Resolve blockierte Resolve (Neoverb).
 - **Editor:** `IPlugView` im X11-Fenster von Resolve. Größen, Inhaltsskalierung
   (`IPlugViewContentScaleSupport` statt `'PreS'`), Rahmen-Fix und Wine-DPI wie bei VST2; der
   Name für `plugins.conf` ist der Name der Klasse.
