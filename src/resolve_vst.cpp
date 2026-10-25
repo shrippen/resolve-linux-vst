@@ -21,6 +21,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#include <algorithm>
 #include <atomic>
 #include <cerrno>
 #include <cmath>
@@ -135,6 +136,18 @@ std::string pluginName(const std::string &file)
     return name;
 }
 
+// Name mit dem Ordner davor, z. B. iZotope/Neoverb: yabridge legt die Plugins in Ordnern
+// nach Hersteller ab, so passt ein Muster wie [iZotope/*] auf alle.
+std::string pluginNameWithFolder(const std::string &file)
+{
+    const size_t slash = file.rfind('/');
+    if (slash == std::string::npos || slash == 0)
+        return pluginName(file);
+    const size_t before = file.rfind('/', slash - 1);
+    return file.substr(before == std::string::npos ? 0 : before + 1, slash - (before == std::string::npos ? 0 : before + 1))
+           + "/" + pluginName(file);
+}
+
 std::string trim(const char *begin, const char *end)
 {
     while (begin < end && (*begin == ' ' || *begin == '\t'))
@@ -145,7 +158,8 @@ std::string trim(const char *begin, const char *end)
 }
 
 // Namen, unter denen ein Plugin in plugins.conf steht: pluginName(), bei VST3 dazu der Name
-// des Bundles ohne .vst3 (eine Waves-Shell enthält Hunderte Plugins).
+// des Bundles ohne .vst3 (eine Waves-Shell enthält Hunderte Plugins), und der Name mit dem
+// Ordner davor (pluginNameWithFolder, bei VST3 der des Bundles).
 using Names = std::vector<std::string>;
 
 // Eingebaute Vorgaben, wenn plugins.conf nichts sagt (Muster wie dort).
@@ -156,6 +170,9 @@ constexpr Default kDefaults[] = {
     // Waves unter Wine zeichnet mit dem Faktor 240/DPI des Prefix, meldet aber die Größe ohne
     // ihn; bei 240 stimmen beide, die Skalierung kommt dann vom Host (Inhaltsskalierung).
     {"WaveShell*", "wine-dpi", "240"},
+    // iZotope unter Wine kennt keine Inhaltsskalierung und zeichnet in 1/2,5 der Größe; nur
+    // Wine selbst kann es vergrößern (wine-zoom).
+    {"iZotope/*", "wine-zoom", "auto"},
 };
 
 bool matches(const std::string &pattern, const Names &names)
@@ -243,6 +260,9 @@ struct Instance {
     Dispatcher dispatcher = nullptr;
     Names names; // für plugins.conf
     double scale = 1.0;
+    // Vergrößerung durch Wine (wine-zoom): Das Plugin meldet Größen in seinen Pixeln, auf dem
+    // Bildschirm sind sie zoom-mal so groß.
+    double zoom = 1.0;
     ERect rect{};
     // Rahmen (siehe fixFrame): Editorfenster von Resolve, Zielgröße in Bildschirmpixeln,
     // Zeitpunkt, bis zu dem bei effEditIdle nachgeprüft wird.
@@ -320,6 +340,10 @@ void sendContentScale(Instance *in, AEffect *effect)
     if (setting.empty())
         if (const char *env = getenv("RESOLVE_VST_CONTENT_SCALE"))
             setting = env;
+    if (setting.empty() && in->zoom != 1.0) {
+        logf("  keine Inhaltsskalierung für %s: Wine vergrößert (%.2f)", in->names[0].c_str(), in->zoom);
+        return;
+    }
     const double scale = setting.empty() || setting == "auto" ? in->scale : atof(setting.c_str());
     if (scale <= 0) {
         logf("  Inhaltsskalierung für %s abgeschaltet", in->names[0].c_str());
@@ -487,8 +511,10 @@ long dispatch(AEffect *effect, int opcode, int index, long value, void *ptr, flo
         auto **rect = static_cast<ERect **>(ptr);
         if (rect && *rect) {
             const ERect reported = **rect;
-            ERect r = reported;
-            const int w = r.right - r.left, h = r.bottom - r.top;
+            // In Bildschirmpixeln (bei wine-zoom größer als gemeldet).
+            ERect r = {0, 0, short(lround((reported.bottom - reported.top) * in->zoom)),
+                       short(lround((reported.right - reported.left) * in->zoom))};
+            const int w = r.right, h = r.bottom;
             bool replaced = false;
             if (!in->window.load()) {
                 in->targetW.store(w);
@@ -499,7 +525,7 @@ long dispatch(AEffect *effect, int opcode, int index, long value, void *ptr, flo
                 r = {0, 0, short(in->targetH.load()), short(in->targetW.load())};
                 replaced = true;
             }
-            if (in->scale != 1.0 || replaced) {
+            if (in->scale != 1.0 || in->zoom != 1.0 || replaced) {
                 // Eigene Kopie: Das ERect gehört dem Plugin.
                 in->rect = {scaled(r.top, in->scale), scaled(r.left, in->scale),
                             scaled(r.bottom, in->scale), scaled(r.right, in->scale)};
@@ -526,15 +552,16 @@ long hostCallback(AEffect *effect, int opcode, int index, long value, void *ptr,
     if (opcode == audioMasterSizeWindow && effect) {
         Instance *in = findInstance(effect);
         if (in) {
-            in->targetW.store(index);
-            in->targetH.store(int(value));
+            in->targetW.store(int(lround(index * in->zoom)));
+            in->targetH.store(int(lround(value * in->zoom)));
             in->fixUntilMs.store(nowMs() + 5000);
         }
-        if (in && in->scale != 1.0) {
+        if (in && (in->scale != 1.0 || in->zoom != 1.0)) {
+            const double f = in->zoom / in->scale;
             logf("Plugin %p will %dx%d, an Resolve %ldx%ld", static_cast<void *>(effect), index, int(value),
-                 lround(index / in->scale), lround(value / in->scale));
-            index = static_cast<int>(lround(index / in->scale));
-            value = lround(value / in->scale);
+                 lround(index * f), lround(value * f));
+            index = static_cast<int>(lround(index * f));
+            value = lround(value * f);
         }
         long result = gHostCallback.load(std::memory_order_relaxed)(effect, opcode, index, value, ptr, opt);
         logf("  audioMasterSizeWindow: Resolve antwortet %ld", result);
@@ -545,7 +572,7 @@ long hostCallback(AEffect *effect, int opcode, int index, long value, void *ptr,
     return gHostCallback.load(std::memory_order_relaxed)(effect, opcode, index, value, ptr, opt);
 }
 
-void wrap(AEffect *effect, const Names &names)
+void wrap(AEffect *effect, const Names &names, double zoom)
 {
     std::lock_guard lock(gInstancesMutex);
     for (auto &in : gInstances) {
@@ -554,6 +581,7 @@ void wrap(AEffect *effect, const Names &names)
         in.dispatcher = effect->dispatcher;
         in.names = names;
         in.scale = editorScale();
+        in.zoom = zoom;
         in.window.store(0);
         in.targetW.store(0);
         in.targetH.store(0);
@@ -704,11 +732,30 @@ int parseWineDpi(const char *v)
     return end != v && n >= 0 ? int(n) : -1;
 }
 
-// DPI für ein Plugin: wine-dpi in plugins.conf, sonst RESOLVE_VST_WINE_DPI, sonst auto.
-// Jedes yabridge-Plugin läuft in einem eigenen Wine-Prozess und liest die DPI bei dessen
-// Start, darum kann sie je Plugin verschieden sein (nicht bei yabridge-Plugingruppen).
+// Wine-Vergrößerung: Plugins, die weder DPI noch Inhaltsskalierung kennen (iZotope), zeichnet
+// Wine mit dem Faktor kWineBaseDpi/DPI des Prefix (gemessen mit Wine 11; Waves verhält sich
+// genauso, siehe kDefaults). Das Plugin meldet seine Größe aber ohne diesen Faktor; den rechnet
+// der Lader dazu (Instance::zoom). Etwas weicher als echte Skalierung, Wine rechnet das Bild hoch.
+constexpr int kWineBaseDpi = 240;
+
+// wine-zoom in plugins.conf: auto = Resolves Faktor, Zahl = fest, 0 oder leer = aus.
+double wineZoomSetting(const Names &names)
+{
+    const std::string setting = pluginSetting(names, "wine-zoom");
+    if (setting == "auto")
+        return editorScale();
+    const double zoom = atof(setting.c_str());
+    return zoom > 0 ? zoom : 0;
+}
+
+// DPI für ein Plugin: aus wine-zoom, sonst wine-dpi in plugins.conf, sonst
+// RESOLVE_VST_WINE_DPI, sonst auto. Jedes yabridge-Plugin läuft in einem eigenen
+// Wine-Prozess und liest die DPI bei dessen Start, darum kann sie je Plugin verschieden sein
+// (nicht bei yabridge-Plugingruppen).
 int wantedWineDpi(const Names &names)
 {
+    if (const double zoom = wineZoomSetting(names); zoom > 0)
+        return std::max(1, int(lround(kWineBaseDpi / zoom)));
     std::string setting = pluginSetting(names, "wine-dpi");
     if (setting.empty())
         if (const char *env = getenv("RESOLVE_VST_WINE_DPI"))
@@ -736,6 +783,15 @@ bool rememberWineDpi(const std::string &prefix, int previous)
         return false;
     bool ok = fprintf(f, "%s\t%d\n", prefix.c_str(), previous) > 0;
     return fclose(f) == 0 && ok;
+}
+
+// Faktor für Instance::zoom: kWineBaseDpi / tatsächlich gesetzte DPI (gerundet), 1 ohne
+// wine-zoom oder ohne Wine. `prefix` wie bei syncWineDpi.
+double wineZoom(const Names &names, const std::string &prefix)
+{
+    if (prefix.empty() || wineZoomSetting(names) <= 0)
+        return 1.0;
+    return double(kWineBaseDpi) / wantedWineDpi(names);
 }
 
 // `prefix` aus winePrefixFor bzw. winePrefixForBundle.
@@ -819,15 +875,17 @@ AEffect *VSTPluginLoader::Load(const wchar_t *wpath, audioMasterCallback callbac
             return nullptr;
         }
         const std::string bundle = vst3Bundle(path);
-        const Names names{pluginName(path), pluginName(bundle.substr(0, bundle.size() - 5))}; // ohne .vst3
-        syncWineDpi(names, winePrefixForBundle(bundle));
+        const std::string bundleName = bundle.substr(0, bundle.size() - 5); // ohne .vst3
+        const Names names{pluginName(path), pluginName(bundleName), pluginNameWithFolder(bundleName)};
+        const std::string prefix = winePrefixForBundle(bundle);
+        syncWineDpi(names, prefix);
         gHostCallback.store(callback, std::memory_order_relaxed);
         AEffect *effect = vst3Load(path, hostCallback);
         if (!effect) {
             failed = true;
             return nullptr;
         }
-        wrap(effect, names);
+        wrap(effect, names, wineZoom(names, prefix));
         loaded_ = 1;
         logf("  ok, VST3 als AEffect %p", static_cast<void *>(effect));
         return effect;
@@ -843,7 +901,9 @@ AEffect *VSTPluginLoader::Load(const wchar_t *wpath, audioMasterCallback callbac
         if (file != path)
             logf("  → %s", file.c_str());
     }
-    syncWineDpi({pluginName(file)}, winePrefixFor(file));
+    const Names names{pluginName(file), pluginNameWithFolder(file)};
+    const std::string prefix = winePrefixFor(file);
+    syncWineDpi(names, prefix);
 
     int flags = RTLD_NOW | RTLD_LOCAL;
     if (const char *deep = getenv("RESOLVE_VST_DEEPBIND"); deep && *deep == '1')
@@ -876,7 +936,7 @@ AEffect *VSTPluginLoader::Load(const wchar_t *wpath, audioMasterCallback callbac
         return nullptr;
     }
 
-    wrap(effect, {pluginName(file)});
+    wrap(effect, names, wineZoom(names, prefix));
     loaded_ = 1;
     logf("  ok, AEffect %p", static_cast<void *>(effect));
     return effect;

@@ -192,7 +192,8 @@ schaltet das ab.
 
 `~/.config/resolve-vst/plugins.conf` (bzw. `$XDG_CONFIG_HOME/resolve-vst/plugins.conf`),
 Abschnitt je Plugin. Name = Dateiname der Plugin-`.so` ohne Endung, bei VST3 der Name des
-Plugins oder des Bundles ohne `.vst3`; Shell-Muster gehen auch. Es gilt der erste passende
+Plugins oder des Bundles ohne `.vst3`, außerdem der Name mit dem Ordner davor (bei yabridge
+der Hersteller, z. B. `iZotope/Neoverb`); Shell-Muster gehen auch. Es gilt der erste passende
 Abschnitt.
 
 ```
@@ -202,10 +203,13 @@ content-scale = 0   # Zahl, auto (Resolves Faktor), 0 = nicht senden
 
 [WaveShell*]        # alle Waves-Plugins
 wine-dpi = 240
+
+[iZotope/*]         # alle iZotope-Plugins
+wine-zoom = auto    # Zahl, auto (Resolves Faktor), 0 = aus
 ```
 
-Ohne Eintrag gelten eingebaute Vorgaben (Waves, siehe unten), dann `RESOLVE_VST_WINE_DPI`
-und `RESOLVE_VST_CONTENT_SCALE`, sonst `auto`.
+Ohne Eintrag gelten eingebaute Vorgaben (Waves und iZotope, siehe unten), dann
+`RESOLVE_VST_WINE_DPI` und `RESOLVE_VST_CONTENT_SCALE`, sonst `auto`.
 
 **Wine-DPI:** Vor dem Laden jedes yabridge-Plugins stellt der Lader die DPI des Prefix ein
 (über `$WINELOADER` wie yabridge, nur wenn sie abweicht). Jedes yabridge-Plugin läuft in einem
@@ -222,6 +226,17 @@ Größe aber ohne ihn: Bei 180 DPI ist der Editor abgeschnitten, bei 360 (`auto`
 3,75) bleibt er klein mit schwarzem Rand. Bei 240 stimmen Zeichnung und Größe, und Waves
 skaliert sich scharf mit der Inhaltsskalierung vom Host (getestet mit den Faktoren 1 und 2,
 unabhängig von `Xft.dpi` und Bildschirmgröße). Darum ist 240 für `WaveShell*` eingebaut.
+
+**iZotope** (Neoverb, Ozone, Neutron, Nectar, RX; VST3 über yabridge) zeichnet ebenfalls mit
+240 / Wine-DPI und meldet die Größe ohne den Faktor, kennt aber keine Inhaltsskalierung
+(`IPlugViewContentScaleSupport` fehlt) und wird beim Vergrößern des Fensters nicht größer,
+sondern bekommt nur mehr Fläche (höchstens 1000×738 bei Neoverb). Bei 240 bleibt es darum
+in Originalgröße, bei `auto` (360) noch kleiner. Hier hilft nur, Wine vergrößern zu lassen:
+`wine-zoom` stellt die DPI auf 240 / Faktor (64 bei 3,75), rechnet die gemeldete Größe mit
+240 / DPI hoch und schickt keine Inhaltsskalierung. Wine skaliert das Bild hoch, es ist darum
+etwas weicher als echte Skalierung. Für `iZotope/*` eingebaut (geprüft mit Neoverb und
+Ozone 10 Equalizer). Die 240 ist gemessen (Wine 11.11, auch in Xvfb ohne `Xft.dpi`), woher
+Wine sie nimmt, ist offen.
 
 Wine kennt keine DPI pro Prozess, der Wert gilt für das ganze Prefix. Der Lader merkt sich
 darum den Wert vor Resolve in `~/.local/state/resolve-vst/wine-dpi-restore`, und
@@ -272,7 +287,9 @@ Fenstermanager scheitern manche Plugins an fehlenden X-Atomen (MiniMeters bricht
 - VST3: Scanner erkennt native (ToneBoosters, MiniMeters) und yabridge-Plugins (iZotope);
   mit `editor-test` geprüft: Audio läuft durch (Kompressor regelt), Parameter, Chunk,
   Editor mit Inhaltsskalierung (ToneBoosters). Waves (Shell 14.12 und neuer): Scan, Audio,
-  Parameter, Chunk, Editor in richtiger Größe bei DPI 240. In Resolve noch nicht ausprobiert.
+  Parameter, Chunk, Editor in richtiger Größe bei DPI 240. iZotope: Editor in voller Größe
+  mit `wine-zoom` (`editor-test`); Neoverb in Resolve geladen, dort aber noch zu klein
+  (vor `wine-zoom`).
 - Bibliotheken werden nie entladen (`dlclose` fehlt bewusst, siehe Quelltext).
 - Bricht, wenn Blackmagic `VSTPluginLoader` umbenennt oder die Signatur ändert; dann
   meldet das Log, dass nichts umgeleitet wurde.

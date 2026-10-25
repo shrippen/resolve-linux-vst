@@ -1334,6 +1334,8 @@ long Adapter::openEditor(void *window)
             tresult r = scale->setContentScaleFactor(contentScale);
             logMessage("VST3 %s: Inhaltsskalierung %.2f (Antwort %d)", info.name.c_str(), contentScale, int(r));
             scale->release();
+        } else {
+            logMessage("VST3 %s: keine Inhaltsskalierung (IPlugViewContentScaleSupport fehlt)", info.name.c_str());
         }
     }
     if (view->attached(window, kPlatformTypeX11EmbedWindowID) != kResultOk) {
