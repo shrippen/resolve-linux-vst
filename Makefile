@@ -27,3 +27,11 @@ uninstall:
 	rm -f $(PREFIX)/bin/resolve-vst $(PREFIX)/share/applications/resolve-vst.desktop
 
 .PHONY: install uninstall
+
+# Testprogramm: Editor eines Plugins wie in Resolve öffnen und aufnehmen (braucht X11, ffmpeg).
+editor-test: $(BUILD)/editor-test
+
+$(BUILD)/editor-test: tools/editor-test.cpp $(BUILD)/libresolve-vst.so
+	$(CXX) -O2 -Wall -Wextra -o $@ $< -lX11 $(abspath $(BUILD)/libresolve-vst.so) -Wl,-rpath,$(abspath $(BUILD))
+
+.PHONY: editor-test

@@ -30,6 +30,7 @@
 #include <ctime>
 #include <mutex>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 #define EXPORT __attribute__((visibility("default"), used, noinline))
@@ -139,6 +140,8 @@ namespace {
 constexpr int effClose = 1;
 constexpr int effEditGetRect = 13;
 constexpr int effEditOpen = 14;
+constexpr int effEditClose = 15;
+constexpr int effEditIdle = 19;
 constexpr int effVendorSpecific = 50;
 constexpr int audioMasterSizeWindow = 15;
 constexpr int kPreS = 0x50726553; // 'PreS'
@@ -153,6 +156,12 @@ struct Instance {
     Dispatcher dispatcher = nullptr;
     double scale = 1.0;
     ERect rect{};
+    // Rahmen (siehe fixFrame): Editorfenster von Resolve, Zielgröße in Bildschirmpixeln,
+    // Zeitpunkt, bis zu dem bei effEditIdle nachgeprüft wird.
+    std::atomic<unsigned long> window{0};
+    std::atomic<int> targetW{0}, targetH{0};
+    std::atomic<long> fixUntilMs{0};
+    unsigned idleCount = 0;
 };
 
 // Feste Tabelle statt map: der Dispatcher läuft auch im Audio-Thread, Lesen ohne Lock.
@@ -225,6 +234,128 @@ void sendContentScale(Instance *in, AEffect *effect)
     logf("  Inhaltsskalierung %.2f an Plugin %p (Antwort %ld)", scale, static_cast<void *>(effect), result);
 }
 
+long nowMs()
+{
+    timespec t;
+    clock_gettime(CLOCK_MONOTONIC, &t);
+    return t.tv_sec * 1000 + t.tv_nsec / 1000000;
+}
+
+// Rahmen: yabridge bettet das Wine-Fenster in ein eigenes Zwischenfenster im Editorfenster
+// des Hosts ein und gibt ihm die Größe aus effEditGetRect beim Öffnen. Ändert das Plugin
+// danach seine Größe (JUCE nach 'PreS'/'AeCs'), wächst das Zwischenfenster nicht mit und
+// schneidet den Editor ab; JUCE-Plugins unter Wine melden nach dem Öffnen zudem wieder ihre
+// Grundgröße. Darum bringt der Lader die Unterfenster von Resolves Editorfenster auf die
+// Zielgröße: die Größe vor dem Öffnen bzw. die letzte von audioMasterSizeWindow.
+// Über xcb, nicht Xlib: Xlib beendet bei X-Fehlern (Fenster schon weg) sonst den Prozess,
+// ein eigener Fehler-Handler gälte für ganz Resolve. RESOLVE_VST_FIX_FRAME=0 schaltet ab.
+
+struct XcbCookie {
+    unsigned sequence;
+};
+struct XcbQueryTreeReply {
+    uint8_t responseType, pad0;
+    uint16_t sequence;
+    uint32_t length, root, parent;
+    uint16_t childrenLen;
+    uint8_t pad1[14];
+};
+struct XcbGeometryReply {
+    uint8_t responseType, depth;
+    uint16_t sequence;
+    uint32_t length, root;
+    int16_t x, y;
+    uint16_t width, height, borderWidth;
+    uint8_t pad0[2];
+};
+
+struct Xcb {
+    void *(*connect)(const char *, int *);
+    int (*hasError)(void *);
+    XcbCookie (*queryTree)(void *, uint32_t);
+    XcbQueryTreeReply *(*queryTreeReply)(void *, XcbCookie, void **);
+    uint32_t *(*children)(const XcbQueryTreeReply *);
+    int (*childrenLength)(const XcbQueryTreeReply *);
+    XcbCookie (*getGeometry)(void *, uint32_t);
+    XcbGeometryReply *(*getGeometryReply)(void *, XcbCookie, void **);
+    XcbCookie (*configureWindow)(void *, uint32_t, uint16_t, const uint32_t *);
+    void *(*pollForEvent)(void *);
+    int (*flush)(void *);
+    void *connection = nullptr;
+};
+
+bool frameFixEnabled()
+{
+    const char *env = getenv("RESOLVE_VST_FIX_FRAME");
+    return !env || strcmp(env, "0") != 0;
+}
+
+Xcb *xcb()
+{
+    static Xcb x;
+    static bool tried = false;
+    if (tried)
+        return x.connection ? &x : nullptr;
+    tried = true;
+    void *lib = dlopen("libxcb.so.1", RTLD_NOW | RTLD_LOCAL);
+    if (!lib)
+        return nullptr;
+    auto sym = [lib](auto &fn, const char *name) {
+        fn = reinterpret_cast<std::remove_reference_t<decltype(fn)>>(dlsym(lib, name));
+        return fn != nullptr;
+    };
+    if (!sym(x.connect, "xcb_connect") || !sym(x.hasError, "xcb_connection_has_error")
+        || !sym(x.queryTree, "xcb_query_tree") || !sym(x.queryTreeReply, "xcb_query_tree_reply")
+        || !sym(x.children, "xcb_query_tree_children") || !sym(x.childrenLength, "xcb_query_tree_children_length")
+        || !sym(x.getGeometry, "xcb_get_geometry") || !sym(x.getGeometryReply, "xcb_get_geometry_reply")
+        || !sym(x.configureWindow, "xcb_configure_window") || !sym(x.pollForEvent, "xcb_poll_for_event")
+        || !sym(x.flush, "xcb_flush"))
+        return nullptr;
+    void *c = x.connect(nullptr, nullptr);
+    if (!c || x.hasError(c)) {
+        logf("Rahmen: keine X11-Verbindung");
+        return nullptr;
+    }
+    x.connection = c;
+    return &x;
+}
+
+void fixFrame(Instance *in)
+{
+    static std::mutex mutex;
+    const uint32_t window = uint32_t(in->window.load());
+    const int w = in->targetW.load(), h = in->targetH.load();
+    if (!window || w <= 0 || h <= 0 || !frameFixEnabled())
+        return;
+    std::lock_guard lock(mutex);
+    Xcb *x = xcb();
+    if (!x)
+        return;
+    void *c = x->connection;
+    void *error = nullptr;
+    XcbQueryTreeReply *tree = x->queryTree ? x->queryTreeReply(c, x->queryTree(c, window), &error) : nullptr;
+    free(error);
+    if (!tree)
+        return;
+    const uint32_t *kids = x->children(tree);
+    for (int i = 0, n = x->childrenLength(tree); i < n; ++i) {
+        error = nullptr;
+        XcbGeometryReply *g = x->getGeometryReply(c, x->getGeometry(c, kids[i]), &error);
+        free(error);
+        if (g && (g->width != w || g->height != h)) {
+            const uint32_t size[] = {uint32_t(w), uint32_t(h)};
+            x->configureWindow(c, kids[i], 4 | 8, size); // XCB_CONFIG_WINDOW_WIDTH | _HEIGHT
+            logf("Rahmen: Unterfenster %#x von %dx%d auf %dx%d", kids[i], g->width, g->height, w, h);
+        }
+        free(g);
+    }
+    free(tree);
+    x->flush(c);
+    // Fehler unbestätigter Anfragen landen in der Ereigniswarteschlange: abräumen.
+    while (void *event = x->pollForEvent(c))
+        free(event);
+}
+
 short scaled(short v, double s)
 {
     return static_cast<short>(lround(v / s));
@@ -236,25 +367,52 @@ long dispatch(AEffect *effect, int opcode, int index, long value, void *ptr, flo
     if (!in)
         return 0;
     switch (opcode) {
-    case effEditOpen:
+    case effEditOpen: {
         in->scale = editorScale(reinterpret_cast<uintptr_t>(ptr));
         logf("Editor öffnen: Plugin %p, Fenster %#lx, Skalierung %.2f", static_cast<void *>(effect),
              static_cast<unsigned long>(reinterpret_cast<uintptr_t>(ptr)), in->scale);
         sendContentScale(in, effect);
+        long result = in->dispatcher(effect, opcode, index, value, ptr, opt);
+        in->window.store(reinterpret_cast<uintptr_t>(ptr));
+        in->fixUntilMs.store(nowMs() + 10000);
+        fixFrame(in);
+        return result;
+    }
+    case effEditClose:
+        in->window.store(0);
+        return in->dispatcher(effect, opcode, index, value, ptr, opt);
+    case effEditIdle:
+        // Kurz nach dem Öffnen bzw. einer Größenänderung den Rahmen nachprüfen (yabridge
+        // setzt ihn beim Öffnen selbst und kann dem Lader zuvorkommen).
+        if (in->window.load() && nowMs() < in->fixUntilMs.load() && ++in->idleCount % 5 == 0)
+            fixFrame(in);
         return in->dispatcher(effect, opcode, index, value, ptr, opt);
     case effEditGetRect: {
         long result = in->dispatcher(effect, opcode, index, value, ptr, opt);
         auto **rect = static_cast<ERect **>(ptr);
         if (rect && *rect) {
-            const ERect r = **rect;
-            if (in->scale != 1.0) {
+            const ERect reported = **rect;
+            ERect r = reported;
+            const int w = r.right - r.left, h = r.bottom - r.top;
+            bool replaced = false;
+            if (!in->window.load()) {
+                in->targetW.store(w);
+                in->targetH.store(h);
+            } else if (frameFixEnabled() && in->targetW.load() > w && in->targetH.load() > h) {
+                // Nach dem Öffnen kleiner als vorher, ohne audioMasterSizeWindow: JUCE unter Wine
+                // meldet dann seine Grundgröße, gezeichnet wird aber in der Zielgröße.
+                r = {0, 0, short(in->targetH.load()), short(in->targetW.load())};
+                replaced = true;
+            }
+            if (in->scale != 1.0 || replaced) {
                 // Eigene Kopie: Das ERect gehört dem Plugin.
                 in->rect = {scaled(r.top, in->scale), scaled(r.left, in->scale),
                             scaled(r.bottom, in->scale), scaled(r.right, in->scale)};
                 *rect = &in->rect;
             }
-            logf("Editorgröße: Plugin %p meldet %dx%d, an Resolve %dx%d", static_cast<void *>(effect),
-                 r.right - r.left, r.bottom - r.top, (*rect)->right - (*rect)->left, (*rect)->bottom - (*rect)->top);
+            logf("Editorgröße: Plugin %p meldet %dx%d%s, an Resolve %dx%d", static_cast<void *>(effect),
+                 reported.right - reported.left, reported.bottom - reported.top, replaced ? " (ersetzt)" : "",
+                 (*rect)->right - (*rect)->left, (*rect)->bottom - (*rect)->top);
         }
         return result;
     }
@@ -271,7 +429,13 @@ long dispatch(AEffect *effect, int opcode, int index, long value, void *ptr, flo
 long hostCallback(AEffect *effect, int opcode, int index, long value, void *ptr, float opt)
 {
     if (opcode == audioMasterSizeWindow && effect) {
-        if (Instance *in = findInstance(effect); in && in->scale != 1.0) {
+        Instance *in = findInstance(effect);
+        if (in) {
+            in->targetW.store(index);
+            in->targetH.store(int(value));
+            in->fixUntilMs.store(nowMs() + 5000);
+        }
+        if (in && in->scale != 1.0) {
             logf("Plugin %p will %dx%d, an Resolve %ldx%ld", static_cast<void *>(effect), index, int(value),
                  lround(index / in->scale), lround(value / in->scale));
             index = static_cast<int>(lround(index / in->scale));
@@ -279,6 +443,8 @@ long hostCallback(AEffect *effect, int opcode, int index, long value, void *ptr,
         }
         long result = gHostCallback.load(std::memory_order_relaxed)(effect, opcode, index, value, ptr, opt);
         logf("  audioMasterSizeWindow: Resolve antwortet %ld", result);
+        if (in)
+            fixFrame(in);
         return result;
     }
     return gHostCallback.load(std::memory_order_relaxed)(effect, opcode, index, value, ptr, opt);
@@ -292,6 +458,11 @@ void wrap(AEffect *effect)
             continue;
         in.dispatcher = effect->dispatcher;
         in.scale = editorScale();
+        in.window.store(0);
+        in.targetW.store(0);
+        in.targetH.store(0);
+        in.fixUntilMs.store(0);
+        in.idleCount = 0;
         in.effect.store(effect, std::memory_order_release);
         effect->dispatcher = dispatch;
         return;
@@ -303,8 +474,8 @@ void wrap(AEffect *effect)
 // (HKCU\Control Panel\Desktop\LogPixels, Standard 96); JUCE-Plugins ignorieren sie (siehe
 // sendContentScale), andere nicht. Wine kennt keine DPI pro Prozess, der Wert gilt für das
 // ganze Prefix und wird beim Start des Plugin-Prozesses gelesen. Darum wird er vor dem
-// Laden eines yabridge-Plugins auf 96 × Resolves Faktor gestellt, nur in resolve selbst
-// (der Scanner zeigt keine Editoren) und je Prefix einmal. Den Vorwert merkt sich
+// Laden jedes yabridge-Plugins auf den Wert für dieses Plugin gestellt (wantedWineDpi), nur in
+// resolve selbst (der Scanner zeigt keine Editoren). Den Vorwert merkt sich
 // stateDir()/wine-dpi-restore; resolve-vst setzt ihn zurück, sobald Resolve beendet ist.
 
 bool isResolveProcess()
@@ -404,14 +575,55 @@ int queryWineDpi(const std::string &prefix)
     return -1;
 }
 
-// RESOLVE_VST_WINE_DPI: nicht gesetzt oder `auto` = 96 × Resolves Faktor, `0` = nicht
-// anfassen, sonst der Wert.
-int wantedWineDpi()
+// Wert aus der Konfiguration: "auto" = 96 × Resolves Faktor, "0" = nicht anfassen, sonst
+// die Zahl; leer oder unbekannt = -1.
+int parseWineDpi(const char *v)
 {
-    const char *env = getenv("RESOLVE_VST_WINE_DPI");
-    if (!env || !*env || strcmp(env, "auto") == 0)
+    while (*v == ' ' || *v == '\t')
+        ++v;
+    if (strncmp(v, "auto", 4) == 0)
         return int(lround(96 * editorScale()));
-    return atoi(env);
+    char *end;
+    long n = strtol(v, &end, 10);
+    return end != v && n >= 0 ? int(n) : -1;
+}
+
+// DPI für ein Plugin: Zeile "Name = Wert" in $XDG_CONFIG_HOME/resolve-vst/wine-dpi.conf
+// (Name = Dateiname der yabridge-.so ohne Endung), sonst RESOLVE_VST_WINE_DPI, sonst auto.
+// Jedes yabridge-Plugin läuft in einem eigenen Wine-Prozess und liest die DPI bei dessen
+// Start, darum kann sie je Plugin verschieden sein (nicht bei yabridge-Plugingruppen).
+int wantedWineDpi(const std::string &so)
+{
+    std::string name = so.substr(so.rfind('/') + 1);
+    name.resize(name.size() - 3); // ".so", von winePrefixFor geprüft
+    std::string conf;
+    if (const char *xdg = getenv("XDG_CONFIG_HOME"); xdg && *xdg)
+        conf = xdg;
+    else if (const char *home = getenv("HOME"))
+        conf = std::string(home) + "/.config";
+    if (FILE *f = fopen((conf + "/resolve-vst/wine-dpi.conf").c_str(), "r")) {
+        char line[1024];
+        int found = -1;
+        while (found < 0 && fgets(line, sizeof line, f)) {
+            line[strcspn(line, "#\r\n")] = 0;
+            char *eq = strchr(line, '=');
+            if (!eq)
+                continue;
+            char *key = line, *keyEnd = eq;
+            while (*key == ' ' || *key == '\t')
+                ++key;
+            while (keyEnd > key && (keyEnd[-1] == ' ' || keyEnd[-1] == '\t'))
+                --keyEnd;
+            if (std::string(key, keyEnd) == name)
+                found = parseWineDpi(eq + 1);
+        }
+        fclose(f);
+        if (found >= 0)
+            return found;
+    }
+    const char *env = getenv("RESOLVE_VST_WINE_DPI");
+    int dpi = env && *env ? parseWineDpi(env) : -1;
+    return dpi >= 0 ? dpi : parseWineDpi("auto");
 }
 
 // Merkt sich den Vorwert (Zeile "Prefix<Tab>DPI", -1 = war nicht gesetzt). Steht der Prefix
@@ -437,41 +649,53 @@ bool rememberWineDpi(const std::string &prefix, int previous)
 
 void syncWineDpi(const std::string &so)
 {
+    struct Known {
+        std::string prefix;
+        int dpi;
+    };
     static const bool inResolve = isResolveProcess();
     static std::mutex mutex;
-    static std::vector<std::string> done;
+    static std::vector<Known> known; // zuletzt gesetzter bzw. abgefragter Wert je Prefix
     if (!inResolve)
         return;
     const std::string prefix = winePrefixFor(so);
     if (prefix.empty())
         return;
-    std::lock_guard lock(mutex);
-    for (const auto &p : done)
-        if (p == prefix)
-            return;
-    done.push_back(prefix);
-
-    const int wanted = wantedWineDpi();
+    const int wanted = wantedWineDpi(so);
     if (wanted <= 0)
         return;
+    std::lock_guard lock(mutex);
+
     timespec t0, t1;
     clock_gettime(CLOCK_MONOTONIC, &t0);
-    const int current = queryWineDpi(prefix);
-    if (current == -2) {
-        logf("  Wine-DPI %s: Abfrage nicht möglich, bleibt", prefix.c_str());
-        return;
+    Known *k = nullptr;
+    for (auto &entry : known)
+        if (entry.prefix == prefix)
+            k = &entry;
+    if (!k) {
+        const int current = queryWineDpi(prefix);
+        if (current == -2) {
+            logf("  Wine-DPI %s: Abfrage nicht möglich, bleibt", prefix.c_str());
+            return;
+        }
+        known.push_back({prefix, current});
+        k = &known.back();
     }
+    const int current = k->dpi;
     if (current == wanted) {
         logf("  Wine-DPI %s: %d, passt", prefix.c_str(), current);
         return;
     }
-    // Ohne gemerkten Vorwert kein Ändern, sonst ließe er sich nicht zurücksetzen.
+    // Ohne gemerkten Vorwert kein Ändern, sonst ließe er sich nicht zurücksetzen. Nur der
+    // erste Eintrag je Prefix zählt (Wert vor Resolve).
     if (!rememberWineDpi(prefix, current)) {
         logf("  Wine-DPI %s: Vorwert nicht speicherbar, bleibt %d", prefix.c_str(), current);
         return;
     }
     bool ok = runWine(prefix, {"reg", "add", "HKCU\\Control Panel\\Desktop", "/v", "LogPixels", "/t", "REG_DWORD",
                                "/d", std::to_string(wanted), "/f"}) == 0;
+    if (ok)
+        k->dpi = wanted;
     clock_gettime(CLOCK_MONOTONIC, &t1);
     logf("  Wine-DPI %s: %d → %d %s (%.1f s); zurück nach Beenden von Resolve", prefix.c_str(), current, wanted,
          ok ? "gesetzt" : "NICHT gesetzt", double(t1.tv_sec - t0.tv_sec) + (t1.tv_nsec - t0.tv_nsec) / 1e9);

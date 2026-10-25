@@ -67,20 +67,56 @@ Plugin (eigener Dispatcher und Host-Callback) und teilt `effEditGetRect` und
 
 Wie groß das Plugin selbst zeichnet, entscheidet das Plugin:
 
-- **Qt-/Linux-Plugins** wie Carla erben die Skalierung aus der Umgebung.
-- **JUCE-Plugins** (z. B. MPC Beats, viele Windows-Plugins über yabridge) skalieren als VST2
-  nur, wenn der Host es ihnen sagt: `effVendorSpecific` mit `'PreS'`/`'AeCs'`, Faktor in
-  `opt` (wie Bitwig und Ableton). Resolve sendet das nicht; der Lader schickt Resolves
-  Faktor vor dem Öffnen des Editors. Getestet mit MPC Beats: 1280×768 → 3200×1920 bei 2,5.
-- **Andere Windows-Plugins über yabridge** zeichnen mit der DPI ihres Wine-Prefix
-  (`HKCU\Control Panel\Desktop\LogPixels`; Bottles' `custom_dpi` schreibt dorthin). Der
-  Lader stellt sie vor dem Laden des ersten yabridge-Plugins eines Prefix auf
-  `96 × Resolves Faktor` (über `$WINELOADER` wie yabridge, nur wenn der Wert abweicht).
-  Wine kennt keine DPI pro Prozess, der Wert gilt für das ganze Prefix. Darum merkt sich der
-  Lader den Vorwert in `~/.local/state/resolve-vst/wine-dpi-restore`, und `resolve-vst` setzt
-  ihn zurück, sobald Resolve endet, auch nach einem Absturz. Wurde das Skript selbst
-  abgebrochen, holt es das beim nächsten Start nach (oder von Hand: `resolve-vst restore`).
-  Plugin-Prozesse, die schon vor der Änderung liefen, behalten ihre DPI.
+- **Qt-/Linux-Plugins** wie Carla skalieren sich selbst aus der Umgebung.
+- **JUCE-Plugins** (z. B. MPC Beats) skalieren als VST2 nur auf Anweisung des Hosts:
+  `effVendorSpecific` mit `'PreS'`/`'AeCs'`, Faktor in `opt` (wie Bitwig und Ableton). Resolve
+  sendet das nicht; der Lader schickt Resolves Faktor vor dem Öffnen des Editors.
+- **Windows-Plugins über yabridge** zeichnen zusätzlich mit der DPI ihres Wine-Prefix
+  (`HKCU\Control Panel\Desktop\LogPixels`; Bottles' `custom_dpi` schreibt dorthin).
+
+### Rahmen bei yabridge
+
+yabridge bettet das Wine-Fenster in ein eigenes Zwischenfenster ein, das die Größe aus
+`effEditGetRect` beim Öffnen bekommt und danach nicht mitwächst. JUCE-Plugins unter Wine
+melden nach dem Öffnen außerdem wieder ihre Grundgröße, zeichnen aber skaliert: Der Editor
+wird abgeschnitten. Der Lader bringt darum die Unterfenster von Resolves Editorfenster auf die
+Zielgröße (Größe vor dem Öffnen bzw. letzte `audioMasterSizeWindow`), direkt nach dem Öffnen
+und in den ersten Sekunden bei `effEditIdle`, und ersetzt die kleinere Größe nach dem Öffnen.
+Über xcb, nicht Xlib (Xlib beendet bei X-Fehlern den Prozess). `RESOLVE_VST_FIX_FRAME=0`
+schaltet das ab.
+
+### Wine-DPI je Plugin
+
+Vor dem Laden jedes yabridge-Plugins stellt der Lader die DPI des Prefix ein (über
+`$WINELOADER` wie yabridge, nur wenn sie abweicht). Jedes yabridge-Plugin läuft in einem
+eigenen Wine-Prozess und liest die DPI bei dessen Start, darum kann sie je Plugin verschieden
+sein (nicht bei yabridge-Plugingruppen). Standard ist `96 × Resolves Faktor`
+(`RESOLVE_VST_WINE_DPI`), einzelne Plugins in `~/.config/resolve-vst/wine-dpi.conf`:
+
+```
+# Name = Wert; Name = Dateiname der yabridge-.so ohne Endung,
+# Wert = Zahl, auto (96 × Faktor) oder 0 (nicht anfassen)
+MPC Beats64 = 96
+```
+
+JUCE-Plugins brauchen 96: Sie skalieren über den Faktor vom Host, mit höherer Wine-DPI
+werden sie kleiner oder verschwinden (getestet mit MPC Beats unter Wine 9.21 und 11.11).
+
+Wine kennt keine DPI pro Prozess, der Wert gilt für das ganze Prefix. Der Lader merkt sich
+darum den Wert vor Resolve in `~/.local/state/resolve-vst/wine-dpi-restore`, und
+`resolve-vst` setzt ihn zurück, sobald Resolve endet, auch nach einem Absturz. Wurde das
+Skript selbst abgebrochen, holt es das beim nächsten Start nach (oder `resolve-vst restore`).
+
+### Testen ohne Resolve
+
+`make editor-test` baut `build/editor-test`: Es öffnet den Editor eines Plugins wie Resolve
+(über `libresolve-vst.so`) und nimmt ihn auf.
+
+```sh
+RESOLVE_VST_EDITOR_SCALE=3.75 build/editor-test ~/.vst/yabridge/'MPC Beats64.so' mpc.png
+```
+
+Die Wine-DPI stellt es nicht ein; die vorher von Hand setzen.
 
 ## Umgebungsvariablen
 
@@ -90,7 +126,8 @@ Wie groß das Plugin selbst zeichnet, entscheidet das Plugin:
 | `RESOLVE_VST_LINKS` | Ordner für die `.vst`-Links (Standard `~/.local/share/resolve-vst/vst`) |
 | `RESOLVE_VST_EDITOR_SCALE` | Skalierung der Editorgröße festlegen (Standard: Faktor von Resolves Fenster; `1` = aus) |
 | `RESOLVE_VST_CONTENT_SCALE` | Faktor für `'PreS'`/`'AeCs'` festlegen (Standard: Resolves Faktor; `0` = nicht senden) |
-| `RESOLVE_VST_WINE_DPI` | DPI für yabridge-Prefixe: `auto` (Standard) = 96 × Faktor, Zahl = fest, `0` = nicht anfassen |
+| `RESOLVE_VST_WINE_DPI` | DPI für yabridge-Prefixe: `auto` (Standard) = 96 × Faktor, Zahl = fest, `0` = nicht anfassen; je Plugin in `wine-dpi.conf` |
+| `RESOLVE_VST_FIX_FRAME=0` | yabridge-Rahmen nicht anpassen |
 | `RESOLVE_VST_DEEPBIND=1` | Plugins mit `RTLD_DEEPBIND` laden (bei Symbolkonflikten mit Resolve) |
 | `RESOLVE_BIN` | Pfad zu Resolve (Standard `/opt/resolve/bin/resolve`) |
 | `VST_PATH` | Suchpfade für VST2, durch `:` getrennt |
@@ -101,7 +138,8 @@ Wie groß das Plugin selbst zeichnet, entscheidet das Plugin:
   Kanälen erkannt, defekte Plugins sauber als nicht funktionsfähig markiert.
 - In Resolve: Plugins erscheinen, lassen sich auf Busse legen, Editoren öffnen sich in einem
   eigenen Resolve-Fenster (X11-Fenster über `QWidget::winId()` an `effEditOpen`).
-- Editorgröße unter HiDPI: Umrechnung eingebaut, in Resolve noch nicht bestätigt.
+- Editorgröße unter HiDPI: mit `editor-test` geprüft (MPC Beats über yabridge 3200×1920 bei
+  Faktor 3,75 und Wine-DPI 96, Carla), in Resolve noch nicht bestätigt.
 - Bibliotheken werden nie entladen (`dlclose` fehlt bewusst, siehe Quelltext).
 - Bricht, wenn Blackmagic `VSTPluginLoader` umbenennt oder die Signatur ändert; dann
   meldet das Log, dass nichts umgeleitet wurde.
