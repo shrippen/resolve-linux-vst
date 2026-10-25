@@ -13,6 +13,7 @@
 #include <dirent.h>
 #include <dlfcn.h>
 #include <elf.h>
+#include <fnmatch.h>
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
@@ -143,33 +144,54 @@ std::string trim(const char *begin, const char *end)
     return std::string(begin, end);
 }
 
+// Namen, unter denen ein Plugin in plugins.conf steht: pluginName(), bei VST3 dazu der Name
+// des Bundles ohne .vst3 (eine Waves-Shell enthält Hunderte Plugins).
+using Names = std::vector<std::string>;
+
+// Eingebaute Vorgaben, wenn plugins.conf nichts sagt (Muster wie dort).
+struct Default {
+    const char *pattern, *key, *value;
+};
+constexpr Default kDefaults[] = {
+    // Waves unter Wine zeichnet mit dem Faktor 240/DPI des Prefix, meldet aber die Größe ohne
+    // ihn; bei 240 stimmen beide, die Skalierung kommt dann vom Host (Inhaltsskalierung).
+    {"WaveShell*", "wine-dpi", "240"},
+};
+
+bool matches(const std::string &pattern, const Names &names)
+{
+    for (const auto &n : names)
+        if (fnmatch(pattern.c_str(), n.c_str(), 0) == 0)
+            return true;
+    return false;
+}
+
 // Einstellung je Plugin aus $XDG_CONFIG_HOME/resolve-vst/plugins.conf (Standard
-// ~/.config/resolve-vst/plugins.conf), leer wenn nicht gesetzt:
+// ~/.config/resolve-vst/plugins.conf), sonst aus kDefaults, leer wenn nicht gesetzt:
 //
-//   [MPC Beats64]          # pluginName(), also Dateiname der .so ohne Endung
+//   [MPC Beats64]          # Name (siehe Names) oder Shell-Muster wie [WaveShell*]
 //   wine-dpi = 96
 //   content-scale = 0
 //
-// Wird bei jedem Aufruf gelesen (klein, selten gebraucht); Änderungen gelten ohne Neustart.
-std::string pluginSetting(const std::string &plugin, const char *key)
+// Es gilt der erste passende Abschnitt mit dem Schlüssel. Wird bei jedem Aufruf gelesen
+// (klein, selten gebraucht); Änderungen gelten ohne Neustart.
+std::string pluginSetting(const Names &plugin, const char *key)
 {
     std::string conf;
     if (const char *xdg = getenv("XDG_CONFIG_HOME"); xdg && *xdg)
         conf = xdg;
     else if (const char *home = getenv("HOME"))
         conf = std::string(home) + "/.config";
-    FILE *f = fopen((conf + "/resolve-vst/plugins.conf").c_str(), "r");
-    if (!f)
-        return {};
     std::string value;
+    FILE *f = fopen((conf + "/resolve-vst/plugins.conf").c_str(), "r");
     bool inSection = false;
     char line[1024];
-    while (fgets(line, sizeof line, f)) {
+    while (f && fgets(line, sizeof line, f)) {
         line[strcspn(line, "#\r\n")] = 0;
         const char *end = line + strlen(line);
         if (const char *open = strchr(line, '['); open && trim(line, open).empty()) {
             const char *close = strchr(open, ']');
-            inSection = close && trim(open + 1, close) == plugin;
+            inSection = close && matches(trim(open + 1, close), plugin);
             continue;
         }
         const char *eq = strchr(line, '=');
@@ -178,7 +200,14 @@ std::string pluginSetting(const std::string &plugin, const char *key)
             break;
         }
     }
-    fclose(f);
+    if (f)
+        fclose(f);
+    if (value.empty())
+        for (const auto &d : kDefaults)
+            if (strcmp(d.key, key) == 0 && matches(d.pattern, plugin)) {
+                value = d.value;
+                break;
+            }
     return value;
 }
 
@@ -212,7 +241,7 @@ constexpr long kAeCs = 0x41654373; // 'AeCs'
 struct Instance {
     std::atomic<AEffect *> effect{nullptr};
     Dispatcher dispatcher = nullptr;
-    std::string name; // pluginName(), für plugins.conf
+    Names names; // für plugins.conf
     double scale = 1.0;
     ERect rect{};
     // Rahmen (siehe fixFrame): Editorfenster von Resolve, Zielgröße in Bildschirmpixeln,
@@ -287,13 +316,13 @@ double editorScale(unsigned long long windowId = 0)
 // Faktor, Zahl = fest, 0 = nicht senden.
 void sendContentScale(Instance *in, AEffect *effect)
 {
-    std::string setting = pluginSetting(in->name, "content-scale");
+    std::string setting = pluginSetting(in->names, "content-scale");
     if (setting.empty())
         if (const char *env = getenv("RESOLVE_VST_CONTENT_SCALE"))
             setting = env;
     const double scale = setting.empty() || setting == "auto" ? in->scale : atof(setting.c_str());
     if (scale <= 0) {
-        logf("  Inhaltsskalierung für %s abgeschaltet", in->name.c_str());
+        logf("  Inhaltsskalierung für %s abgeschaltet", in->names[0].c_str());
         return;
     }
     long result = in->dispatcher(effect, effVendorSpecific, kPreS, kAeCs, nullptr, float(scale));
@@ -516,14 +545,14 @@ long hostCallback(AEffect *effect, int opcode, int index, long value, void *ptr,
     return gHostCallback.load(std::memory_order_relaxed)(effect, opcode, index, value, ptr, opt);
 }
 
-void wrap(AEffect *effect, const std::string &name)
+void wrap(AEffect *effect, const Names &names)
 {
     std::lock_guard lock(gInstancesMutex);
     for (auto &in : gInstances) {
         if (in.effect.load(std::memory_order_relaxed))
             continue;
         in.dispatcher = effect->dispatcher;
-        in.name = name;
+        in.names = names;
         in.scale = editorScale();
         in.window.store(0);
         in.targetW.store(0);
@@ -541,8 +570,9 @@ void wrap(AEffect *effect, const std::string &name)
 // (HKCU\Control Panel\Desktop\LogPixels, Standard 96); JUCE-Plugins ignorieren sie (siehe
 // sendContentScale), andere nicht. Wine kennt keine DPI pro Prozess, der Wert gilt für das
 // ganze Prefix und wird beim Start des Plugin-Prozesses gelesen. Darum wird er vor dem
-// Laden jedes yabridge-Plugins auf den Wert für dieses Plugin gestellt (wantedWineDpi), nur in
-// resolve selbst (der Scanner zeigt keine Editoren). Den Vorwert merkt sich
+// Laden jedes yabridge-Plugins auf den Wert für dieses Plugin gestellt (wantedWineDpi), in
+// resolve und im VstScanner: Plugin-Prozesse können ihn überleben (eine yabridge-Plugingruppe
+// wie die von Waves läuft weiter und wird später von Resolve benutzt). Den Vorwert merkt sich
 // stateDir()/wine-dpi-restore; resolve-vst setzt ihn zurück, sobald Resolve beendet ist.
 
 bool isResolveProcess()
@@ -553,7 +583,8 @@ bool isResolveProcess()
         return false;
     exe[n] = 0;
     const char *base = strrchr(exe, '/');
-    return strcmp(base ? base + 1 : exe, "resolve") == 0;
+    base = base ? base + 1 : exe;
+    return strcmp(base, "resolve") == 0 || strcmp(base, "VstScanner") == 0;
 }
 
 // Prefix, in dem eine Windows-Datei (meist ein Symlink von yabridge) liegt.
@@ -676,9 +707,9 @@ int parseWineDpi(const char *v)
 // DPI für ein Plugin: wine-dpi in plugins.conf, sonst RESOLVE_VST_WINE_DPI, sonst auto.
 // Jedes yabridge-Plugin läuft in einem eigenen Wine-Prozess und liest die DPI bei dessen
 // Start, darum kann sie je Plugin verschieden sein (nicht bei yabridge-Plugingruppen).
-int wantedWineDpi(const std::string &name)
+int wantedWineDpi(const Names &names)
 {
-    std::string setting = pluginSetting(name, "wine-dpi");
+    std::string setting = pluginSetting(names, "wine-dpi");
     if (setting.empty())
         if (const char *env = getenv("RESOLVE_VST_WINE_DPI"))
             setting = env;
@@ -707,8 +738,8 @@ bool rememberWineDpi(const std::string &prefix, int previous)
     return fclose(f) == 0 && ok;
 }
 
-// `name` wie pluginName(), `prefix` aus winePrefixFor bzw. winePrefixForBundle.
-void syncWineDpi(const std::string &name, const std::string &prefix)
+// `prefix` aus winePrefixFor bzw. winePrefixForBundle.
+void syncWineDpi(const Names &names, const std::string &prefix)
 {
     struct Known {
         std::string prefix;
@@ -719,7 +750,7 @@ void syncWineDpi(const std::string &name, const std::string &prefix)
     static std::vector<Known> known; // zuletzt gesetzter bzw. abgefragter Wert je Prefix
     if (!inResolve || prefix.empty())
         return;
-    const int wanted = wantedWineDpi(name);
+    const int wanted = wantedWineDpi(names);
     if (wanted <= 0)
         return;
     std::lock_guard lock(mutex);
@@ -787,14 +818,16 @@ AEffect *VSTPluginLoader::Load(const wchar_t *wpath, audioMasterCallback callbac
             failed = true;
             return nullptr;
         }
-        syncWineDpi(pluginName(path), winePrefixForBundle(vst3Bundle(path)));
+        const std::string bundle = vst3Bundle(path);
+        const Names names{pluginName(path), pluginName(bundle.substr(0, bundle.size() - 5))}; // ohne .vst3
+        syncWineDpi(names, winePrefixForBundle(bundle));
         gHostCallback.store(callback, std::memory_order_relaxed);
         AEffect *effect = vst3Load(path, hostCallback);
         if (!effect) {
             failed = true;
             return nullptr;
         }
-        wrap(effect, pluginName(path));
+        wrap(effect, names);
         loaded_ = 1;
         logf("  ok, VST3 als AEffect %p", static_cast<void *>(effect));
         return effect;
@@ -810,7 +843,7 @@ AEffect *VSTPluginLoader::Load(const wchar_t *wpath, audioMasterCallback callbac
         if (file != path)
             logf("  → %s", file.c_str());
     }
-    syncWineDpi(pluginName(file), winePrefixFor(file));
+    syncWineDpi({pluginName(file)}, winePrefixFor(file));
 
     int flags = RTLD_NOW | RTLD_LOCAL;
     if (const char *deep = getenv("RESOLVE_VST_DEEPBIND"); deep && *deep == '1')
@@ -843,7 +876,7 @@ AEffect *VSTPluginLoader::Load(const wchar_t *wpath, audioMasterCallback callbac
         return nullptr;
     }
 
-    wrap(effect, pluginName(file));
+    wrap(effect, {pluginName(file)});
     loaded_ = 1;
     logf("  ok, AEffect %p", static_cast<void *>(effect));
     return effect;

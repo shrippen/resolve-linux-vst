@@ -73,17 +73,36 @@ neu scannen.
 ### Plugins ausblenden
 
 `~/.config/resolve-vst/ignore`: Shell-Muster auf die Pfade im Link-Ordner, eins je Zeile.
-Resolve scannt jedes Plugin einzeln; bei yabridge startet dafür jedes Mal Wine (einige
-Sekunden). Große Sammlungen, die man nicht braucht, lieber ausblenden:
+Resolve scannt jedes Plugin einzeln. Ein yabridge-Bundle startet Wine dabei nur einmal (das
+Modul bleibt geladen), jedes Plugin kostet dann noch etwa eine Sekunde; die Waves-Shell
+14.12 mit 617 Plugins also gut zehn Minuten beim ersten Scan. Was man nicht braucht:
 
 ```
-# Waves-Shell mit über 600 Plugins
-VST3/yabridge/WaveShell1-VST3 14.12_x64/*
 carla/CarlaPatchbay[0-9]*
+VST3/yabridge/WaveShell1-VST3 14.12_x64/Abbey Road*
 ```
 
 `resolve-vst link` legt den Ordner nur neu an, wenn sich etwas geändert hat (Liste in
 `.entries` dort).
+
+## Waves schneller laden
+
+Waves-Plugins stecken in WaveShells (hier sechs Versionen, 646 Plugins). Ohne weiteres startet
+yabridge für jede Shell einen eigenen Wine-Prozess. Mit einer **yabridge-Plugingruppe**
+laufen alle in einem Prozess, Wine startet einmal, und der Prozess bleibt nach dem Schließen
+warm: ein weiteres Waves-Plugin ist dann in 30 ms statt 0,5–1 s erzeugt. Dazu
+`~/.vst3/yabridge/yabridge.toml`:
+
+```toml
+["WaveShell*.vst3"]
+group = "waves"
+```
+
+Die Gruppe liest die Wine-DPI beim Start. Der Lader stellt die DPI darum auch im Scanner ein
+(sonst liefe die Gruppe nach einem Scan mit der falschen weiter). Wurde die Gruppe von einem
+anderen Host mit anderer DPI gestartet, sie beenden (`pkill -f 'yabridge-host.exe.so group'`).
+Nach einem Absturz von Resolve beendet `resolve-vst` die Gruppen selbst: Sie hängen sonst
+beim nächsten Editor bis zu zwei Minuten.
 
 ## VST3-Adapter
 
@@ -145,15 +164,21 @@ schaltet das ab.
 ### Einstellungen je Plugin
 
 `~/.config/resolve-vst/plugins.conf` (bzw. `$XDG_CONFIG_HOME/resolve-vst/plugins.conf`),
-Abschnitt je Plugin, Name = Dateiname der Plugin-`.so` ohne Endung:
+Abschnitt je Plugin. Name = Dateiname der Plugin-`.so` ohne Endung, bei VST3 der Name des
+Plugins oder des Bundles ohne `.vst3`; Shell-Muster gehen auch. Es gilt der erste passende
+Abschnitt.
 
 ```
 [MPC Beats64]
 wine-dpi = 96       # Zahl, auto (96 × Resolves Faktor), 0 = nicht anfassen
 content-scale = 0   # Zahl, auto (Resolves Faktor), 0 = nicht senden
+
+[WaveShell*]        # alle Waves-Plugins
+wine-dpi = 240
 ```
 
-Ohne Eintrag gelten `RESOLVE_VST_WINE_DPI` und `RESOLVE_VST_CONTENT_SCALE`, sonst `auto`.
+Ohne Eintrag gelten eingebaute Vorgaben (Waves, siehe unten), dann `RESOLVE_VST_WINE_DPI`
+und `RESOLVE_VST_CONTENT_SCALE`, sonst `auto`.
 
 **Wine-DPI:** Vor dem Laden jedes yabridge-Plugins stellt der Lader die DPI des Prefix ein
 (über `$WINELOADER` wie yabridge, nur wenn sie abweicht). Jedes yabridge-Plugin läuft in einem
@@ -164,6 +189,12 @@ sein (nicht bei yabridge-Plugingruppen).
 Es zeichnet mit dem Faktor des Bildschirms (`Xft.dpi`), nicht mit dem vom Host. Mit höherer
 Wine-DPI wird es kleiner oder verschwindet; mit Faktor vom Host rechnet es nur die
 Fenstergröße damit (4800×2880 statt 3200×1920 bei 3,75), der Rest bleibt schwarz.
+
+**Waves** (WaveShell, VST3 über yabridge) zeichnet mit dem Faktor 240 / Wine-DPI, meldet die
+Größe aber ohne ihn: Bei 180 DPI ist der Editor abgeschnitten, bei 360 (`auto` bei Faktor
+3,75) bleibt er klein mit schwarzem Rand. Bei 240 stimmen Zeichnung und Größe, und Waves
+skaliert sich scharf mit der Inhaltsskalierung vom Host (getestet mit den Faktoren 1 und 2,
+unabhängig von `Xft.dpi` und Bildschirmgröße). Darum ist 240 für `WaveShell*` eingebaut.
 
 Wine kennt keine DPI pro Prozess, der Wert gilt für das ganze Prefix. Der Lader merkt sich
 darum den Wert vor Resolve in `~/.local/state/resolve-vst/wine-dpi-restore`, und
@@ -213,7 +244,8 @@ Fenstermanager scheitern manche Plugins an fehlenden X-Atomen (MiniMeters bricht
   (3200×1920 bei Faktor 3,75). Carla unverändert.
 - VST3: Scanner erkennt native (ToneBoosters, MiniMeters) und yabridge-Plugins (iZotope);
   mit `editor-test` geprüft: Audio läuft durch (Kompressor regelt), Parameter, Chunk,
-  Editor mit Inhaltsskalierung (ToneBoosters). In Resolve noch nicht ausprobiert.
+  Editor mit Inhaltsskalierung (ToneBoosters). Waves (Shell 14.12 und neuer): Scan, Audio,
+  Parameter, Chunk, Editor in richtiger Größe bei DPI 240. In Resolve noch nicht ausprobiert.
 - Bibliotheken werden nie entladen (`dlclose` fehlt bewusst, siehe Quelltext).
 - Bricht, wenn Blackmagic `VSTPluginLoader` umbenennt oder die Signatur ändert; dann
   meldet das Log, dass nichts umgeleitet wurde.

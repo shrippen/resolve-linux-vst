@@ -14,6 +14,7 @@
 #include <glib.h>
 
 #include <cmath>
+#include <csignal>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -193,7 +194,13 @@ int main(int argc, char **argv)
                             + std::to_string(a.height) + " -i " + getenv("DISPLAY") + "+" + std::to_string(x) + ","
                             + std::to_string(y) + " -frames:v 1 '" + argv[2] + "'";
     int status = system(cmd.c_str());
-    // Ohne effClose beenden: Manche Plugins (MPC Beats über yabridge) hängen ohne
-    // Ereignisschleife des Hosts beim Schließen; yabridge räumt den Wine-Prozess selbst ab.
+    // Sauber schließen wie Resolve (eine yabridge-Plugingruppe hängt sonst beim nächsten
+    // Editor). Manche Plugins (MPC Beats) hängen beim Schließen ohne Ereignisschleife des
+    // Hosts: nach 10 s ohne Aufräumen beenden.
+    signal(SIGALRM, [](int) { _Exit(3); });
+    alarm(10);
+    e->dispatcher(e, 15, 0, 0, nullptr, 0); // effEditClose
+    e->dispatcher(e, 12, 0, 0, nullptr, 0); // effMainsChanged aus
+    e->dispatcher(e, 1, 0, 0, nullptr, 0);  // effClose
     _Exit(status == 0 ? 0 : 1);
 }

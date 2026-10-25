@@ -218,6 +218,11 @@ restore)
     # zurücksetzen. LD_PRELOAD nur für Resolve, nicht für die Wine-Aufrufe hier.
     status=0
     LD_PRELOAD="$lib${LD_PRELOAD:+:$LD_PRELOAD}" "$resolve" "$@" || status=$?
+    # Nach einem Absturz hängen yabridge-Plugingruppen (z. B. Waves) beim nächsten Editor bis
+    # zu zwei Minuten, weil sie den verschwundenen Host noch bedienen: beenden.
+    if ((status >= 128)) && pkill -f 'yabridge-host\.exe\.so group '; then
+        echo "resolve-vst: Resolve abgestürzt, yabridge-Plugingruppen beendet" >&2
+    fi
     restore_wine_dpi
     exit "$status"
     ;;
