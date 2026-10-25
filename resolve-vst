@@ -1,32 +1,45 @@
 #!/usr/bin/env bash
-# resolve-vst: DaVinci Resolve mit VST2-Lader starten.
+# resolve-vst: DaVinci Resolve mit VST-Lader starten.
 #
 #   resolve-vst [Resolve-Argumente]   Links auffrischen, Resolve starten
 #   resolve-vst link                  nur die Links auffrischen
-#   resolve-vst list                  gefundene Plugins anzeigen
+#   resolve-vst list                  gefundene Plugins anzeigen (VST3 mit Klassen)
 #   resolve-vst restore               geänderte Wine-DPI zurücksetzen (geschieht sonst
 #                                     automatisch, wenn Resolve endet)
 #
 # Resolves Scanner nimmt nur Einträge mit der Endung .vst (macOS-Stil). Darum legt das
 # Skript für jede VST2-Bibliothek einen Symlink Name.vst in $RESOLVE_VST_LINKS an; diesen
 # Ordner einmal in Resolve unter Einstellungen → Audio-Plugins als VST-Pfad eintragen.
+# VST3-Plugins erscheinen dort als Ordner VST3/…/Klasse.vst mit den Dateien bundle (Symlink
+# auf das Bundle) und class (Klassen-ID); libresolve-vst.so lädt sie über den VST3-Adapter.
 set -euo pipefail
 
 here=$(dirname "$(readlink -f "$0")")
 lib=${RESOLVE_VST_LIB:-}
-for candidate in "$here/build/libresolve-vst.so" "$here/../lib/resolve-vst/libresolve-vst.so"; do
-    [[ -z $lib && -f $candidate ]] && lib=$(readlink -f "$candidate")
+classes=""
+for dir in "$here/build" "$here/../lib/resolve-vst"; do
+    [[ -z $lib && -f $dir/libresolve-vst.so ]] && lib=$(readlink -f "$dir/libresolve-vst.so")
+    [[ -z $classes && -x $dir/vst3-classes ]] && classes=$(readlink -f "$dir/vst3-classes")
 done
 resolve=${RESOLVE_BIN:-/opt/resolve/bin/resolve}
 links=${RESOLVE_VST_LINKS:-${XDG_DATA_HOME:-$HOME/.local/share}/resolve-vst/vst}
 # Vorwerte der Wine-DPI, geschrieben von libresolve-vst.so (stateDir() dort).
 restore=${XDG_STATE_HOME:-$HOME/.local/state}/resolve-vst/wine-dpi-restore
+# Klassen je VST3-Bundle (Auslesen startet bei yabridge Wine, darum zwischengespeichert).
+cache=${XDG_CACHE_HOME:-$HOME/.cache}/resolve-vst/vst3
+# Einträge, die Resolve nicht sehen soll (siehe entries).
+ignore=${XDG_CONFIG_HOME:-$HOME/.config}/resolve-vst/ignore
 
 # Suchpfade für VST2 unter Linux, wie bei anderen Hosts üblich; $VST_PATH hat Vorrang.
 if [[ -n ${VST_PATH:-} ]]; then
     IFS=: read -ra roots <<<"$VST_PATH"
 else
     roots=("$HOME/.vst" "$HOME/.lxvst" /usr/local/lib/vst /usr/local/lib/lxvst /usr/lib/vst /usr/lib/lxvst)
+fi
+if [[ -n ${VST3_PATH:-} ]]; then
+    IFS=: read -ra roots3 <<<"$VST3_PATH"
+else
+    roots3=("$HOME/.vst3" /usr/local/lib/vst3 /usr/lib/vst3)
 fi
 
 is_vst2() {
@@ -43,21 +56,112 @@ plugins() {
     done
 }
 
-link() {
-    rm -rf "$links"
-    mkdir -p "$links"
-    local root file rel target n=0
+# VST3-Bundles (Ordner oder alte Einzeldateien Name.vst3), je Zeile Wurzel<Tab>Pfad.
+bundles() {
+    local root file
+    for root in "${roots3[@]}"; do
+        [[ -d $root ]] || continue
+        find -L "$root" -mindepth 1 -name '*.vst3' -prune -printf "$root\t%p\n" 2>/dev/null
+    done
+}
+
+# Klassen eines Bundles (ID<Tab>Name<Tab>Unterkategorien), aus dem Zwischenspeicher, solange
+# sich die Bibliotheken im Bundle nicht geändert haben.
+classes_of() {
+    local bundle=$1 key file
+    key="$(readlink -f "$bundle") $(find -L "$bundle" -maxdepth 3 -name '*.so' -printf '%T@ %s ' 2>/dev/null)"
+    file="$cache/$(sha1sum <<<"$bundle" | cut -c1-16)"
+    if [[ -f $file && $(head -n1 "$file") == "$key" ]]; then
+        tail -n +2 "$file"
+        return
+    fi
+    mkdir -p "$cache"
+    local out
+    out=$(timeout 120 "$classes" "$bundle" 2>/dev/null) || true
+    printf '%s\n%s' "$key" "${out:+$out$'\n'}" >"$file"
+    printf '%s' "${out:+$out$'\n'}"
+}
+
+# Einträge im Link-Ordner, je Zeile Pfad<Tab>Quelle<Tab>Klassen-ID (leer bei VST2), ohne die
+# Muster aus $ignore (Shell-Muster auf den Pfad, eins je Zeile, # für Kommentare).
+entries() {
+    local root file rel id name sub dir target found count
+    local -A seen=()
+    local -a skip=()
+    if [[ -f $ignore ]]; then
+        mapfile -t skip < <(sed -e 's/[[:space:]]*#.*//' -e '/^[[:space:]]*$/d' "$ignore")
+    fi
+    emit() { # Pfad Quelle [ID]
+        local path=$1 pattern
+        for pattern in "${skip[@]}"; do
+            # shellcheck disable=SC2053 # Muster gewollt
+            [[ $path == $pattern ]] && return
+        done
+        printf '%s\t%s\t%s\n' "$path" "$2" "${3:-}"
+    }
     while IFS=$'\t' read -r root file; do
         rel=${file#"$root"/}
         # Ordner auf .vst (z. B. carla.vst/) hält der Scanner selbst für ein Plugin.
         rel=$(sed -E 's#\.vst(/|$)#\1#g' <<<"${rel%.so}")
-        target="$links/$rel.vst"
-        [[ -e $target ]] && target="$links/$rel ($(basename "$root")).vst"
-        mkdir -p "$(dirname "$target")"
-        ln -s "$file" "$target"
-        n=$((n + 1))
+        target="$rel.vst"
+        [[ -n ${seen[$target]:-} ]] && target="$rel ($(basename "$root")).vst"
+        seen[$target]=1
+        emit "$target" "$file"
     done < <(plugins)
-    echo "resolve-vst: $n VST2-Plugins in $links" >&2
+
+    [[ -n $classes ]] || { echo "resolve-vst: vst3-classes nicht gefunden (make?), keine VST3-Plugins" >&2; return; }
+    local -a list=()
+    mapfile -t list < <(bundles)
+    # Erst alle Bundles auslesen, parallel (yabridge braucht je Bundle einige Sekunden).
+    for entry in "${list[@]}"; do
+        classes_of "${entry#*$'\t'}" >/dev/null &
+        (($(jobs -r | wc -l) >= 8)) && wait -n
+    done
+    wait
+    for entry in "${list[@]}"; do
+        root=${entry%%$'\t'*} file=${entry#*$'\t'}
+        rel=${file#"$root"/}
+        rel=${rel%.vst3}
+        found=$(classes_of "$file")
+        count=$(grep -c . <<<"$found" || true)
+        while IFS=$'\t' read -r id name sub; do
+            [[ -n $id ]] || continue
+            name=${name//\//-}
+            # Eine Klasse: neben die anderen Bundles, sonst in einen Ordner je Bundle.
+            if ((count == 1)); then dir=$(dirname "VST3/$rel"); else dir="VST3/$rel"; fi
+            target="$dir/$name.vst"
+            [[ -n ${seen[$target]:-} ]] && target="$dir/$name ($id).vst"
+            seen[$target]=1
+            emit "$target" "$file" "$id"
+        done <<<"$found"
+    done
+}
+
+# Legt den Link-Ordner neu an, wenn sich die Einträge geändert haben (Liste in .entries).
+link() {
+    local list path source id n2=0 n3=0
+    list=$(entries)
+    if [[ -f $links/.entries && $(<"$links/.entries") == "$list" ]]; then
+        echo "resolve-vst: Plugins unverändert ($(grep -c . <<<"$list" || true) in $links)" >&2
+        return
+    fi
+    rm -rf "$links"
+    mkdir -p "$links"
+    while IFS=$'\t' read -r path source id; do
+        [[ -n $path ]] || continue
+        if [[ -z $id ]]; then
+            mkdir -p "$(dirname "$links/$path")"
+            ln -s "$source" "$links/$path"
+            n2=$((n2 + 1))
+        else
+            mkdir -p "$links/$path"
+            ln -s "$source" "$links/$path/bundle"
+            printf '%s\n' "$id" >"$links/$path/class"
+            n3=$((n3 + 1))
+        fi
+    done <<<"$list"
+    printf '%s\n' "$list" >"$links/.entries"
+    echo "resolve-vst: $n2 VST2- und $n3 VST3-Plugins in $links" >&2
 }
 
 # Setzt die Wine-DPI der Prefixe zurück, die der Lader während Resolve geändert hat.
@@ -89,6 +193,13 @@ link)
     ;;
 list)
     plugins | cut -f2
+    if [[ -n $classes ]]; then
+        bundles | cut -f2 | while IFS= read -r bundle; do
+            classes_of "$bundle" | while IFS=$'\t' read -r id name sub; do
+                printf '%s\t%s\t%s\n' "$bundle" "$name" "$sub"
+            done
+        done
+    fi
     ;;
 restore)
     restore_wine_dpi

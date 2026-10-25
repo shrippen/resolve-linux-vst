@@ -1,6 +1,9 @@
-// editor-test: öffnet den Editor eines VST2-Plugins wie Resolve und nimmt ihn auf.
+// editor-test: öffnet den Editor eines Plugins wie Resolve und nimmt ihn auf.
 //
-//   build/editor-test <plugin.so> <aufnahme.png> [Sekunden]
+//   build/editor-test <plugin.so | Klasse.vst> <aufnahme.png> [Sekunden]
+//
+// VST3-Plugins über ihren Eintrag Klasse.vst aus resolve-vst link (VST3-Adapter). Vor dem
+// Editor laufen einige Blöcke Audio (Sinus) durch das Plugin, die Pegel stehen auf stdout.
 //
 // Lädt über VSTPluginLoader::Load aus libresolve-vst.so (also mit Dispatcher, Callback,
 // Inhaltsskalierung und Rahmen wie in Resolve). Größen sind wie bei Resolves Qt logische
@@ -8,23 +11,19 @@
 // Faktor). Am Ende: Fensterbaum auf stdout, Aufnahme des Editorfensters per ffmpeg.
 // Die Wine-DPI stellt das Programm nicht ein (es heißt nicht resolve).
 #include <X11/Xlib.h>
+#include <glib.h>
 
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <string>
+#include <vector>
 #include <unistd.h>
 
-struct AEffect;
-using Callback = long (*)(AEffect *, int, int, long, void *, float);
-struct AEffect {
-    int32_t magic;
-    Callback dispatcher;
-};
-struct ERect {
-    int16_t top, left, bottom, right;
-};
+#include "../src/vst2.h"
+using Callback = audioMasterCallback;
 class VSTPluginLoader {
 public:
     AEffect *Load(const wchar_t *path, Callback callback, bool &failed);
@@ -94,6 +93,12 @@ int main(int argc, char **argv)
     const int seconds = argc > 3 ? atoi(argv[3]) : 20;
     const std::wstring path(argv[1], argv[1] + strlen(argv[1]));
 
+    // X-Fehler melden statt beenden (gilt für alle Xlib-Verbindungen im Prozess, auch die
+    // des Plugins; manche Plugins stolpern ohne Fenstermanager, z. B. in Xvfb).
+    XSetErrorHandler([](Display *, XErrorEvent *e) {
+        fprintf(stderr, "X-Fehler %d (Anfrage %d)\n", e->error_code, e->request_code);
+        return 0;
+    });
     dpy = XOpenDisplay(nullptr);
     if (!dpy) {
         fprintf(stderr, "keine X11-Verbindung\n");
@@ -114,6 +119,47 @@ int main(int argc, char **argv)
     e->dispatcher(e, 0, 0, 0, nullptr, 0);      // effOpen
     e->dispatcher(e, 10, 0, 0, nullptr, 48000); // effSetSampleRate
     e->dispatcher(e, 11, 0, 512, nullptr, 0);   // effSetBlockSize
+    e->dispatcher(e, 12, 0, 1, nullptr, 0);     // effMainsChanged an
+    printf("%d Parameter, %d→%d Kanäle\n", e->numParams, e->numInputs, e->numOutputs);
+    {
+        // 20 Blöcke Sinus 1 kHz, -12 dBFS, auf allen Eingängen; Pegel des letzten Blocks.
+        const int n = 512;
+        std::vector<std::vector<float>> in(size_t(e->numInputs), std::vector<float>(n)), out(size_t(e->numOutputs), std::vector<float>(n));
+        std::vector<float *> ip, op;
+        for (auto &c : in)
+            ip.push_back(c.data());
+        for (auto &c : out)
+            op.push_back(c.data());
+        double rmsIn = 0, rmsOut = 0;
+        for (int b = 0; b < 20; ++b) {
+            for (auto &c : in)
+                for (int i = 0; i < n; ++i)
+                    c[size_t(i)] = 0.25f * float(sin(2 * M_PI * 1000 * (b * n + i) / 48000.0));
+            e->processReplacing(e, ip.data(), op.data(), n);
+        }
+        for (auto &c : in)
+            for (float v : c)
+                rmsIn += double(v) * v;
+        for (auto &c : out)
+            for (float v : c)
+                rmsOut += double(v) * v;
+        auto db = [](double sum, size_t count) { return count ? 10 * log10(sum / double(count) + 1e-20) : -200.0; };
+        printf("Audio: Eingang %.1f dBFS, Ausgang %.1f dBFS\n", db(rmsIn, in.size() * n), db(rmsOut, out.size() * n));
+    }
+    if (e->numParams > 0) {
+        char name[256] = {}, display[256] = {}, label[256] = {};
+        e->dispatcher(e, 8, 0, 0, name, 0);
+        e->dispatcher(e, 7, 0, 0, display, 0);
+        e->dispatcher(e, 6, 0, 0, label, 0);
+        printf("Parameter 0: %s = %s %s (%.3f)\n", name, display, label, e->getParameter(e, 0));
+    }
+    void *chunk = nullptr;
+    long chunkSize = e->dispatcher(e, 23, 0, 0, &chunk, 0); // effGetChunk
+    if (chunkSize > 0) {
+        std::vector<char> copy(static_cast<char *>(chunk), static_cast<char *>(chunk) + chunkSize);
+        long ok = e->dispatcher(e, 24, 0, chunkSize, copy.data(), 0); // effSetChunk
+        printf("Chunk: %ld Bytes, zurückgeschrieben: %ld\n", chunkSize, ok);
+    }
     rect(e, "vor effEditOpen");
     e->dispatcher(e, 14, 0, 0, reinterpret_cast<void *>(win), 0); // effEditOpen
     rect(e, "nach effEditOpen");
@@ -124,11 +170,28 @@ int main(int argc, char **argv)
             XNextEvent(dpy, &ev);
         }
         e->dispatcher(e, 19, 0, 0, nullptr, 0); // effEditIdle
+        while (g_main_context_iteration(nullptr, FALSE)) // IRunLoop des VST3-Adapters
+            ;
         usleep(20000);
     }
     tree(win, 0);
-    const std::string cmd = "ffmpeg -loglevel error -y -f x11grab -window_id " + std::to_string(win) + " -i "
-                            + getenv("DISPLAY") + " -frames:v 1 '" + argv[2] + "'";
+    // Ausschnitt des Bildschirms an der Fensterposition (x11grab -window_id scheitert unter
+    // Xwayland an Fenstern, die nicht ganz sichtbar sind).
+    XWindowAttributes before;
+    XGetWindowAttributes(dpy, win, &before);
+    printf("Fenster %s\n", before.map_state == IsViewable ? "sichtbar" : "nicht sichtbar, wird gezeigt");
+    XMapRaised(dpy, win);
+    XSync(dpy, False);
+    usleep(300000);
+    XWindowAttributes a;
+    XGetWindowAttributes(dpy, win, &a);
+    int x = 0, y = 0;
+    Window child;
+    XTranslateCoordinates(dpy, win, DefaultRootWindow(dpy), 0, 0, &x, &y, &child);
+    printf("Fenster bei %d,%d\n", x, y);
+    const std::string cmd = "ffmpeg -loglevel error -y -f x11grab -video_size " + std::to_string(a.width) + "x"
+                            + std::to_string(a.height) + " -i " + getenv("DISPLAY") + "+" + std::to_string(x) + ","
+                            + std::to_string(y) + " -frames:v 1 '" + argv[2] + "'";
     int status = system(cmd.c_str());
     // Ohne effClose beenden: Manche Plugins (MPC Beats über yabridge) hängen ohne
     // Ereignisschleife des Hosts beim Schließen; yabridge räumt den Wine-Prozess selbst ab.

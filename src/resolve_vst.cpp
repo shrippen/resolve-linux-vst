@@ -10,6 +10,7 @@
 //    Funktion beim Laden im Speicher auf unsere Funktion umgebogen. Die Adresse steht in
 //    der Symboltabelle von /proc/self/exe.
 
+#include <dirent.h>
 #include <dlfcn.h>
 #include <elf.h>
 #include <fcntl.h>
@@ -33,15 +34,15 @@
 #include <type_traits>
 #include <vector>
 
+#include "vst2.h"
+
 #define EXPORT __attribute__((visibility("default"), used, noinline))
 
 namespace {
 
-constexpr int32_t kEffectMagic = 0x56737450; // 'VstP'
-
 FILE *gLog = nullptr;
 
-void logf(const char *fmt, ...)
+void vlog(const char *fmt, va_list ap)
 {
     if (!gLog)
         return;
@@ -49,12 +50,17 @@ void logf(const char *fmt, ...)
     time_t now = time(nullptr);
     strftime(stamp, sizeof stamp, "%F %T", localtime(&now));
     fprintf(gLog, "%s [%d] ", stamp, getpid());
-    va_list ap;
-    va_start(ap, fmt);
     vfprintf(gLog, fmt, ap);
-    va_end(ap);
     fputc('\n', gLog);
     fflush(gLog);
+}
+
+__attribute__((format(printf, 1, 2))) void logf(const char *fmt, ...)
+{
+    va_list ap;
+    va_start(ap, fmt);
+    vlog(fmt, ap);
+    va_end(ap);
 }
 
 // $XDG_STATE_HOME/resolve-vst (Standard ~/.local/state/resolve-vst), wird angelegt.
@@ -117,12 +123,14 @@ bool isDirectory(const std::string &path)
     return stat(path.c_str(), &st) == 0 && S_ISDIR(st.st_mode);
 }
 
-// Name eines Plugins für die Konfiguration: Dateiname der .so ohne Endung.
-std::string pluginName(const std::string &so)
+// Name eines Plugins für die Konfiguration: Dateiname der .so ohne Endung, bei VST3 der
+// Name des Eintrags Name.vst (Name der Klasse).
+std::string pluginName(const std::string &file)
 {
-    std::string name = so.substr(so.rfind('/') + 1);
-    if (name.size() > 3 && name.compare(name.size() - 3, 3, ".so") == 0)
-        name.resize(name.size() - 3);
+    std::string name = file.substr(file.rfind('/') + 1);
+    for (const char *ext : {".so", ".vst"})
+        if (size_t n = strlen(ext); name.size() > n && name.compare(name.size() - n, n, ext) == 0)
+            name.resize(name.size() - n);
     return name;
 }
 
@@ -176,16 +184,13 @@ std::string pluginSetting(const std::string &plugin, const char *key)
 
 } // namespace
 
-struct AEffect;
-using audioMasterCallback = long (*)(AEffect *, int, int, long, void *, float);
-using Dispatcher = long (*)(AEffect *, int, int, long, void *, float);
-using VstEntry = AEffect *(*)(audioMasterCallback);
-
-struct AEffect {
-    int32_t magic;
-    Dispatcher dispatcher;
-    // Rest der Struktur interessiert hier nicht.
-};
+void logMessage(const char *fmt, ...)
+{
+    va_list ap;
+    va_start(ap, fmt);
+    vlog(fmt, ap);
+    va_end(ap);
+}
 
 namespace {
 
@@ -203,10 +208,6 @@ constexpr int effVendorSpecific = 50;
 constexpr int audioMasterSizeWindow = 15;
 constexpr int kPreS = 0x50726553; // 'PreS'
 constexpr long kAeCs = 0x41654373; // 'AeCs'
-
-struct ERect {
-    int16_t top, left, bottom, right;
-};
 
 struct Instance {
     std::atomic<AEffect *> effect{nullptr};
@@ -555,19 +556,37 @@ bool isResolveProcess()
     return strcmp(base ? base + 1 : exe, "resolve") == 0;
 }
 
-// yabridge legt neben Name.so die Name.dll ab, meist als Symlink in den Prefix.
-std::string winePrefixFor(const std::string &so)
+// Prefix, in dem eine Windows-Datei (meist ein Symlink von yabridge) liegt.
+std::string winePrefixOf(const std::string &windowsFile)
 {
-    if (so.size() < 3 || so.compare(so.size() - 3, 3, ".so") != 0)
-        return {};
-    const std::string dll = so.substr(0, so.size() - 3) + ".dll";
-    char *real = realpath(dll.c_str(), nullptr);
+    char *real = realpath(windowsFile.c_str(), nullptr);
     if (!real)
         return {};
     std::string path = real;
     free(real);
     size_t pos = path.find("/drive_c/");
     return pos == std::string::npos ? std::string() : path.substr(0, pos);
+}
+
+// VST2 über yabridge: neben Name.so liegt Name.dll.
+std::string winePrefixFor(const std::string &so)
+{
+    if (so.size() < 3 || so.compare(so.size() - 3, 3, ".so") != 0)
+        return {};
+    return winePrefixOf(so.substr(0, so.size() - 3) + ".dll");
+}
+
+// VST3 über yabridge: im Bundle liegt Contents/x86_64-win/Name.vst3.
+std::string winePrefixForBundle(const std::string &bundle)
+{
+    std::string prefix;
+    if (DIR *d = opendir((bundle + "/Contents/x86_64-win").c_str())) {
+        while (dirent *e = readdir(d))
+            if (e->d_name[0] != '.' && prefix.empty())
+                prefix = winePrefixOf(bundle + "/Contents/x86_64-win/" + e->d_name);
+        closedir(d);
+    }
+    return prefix;
 }
 
 // Führt `wine <args>` im Prefix aus, über $WINELOADER wie yabridge (z. B. Runner aus
@@ -657,9 +676,9 @@ int parseWineDpi(const char *v)
 // DPI für ein Plugin: wine-dpi in plugins.conf, sonst RESOLVE_VST_WINE_DPI, sonst auto.
 // Jedes yabridge-Plugin läuft in einem eigenen Wine-Prozess und liest die DPI bei dessen
 // Start, darum kann sie je Plugin verschieden sein (nicht bei yabridge-Plugingruppen).
-int wantedWineDpi(const std::string &so)
+int wantedWineDpi(const std::string &name)
 {
-    std::string setting = pluginSetting(pluginName(so), "wine-dpi");
+    std::string setting = pluginSetting(name, "wine-dpi");
     if (setting.empty())
         if (const char *env = getenv("RESOLVE_VST_WINE_DPI"))
             setting = env;
@@ -688,7 +707,8 @@ bool rememberWineDpi(const std::string &prefix, int previous)
     return fclose(f) == 0 && ok;
 }
 
-void syncWineDpi(const std::string &so)
+// `name` wie pluginName(), `prefix` aus winePrefixFor bzw. winePrefixForBundle.
+void syncWineDpi(const std::string &name, const std::string &prefix)
 {
     struct Known {
         std::string prefix;
@@ -697,12 +717,9 @@ void syncWineDpi(const std::string &so)
     static const bool inResolve = isResolveProcess();
     static std::mutex mutex;
     static std::vector<Known> known; // zuletzt gesetzter bzw. abgefragter Wert je Prefix
-    if (!inResolve)
+    if (!inResolve || prefix.empty())
         return;
-    const std::string prefix = winePrefixFor(so);
-    if (prefix.empty())
-        return;
-    const int wanted = wantedWineDpi(so);
+    const int wanted = wantedWineDpi(name);
     if (wanted <= 0)
         return;
     std::lock_guard lock(mutex);
@@ -763,10 +780,24 @@ AEffect *VSTPluginLoader::Load(const wchar_t *wpath, audioMasterCallback callbac
     logf("Load %s", path.c_str());
 
     if (isDirectory(path)) {
-        // VST3-Bundles und Ordner wie carla.vst/ sind keine VST2-Bibliotheken.
-        logf("  übersprungen: Ordner");
-        failed = true;
-        return nullptr;
+        // Ordner Name.vst mit bundle und class: VST3-Plugin über den Adapter (vst3.cpp).
+        // Andere Ordner wie carla.vst/ sind keine Plugins.
+        if (!isVst3Entry(path)) {
+            logf("  übersprungen: Ordner");
+            failed = true;
+            return nullptr;
+        }
+        syncWineDpi(pluginName(path), winePrefixForBundle(vst3Bundle(path)));
+        gHostCallback.store(callback, std::memory_order_relaxed);
+        AEffect *effect = vst3Load(path, hostCallback);
+        if (!effect) {
+            failed = true;
+            return nullptr;
+        }
+        wrap(effect, pluginName(path));
+        loaded_ = 1;
+        logf("  ok, VST3 als AEffect %p", static_cast<void *>(effect));
+        return effect;
     }
 
     // Der Scanner findet nur Namen auf *.vst, darum zeigen Symlinks Name.vst auf die echte
@@ -779,7 +810,7 @@ AEffect *VSTPluginLoader::Load(const wchar_t *wpath, audioMasterCallback callbac
         if (file != path)
             logf("  → %s", file.c_str());
     }
-    syncWineDpi(file);
+    syncWineDpi(pluginName(file), winePrefixFor(file));
 
     int flags = RTLD_NOW | RTLD_LOCAL;
     if (const char *deep = getenv("RESOLVE_VST_DEEPBIND"); deep && *deep == '1')

@@ -1,6 +1,7 @@
 # resolve-vst
 
-VST2-Plugins in DaVinci Resolve (Studio) unter Linux. Prototyp, getestet mit Resolve Studio 21.1.1.
+VST2- und VST3-Plugins in DaVinci Resolve (Studio) unter Linux. Prototyp, getestet mit
+Resolve Studio 21.1.1.
 
 ## Warum das geht
 
@@ -23,7 +24,18 @@ An den Dateien von Resolve wird nichts geändert.
 Der Scanner nimmt nur Einträge mit der Endung `.vst` (wie Bundles unter macOS), keine `.so`.
 `resolve-vst` legt darum für jede VST2-Bibliothek einen Symlink `Name.vst` an.
 
+VST3 kann Resolve unter Linux gar nicht: `VST3Host` in `libFairlightPage.so` besteht nur aus
+leeren Rümpfen, Code zum Laden und Betreiben eines VST3-Plugins fehlt. Darum bringt
+`libresolve-vst.so` einen VST3-Adapter mit (siehe unten), der VST3-Plugins als VST2-Plugins
+zeigt.
+
 ## Einrichten
+
+Die VST3-Schnittstellen von Steinberg (MIT-Lizenz) sind ein Git-Submodul:
+
+```sh
+git submodule update --init
+```
 
 Direkt aus dem Ordner, ohne Installation:
 
@@ -53,9 +65,54 @@ neu scannen.
 - **Native Linux-VST2** aus `~/.vst`, `~/.lxvst`, `/usr/lib/vst`, `/usr/local/lib/vst`
   (oder `$VST_PATH`). Gezählt wird jede `.so`, die `VSTPluginMain` oder `main` exportiert.
 - **Windows-VST2 über yabridge** (`yabridgectl`, VST2-Ziel `~/.vst/yabridge`).
-- **VST3, LV2, CLAP** nicht direkt (Resolve hat unter Linux keinen VST3-Host), aber über
-  **Carla** (`CarlaRackFX`, `CarlaPatchbayFX`): Carla ist selbst ein VST2-Plugin und lädt
-  darin alles andere, auch VST3-Plugins über yabridge.
+- **VST3** aus `~/.vst3`, `/usr/local/lib/vst3`, `/usr/lib/vst3` (oder `$VST3_PATH`),
+  nativ oder über yabridge (VST3-Ziel `~/.vst3/yabridge`), über den VST3-Adapter.
+- **LV2, CLAP** nicht direkt, aber über **Carla** (`CarlaRackFX`, `CarlaPatchbayFX`): Carla
+  ist selbst ein VST2-Plugin und lädt darin alles andere.
+
+### Plugins ausblenden
+
+`~/.config/resolve-vst/ignore`: Shell-Muster auf die Pfade im Link-Ordner, eins je Zeile.
+Resolve scannt jedes Plugin einzeln; bei yabridge startet dafür jedes Mal Wine (einige
+Sekunden). Große Sammlungen, die man nicht braucht, lieber ausblenden:
+
+```
+# Waves-Shell mit über 600 Plugins
+VST3/yabridge/WaveShell1-VST3 14.12_x64/*
+carla/CarlaPatchbay[0-9]*
+```
+
+`resolve-vst link` legt den Ordner nur neu an, wenn sich etwas geändert hat (Liste in
+`.entries` dort).
+
+## VST3-Adapter
+
+`src/vst3.cpp` lädt ein VST3-Plugin und übersetzt zwischen Resolves VST2-Host und den
+VST3-Schnittstellen (`IComponent`, `IAudioProcessor`, `IEditController`, `IPlugView`):
+
+- **Einträge:** Ein Bundle kann mehrere Plugins (Klassen) enthalten. `resolve-vst` liest sie mit
+  `vst3-classes` aus (bei yabridge startet das Wine, darum zwischengespeichert in
+  `~/.cache/resolve-vst/vst3`, neu gelesen, wenn sich die Bibliothek ändert) und legt je Klasse
+  einen Ordner `VST3/…/Name.vst` an, mit `bundle` (Symlink aufs Bundle) und `class`
+  (Klassen-ID). Bundles mit mehreren Klassen (z. B. Waves-Shells) bekommen einen eigenen Ordner.
+- **Audio:** `processReplacing` → `IAudioProcessor::process`, 32 Bit. Nur der Hauptbus (nach
+  Möglichkeit Stereo; `effSetSpeakerArrangement` für Mono und Surround), Nebenbusse wie
+  Sidechain bekommen Stille. Zeitinformation von Resolve geht als `ProcessContext` mit.
+- **Parameter:** VST2-Index = Reihenfolge im Controller, Werte normalisiert wie in VST3.
+  Änderungen aus dem Editor gehen als Automation an Resolve, Werte vom Host an Prozessor und
+  Controller. Ein Bypass-Parameter dient für `effSetBypass`.
+- **Zustand:** ein Chunk aus Komponenten- und Controller-Zustand (Kennung `R3VS`).
+- **Editor:** `IPlugView` im X11-Fenster von Resolve. Größen, Inhaltsskalierung
+  (`IPlugViewContentScaleSupport` statt `'PreS'`), Rahmen-Fix und Wine-DPI wie bei VST2; der
+  Name für `plugins.conf` ist der Name der Klasse.
+- **IRunLoop:** Linux-Editoren brauchen Timer und Dateideskriptoren vom Host. Resolves Qt läuft
+  auf der glib-Ereignisschleife, der Adapter hängt sie dort ein (`g_timeout_add_full`,
+  `g_unix_fd_add_full`), Rückrufe kommen im GUI-Thread an.
+- **Nicht unterstützt:** MIDI und Instrumente mit Noteneingang, Programmlisten, 64 Bit,
+  Sidechain, ARA.
+
+Die VST2-ID (`uniqueID`) ist aus der Klassen-ID gefaltet; Resolve speichert Plugins als
+`Name:ID`. Projekte mit VST3-Plugins hängen damit am Adapter.
 
 ## Plugin-Fenster und HiDPI
 
@@ -115,14 +172,20 @@ Skript selbst abgebrochen, holt es das beim nächsten Start nach (oder `resolve-
 
 ### Testen ohne Resolve
 
-`make editor-test` baut `build/editor-test`: Es öffnet den Editor eines Plugins wie Resolve
-(über `libresolve-vst.so`) und nimmt ihn auf.
+`make editor-test` baut `build/editor-test`: Es lädt ein Plugin wie Resolve (über
+`libresolve-vst.so`), schickt einige Blöcke Audio durch, liest einen Parameter, schreibt den
+Chunk zurück, öffnet den Editor und nimmt ihn auf. VST3-Plugins über ihren Eintrag im
+Link-Ordner.
 
 ```sh
 RESOLVE_VST_EDITOR_SCALE=3.75 build/editor-test ~/.vst/yabridge/'MPC Beats64.so' mpc.png
+build/editor-test ~/.local/share/resolve-vst/vst/VST3/TB/TB_Compressor_v4.vst tb.png
 ```
 
-Die Wine-DPI stellt es nicht ein; die vorher von Hand setzen.
+Die Wine-DPI stellt es nicht ein; die vorher von Hand setzen. Unter KWin (Wayland) wird das
+Testfenster nicht immer gezeigt; dann in einem eigenen X-Server aufnehmen
+(`Xvfb :97 -screen 0 3840x2400x24 &`, `DISPLAY=:97 build/editor-test …`). Ohne
+Fenstermanager scheitern manche Plugins an fehlenden X-Atomen (MiniMeters bricht ab).
 
 ## Umgebungsvariablen
 
@@ -137,6 +200,7 @@ Die Wine-DPI stellt es nicht ein; die vorher von Hand setzen.
 | `RESOLVE_VST_DEEPBIND=1` | Plugins mit `RTLD_DEEPBIND` laden (bei Symbolkonflikten mit Resolve) |
 | `RESOLVE_BIN` | Pfad zu Resolve (Standard `/opt/resolve/bin/resolve`) |
 | `VST_PATH` | Suchpfade für VST2, durch `:` getrennt |
+| `VST3_PATH` | Suchpfade für VST3, durch `:` getrennt |
 
 ## Stand
 
@@ -147,6 +211,9 @@ Die Wine-DPI stellt es nicht ein; die vorher von Hand setzen.
 - Editorgröße unter HiDPI: in Resolve bestätigt, dass MPC Beats groß erscheint; mit
   `editor-test` geprüft, dass es mit den Einstellungen oben sein Fenster ohne Rand füllt
   (3200×1920 bei Faktor 3,75). Carla unverändert.
+- VST3: Scanner erkennt native (ToneBoosters, MiniMeters) und yabridge-Plugins (iZotope);
+  mit `editor-test` geprüft: Audio läuft durch (Kompressor regelt), Parameter, Chunk,
+  Editor mit Inhaltsskalierung (ToneBoosters). In Resolve noch nicht ausprobiert.
 - Bibliotheken werden nie entladen (`dlclose` fehlt bewusst, siehe Quelltext).
 - Bricht, wenn Blackmagic `VSTPluginLoader` umbenennt oder die Signatur ändert; dann
   meldet das Log, dass nichts umgeleitet wurde.
