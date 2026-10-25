@@ -277,6 +277,9 @@ long hostCallback(AEffect *effect, int opcode, int index, long value, void *ptr,
             index = static_cast<int>(lround(index / in->scale));
             value = lround(value / in->scale);
         }
+        long result = gHostCallback.load(std::memory_order_relaxed)(effect, opcode, index, value, ptr, opt);
+        logf("  audioMasterSizeWindow: Resolve antwortet %ld", result);
+        return result;
     }
     return gHostCallback.load(std::memory_order_relaxed)(effect, opcode, index, value, ptr, opt);
 }
