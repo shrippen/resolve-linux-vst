@@ -25,6 +25,14 @@ Der Scanner nimmt nur Einträge mit der Endung `.vst` (wie Bundles unter macOS),
 
 ## Einrichten
 
+Direkt aus dem Ordner, ohne Installation:
+
+```sh
+./start.sh            # baut bei Bedarf, legt die Links an, startet Resolve
+```
+
+Oder installiert:
+
 ```sh
 make
 make install          # nach ~/.local (PREFIX=… für anderswo)
