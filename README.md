@@ -94,6 +94,17 @@ als Bitmaske `<CategoryMask>` je Plugin in
 - **VST2:** aus der VST2-Kategorie (Synth → Instrument, Analysis → Metering, RoomFx → Reverb,
   …); einfache Effekte bleiben unsortiert.
 
+Zwei Stolpersteine in Resolve, die der Lader behebt:
+
+- Resolve und `VstScanner` lesen die Version der Datei (`1.4`) mit dem Zahlenformat des
+  Gebietsschemas; mit deutschem wird daraus 1, und unter 1.3 übergehen sie `<CategoryMask>`.
+  Der Lader setzt darum in beiden Prozessen `LC_NUMERIC=C` (vor Qt; ein gesetztes `LC_ALL`
+  wandert nach `LANG`). Zahlen in Resolves Oberfläche stehen dadurch mit Punkt.
+- `VstScanner` schreibt die Datei bei jedem Start von Resolve neu und rechnet die Masken dabei
+  über Tabellen um (`AudioPluginHost::GetPluginCategoryMaskIn/Out`), die nur Resolve selbst
+  füllt; im Scanner bleiben sie leer, jede Maske würde 0. Der Lader leitet beide Funktionen im
+  Scanner um: bei leerer Tabelle bleibt die Maske, wie sie ist.
+
 Nur Masken, die 0 sind, und je Plugin nur einmal: Was man in Resolve selbst einordnet, bleibt,
 bis Resolve das Plugin neu scannt (gemerkt in `~/.local/state/resolve-vst/categorized` mit
 `<FileTime>`). Vor der ersten Änderung legt das Skript `FXConfiguration.xml.resolve-vst.bak`

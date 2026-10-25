@@ -24,6 +24,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cerrno>
+#include <cstddef>
 #include <cmath>
 #include <cstdarg>
 #include <cstdint>
@@ -952,7 +953,7 @@ void VSTPluginLoader::Close()
 
 namespace {
 
-// Sucht ein Symbol in der Symboltabelle (.symtab) einer ELF-Datei. Nur für Executables
+// Sucht eine Funktion oder Variable in der Symboltabelle (.symtab) einer ELF-Datei. Nur für Executables
 // ohne PIE (ET_EXEC), dort ist st_value die Laufzeitadresse.
 uintptr_t findExecSymbol(const char *file, const char *name)
 {
@@ -982,7 +983,8 @@ uintptr_t findExecSymbol(const char *file, const char *name)
             auto *strs = reinterpret_cast<const char *>(base + sh[sh[i].sh_link].sh_offset);
             size_t count = sh[i].sh_size / sizeof(Elf64_Sym);
             for (size_t j = 0; j < count; ++j) {
-                if (ELF64_ST_TYPE(syms[j].st_info) == STT_FUNC && syms[j].st_value
+                const int type = ELF64_ST_TYPE(syms[j].st_info);
+                if ((type == STT_FUNC || type == STT_OBJECT) && syms[j].st_value
                     && strcmp(strs + syms[j].st_name, name) == 0) {
                     result = syms[j].st_value;
                     break;
@@ -1023,6 +1025,49 @@ void *memberAddress(F f)
     return p;
 }
 
+// Kategorien im VstScanner: Er liest <CategoryMask> beim Laden der Plugin-Liste über
+// AudioPluginHost::GetPluginCategoryMaskIn und schreibt sie über ...MaskOut. Beide rechnen
+// über Tabellen (std::map<int, int>, Bit der Datei ↔ Bit intern: Schlüssel & Maske ergibt
+// den Wert), die PluginHost::Initialize füllt; im Scanner geschieht das nie, die Tabellen
+// bleiben leer, und bei jedem Start von Resolve schreibt der Scanner alle Masken als 0 zurück
+// (auch die von resolve-vst categories). Ersatz: wie das Original, bei leerer Tabelle aber
+// die Maske unverändert.
+struct MaskNode {
+    MaskNode *left, *right, *parent;
+    bool black;
+    int key, value; // libc++ __tree_node<pair<const int, int>>: ab 0x1c
+};
+struct MaskMap {
+    MaskNode *begin;
+    MaskNode endNode; // nur left (Wurzel) gültig
+};
+static_assert(offsetof(MaskNode, key) == 0x1c && offsetof(MaskNode, value) == 0x20);
+
+const MaskMap *gMaskIn = nullptr, *gMaskOut = nullptr;
+
+int translateMask(const MaskNode *node, int mask)
+{
+    if (!node)
+        return 0;
+    return ((node->key & mask) ? node->value : 0) | translateMask(node->left, mask) | translateMask(node->right, mask);
+}
+
+int translateMask(const MaskMap *map, int mask)
+{
+    const MaskNode *root = map ? map->endNode.left : nullptr;
+    return root ? translateMask(root, mask) : mask;
+}
+
+int categoryMaskIn(const void *, int mask)
+{
+    return translateMask(gMaskIn, mask);
+}
+
+int categoryMaskOut(const void *, int mask)
+{
+    return translateMask(gMaskOut, mask);
+}
+
 void patchExecutable()
 {
     char exe[4096];
@@ -1037,21 +1082,46 @@ void patchExecutable()
     } const patches[] = {
         {"_ZN15VSTPluginLoader4LoadEPKwPFlP7AEffectiilPvfERb", memberAddress(&VSTPluginLoader::Load)},
         {"_ZN15VSTPluginLoader5CloseEv", memberAddress(&VSTPluginLoader::Close)},
+        {"_ZNK15AudioPluginHost23GetPluginCategoryMaskInEi", reinterpret_cast<void *>(&categoryMaskIn)},
+        {"_ZNK15AudioPluginHost24GetPluginCategoryMaskOutEi", reinterpret_cast<void *>(&categoryMaskOut)},
     };
+    // Vor dem Umleiten: Tabellen der Kategorie-Masken (nur im VstScanner im Executable).
+    gMaskIn = reinterpret_cast<const MaskMap *>(findExecSymbol(exe, "_ZN15AudioPluginHost19_pluginCategoryMaskE"));
+    gMaskOut = reinterpret_cast<const MaskMap *>(findExecSymbol(exe, "_ZN15AudioPluginHost18_pluginCategoryMapE"));
     for (const auto &p : patches) {
         uintptr_t addr = findExecSymbol(exe, p.name);
         if (!addr)
             continue;
         if (reinterpret_cast<void *>(addr) == p.replacement)
             continue;
+        if ((p.replacement == reinterpret_cast<void *>(&categoryMaskIn) && !gMaskIn)
+            || (p.replacement == reinterpret_cast<void *>(&categoryMaskOut) && !gMaskOut))
+            continue;
         bool ok = patchJump(addr, p.replacement);
         logf("%s: %s bei %#lx %s", exe, p.name, static_cast<unsigned long>(addr), ok ? "umgeleitet" : "NICHT umgeleitet");
     }
 }
 
+// Zahlenformat: Resolve und VstScanner lesen die Version von FXConfiguration.xml ("1.4") mit
+// dem Zahlenformat des Gebietsschemas; mit deutschem (Komma) wird daraus 1, und unter 1.3
+// übergehen beide <CategoryMask>: alle Plugins „Unsortiert“, und der Scanner schreibt bei
+// jedem Start 0 zurück. Darum LC_NUMERIC=C, bevor Qt das Gebietsschema setzt (der Scanner
+// erbt es). LC_ALL ginge vor, sein Wert wandert darum nach LANG.
+void fixNumericLocale()
+{
+    if (!isResolveProcess())
+        return;
+    if (const char *all = getenv("LC_ALL"); all && *all) {
+        setenv("LANG", all, 1);
+        unsetenv("LC_ALL");
+    }
+    setenv("LC_NUMERIC", "C", 1);
+}
+
 __attribute__((constructor)) void init()
 {
     openLog();
+    fixNumericLocale();
     patchExecutable();
 }
 
