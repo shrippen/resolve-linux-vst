@@ -6,6 +6,8 @@
 #   resolve-vst list                  gefundene Plugins anzeigen (VST3 mit Klassen)
 #   resolve-vst restore               geänderte Wine-DPI zurücksetzen (geschieht sonst
 #                                     automatisch, wenn Resolve endet)
+#   resolve-vst categories            Kategorien neuer Plugins in Resolves Liste eintragen
+#                                     (geschieht sonst bei jedem Start)
 #
 # Resolves Scanner nimmt nur Einträge mit der Endung .vst (macOS-Stil). Darum legt das
 # Skript für jede VST2-Bibliothek einen Symlink Name.vst in $RESOLVE_VST_LINKS an; diesen
@@ -82,7 +84,8 @@ classes_of() {
     printf '%s' "${out:+$out$'\n'}"
 }
 
-# Einträge im Link-Ordner, je Zeile Pfad<Tab>Quelle<Tab>Klassen-ID (leer bei VST2), ohne die
+# Einträge im Link-Ordner, je Zeile Pfad<Tab>Quelle<Tab>Klassen-ID<Tab>VST3-Kategorien (beide
+# leer bei VST2), ohne die
 # Muster aus $ignore (Shell-Muster auf den Pfad, eins je Zeile, # für Kommentare).
 entries() {
     local root file rel id name sub dir target found count
@@ -91,13 +94,13 @@ entries() {
     if [[ -f $ignore ]]; then
         mapfile -t skip < <(sed -e 's/[[:space:]]*#.*//' -e '/^[[:space:]]*$/d' "$ignore")
     fi
-    emit() { # Pfad Quelle [ID]
+    emit() { # Pfad Quelle [ID Kategorien]
         local path=$1 pattern
         for pattern in "${skip[@]}"; do
             # shellcheck disable=SC2053 # Muster gewollt
             [[ $path == $pattern ]] && return
         done
-        printf '%s\t%s\t%s\n' "$path" "$2" "${3:-}"
+        printf '%s\t%s\t%s\t%s\n' "$path" "$2" "${3:-}" "${4:-}"
     }
     while IFS=$'\t' read -r root file; do
         rel=${file#"$root"/}
@@ -132,7 +135,7 @@ entries() {
             target="$dir/$name.vst"
             [[ -n ${seen[$target]:-} ]] && target="$dir/$name ($id).vst"
             seen[$target]=1
-            emit "$target" "$file" "$id"
+            emit "$target" "$file" "$id" "$sub"
         done <<<"$found"
     done
 }
@@ -147,7 +150,7 @@ link() {
     fi
     rm -rf "$links"
     mkdir -p "$links"
-    while IFS=$'\t' read -r path source id; do
+    while IFS=$'\t' read -r path source id _; do
         [[ -n $path ]] || continue
         if [[ -z $id ]]; then
             mkdir -p "$(dirname "$links/$path")"
@@ -157,11 +160,83 @@ link() {
             mkdir -p "$links/$path"
             ln -s "$source" "$links/$path/bundle"
             printf '%s\n' "$id" >"$links/$path/class"
+            # Resolve scannt neu, wenn sich die Zeit des Eintrags ändert (<FileTime>): die des
+            # Bundles, nicht die des Neuanlegens.
+            touch -r "$source" "$links/$path"
             n3=$((n3 + 1))
         fi
     done <<<"$list"
     printf '%s\n' "$list" >"$links/.entries"
     echo "resolve-vst: $n2 VST2- und $n3 VST3-Plugins in $links" >&2
+}
+
+# Kategorien in Resolve: Resolve sortiert Plugins nach eigenen Kategorien, gespeichert als
+# Bitmaske <CategoryMask> je Plugin in FXConfiguration.xml (Bit i = Eintrag i der Tabelle
+# unten, wie cCategories in libFairlightPage.so). Unter Linux setzt der Scanner sie nie, alle
+# Plugins landen unter „Unsortiert“. Für VST3 rechnet categories() die Maske wie Resolve selbst
+# (PluginHost::GetPluginCategoryMask) aus den Unterkategorien (z. B. "Fx|Dynamics"): erst
+# Ersetzungen, dann jeder Kategoriename, der im Text vorkommt. Für VST2 aus <Category>.
+fx_config=${RESOLVE_FX_CONFIG:-$HOME/.local/share/DaVinciResolve/configs/Fairlight/Effects/FXConfiguration.xml}
+# Plugins (Pfad und <FileTime>), deren Maske gesetzt wurde: Änderungen in Resolve bleiben dann
+# stehen, bis Resolve das Plugin neu scannt (neue FileTime).
+categorized=${XDG_STATE_HOME:-$HOME/.local/state}/resolve-vst/categorized
+resolve_categories=('' Channel Delay Dynamics EQ Harmonic Spatial Instrument Mastering Metering
+    'Multi Effect' Modulation Restoration Pitch Reverb Surround Tools Other Decoder Vocals Bass
+    Guitar Drums Distortion Analysis Monitor Ambisonics - 'Chain FX')
+
+mask_of() { # VST3-Unterkategorien
+    local s=$1 i mask=0
+    s=${s//Analyzer/Metering} s=${s//Effects/Multi Effect} s=${s//Filter/EQ}
+    s=${s//Generator/Tools} s=${s//Sound Field/Surround} s=${s//Up-Downmix/Surround}
+    for ((i = 1; i < ${#resolve_categories[@]}; i++)); do
+        [[ ${resolve_categories[i]} != - && $s == *"${resolve_categories[i]}"* ]] && mask=$((mask | 1 << i))
+    done
+    echo "$mask"
+}
+
+categories() {
+    [[ -f $fx_config && -f $links/.entries ]] || return 0
+    local path source id sub mask map
+    map=$(while IFS=$'\t' read -r path source id sub; do
+        [[ -n $id ]] || continue
+        mask=$(mask_of "$sub")
+        if ((mask)); then printf '%s/%s\t%s\n' "$links" "$path" "$mask"; fi
+    done <"$links/.entries")
+    mkdir -p "$(dirname "$categorized")"
+    touch "$categorized"
+    local tmp=$fx_config.resolve-vst.tmp n
+    # VST2-Kategorie (effGetPlugCategory) → Bit: Synth → Instrument, Analysis → Metering,
+    # Mastering, Spacializer → Spatial, RoomFx → Reverb, SurroundFx → Surround, Restoration,
+    # Generator → Tools.
+    awk -v links="$links/" -v done_file="$categorized" -v map="$map" '
+        function unxml(s) { gsub(/&lt;/, "<", s); gsub(/&gt;/, ">", s); gsub(/&apos;/, "\047", s);
+                            gsub(/&quot;/, "\"", s); gsub(/&amp;/, "\\&", s); return s }
+        BEGIN {
+            n = split(map, lines, "\n")
+            for (i = 1; i <= n; i++) { split(lines[i], f, "\t"); if (f[1] != "") m[f[1]] = f[2] }
+            while ((getline line < done_file) > 0) done[line] = 1
+            split("2:128 3:512 4:256 5:64 6:16384 7:32768 8:4096 11:65536", v, " ")
+            for (i in v) { split(v[i], f, ":"); vst2[f[1]] = f[2] }
+        }
+        /<Path>/ { p = $0; sub(/.*<Path>/, "", p); sub(/<\/Path>.*/, "", p); path = unxml(p); cat = ""; key = path }
+        /<FileTime>/ { t = $0; sub(/.*<FileTime>/, "", t); sub(/<\/FileTime>.*/, "", t); key = path "\t" t }
+        /<Category>/ { c = $0; gsub(/[^0-9]/, "", c); cat = c }
+        /<CategoryMask>0<\/CategoryMask>/ && index(path, links) == 1 && !(key in done) {
+            mask = (path in m) ? m[path] : (cat in vst2 ? vst2[cat] : 0)
+            if (mask) { sub(/<CategoryMask>0</, "<CategoryMask>" mask "<"); print key >> done_file; changed++ }
+        }
+        { print }
+        END { print changed + 0 > "/dev/stderr" }
+    ' "$fx_config" >"$tmp" 2>"$tmp.n" || { rm -f "$tmp" "$tmp.n"; return 0; }
+    n=$(<"$tmp.n")
+    rm -f "$tmp.n"
+    if ((n > 0)); then
+        [[ -f $fx_config.resolve-vst.bak ]] || cp -p "$fx_config" "$fx_config.resolve-vst.bak"
+        mv "$tmp" "$fx_config"
+        echo "resolve-vst: Kategorien für $n Plugins gesetzt" >&2
+    else
+        rm -f "$tmp"
+    fi
 }
 
 # Setzt die Wine-DPI der Prefixe zurück, die der Lader während Resolve geändert hat.
@@ -204,9 +279,13 @@ list)
 restore)
     restore_wine_dpi
     ;;
+categories)
+    categories
+    ;;
 *)
     [[ -n $lib ]] || { echo "resolve-vst: libresolve-vst.so nicht gefunden (make?)" >&2; exit 1; }
     link
+    categories
     # Wie im eigenen DaVinciResolve.desktop: Resolves Qt 5 skaliert sonst nicht nach der
     # Bildschirm-DPI (Xft.dpi), die Oberfläche wird winzig. Gesetzte Werte haben Vorrang.
     export QT_AUTO_SCREEN_SCALE_FACTOR=${QT_AUTO_SCREEN_SCALE_FACTOR:-1}

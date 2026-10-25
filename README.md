@@ -70,6 +70,30 @@ neu scannen.
 - **LV2, CLAP** nicht direkt, aber über **Carla** (`CarlaRackFX`, `CarlaPatchbayFX`): Carla
   ist selbst ein VST2-Plugin und lädt darin alles andere.
 
+### Kategorien
+
+Resolve sortiert Plugins nach eigenen Kategorien (Dynamics, EQ, Reverb, Vocals, …), gespeichert
+als Bitmaske `<CategoryMask>` je Plugin in
+`~/.local/share/DaVinciResolve/configs/Fairlight/Effects/FXConfiguration.xml`; Bit *i* ist der
+*i*-te Eintrag von `cCategories` in `libFairlightPage.so` (1 Channel, 2 Delay, 3 Dynamics,
+4 EQ, …, 14 Reverb, …). Unter Linux setzt der Scanner sie nie, alles landet unter
+„Unsortiert“.
+
+`resolve-vst` trägt sie vor jedem Start nach (oder `resolve-vst categories`):
+
+- **VST3:** wie Resolve selbst (`PluginHost::GetPluginCategoryMask`) aus den Unterkategorien
+  des Plugins (`Fx|Dynamics`): erst Analyzer → Metering, Effects → Multi Effect, Filter → EQ,
+  Generator → Tools, Sound Field und Up-Downmix → Surround, dann jede Kategorie, deren Name im
+  Text vorkommt.
+- **VST2:** aus der VST2-Kategorie (Synth → Instrument, Analysis → Metering, RoomFx → Reverb,
+  …); einfache Effekte bleiben unsortiert.
+
+Nur Masken, die 0 sind, und je Plugin nur einmal: Was man in Resolve selbst einordnet, bleibt,
+bis Resolve das Plugin neu scannt (gemerkt in `~/.local/state/resolve-vst/categorized` mit
+`<FileTime>`). Vor der ersten Änderung legt das Skript `FXConfiguration.xml.resolve-vst.bak`
+an. Damit Resolve nicht bei jedem neuen Link-Ordner alles neu scannt, tragen die VST3-Einträge
+die Zeit ihres Bundles.
+
 ### Plugins ausblenden
 
 `~/.config/resolve-vst/ignore`: Shell-Muster auf die Pfade im Link-Ordner, eins je Zeile.
