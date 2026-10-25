@@ -127,7 +127,10 @@ namespace {
 constexpr int effClose = 1;
 constexpr int effEditGetRect = 13;
 constexpr int effEditOpen = 14;
+constexpr int effVendorSpecific = 50;
 constexpr int audioMasterSizeWindow = 15;
+constexpr int kPreS = 0x50726553; // 'PreS'
+constexpr long kAeCs = 0x41654373; // 'AeCs'
 
 struct ERect {
     int16_t top, left, bottom, right;
@@ -194,6 +197,22 @@ double editorScale(unsigned long long windowId = 0)
     return 1.0;
 }
 
+// Skalierung für den Inhalt: JUCE-Plugins (und andere) nehmen sie als VST2 nicht vom System,
+// sondern vom Host, über die Erweiterung von Bitwig/Ableton: effVendorSpecific mit
+// index 'PreS', value 'AeCs', Faktor in opt. Resolve sendet sie nicht, darum hier vor dem
+// Öffnen des Editors. Plugins, die sie nicht kennen, ignorieren den Aufruf.
+// RESOLVE_VST_CONTENT_SCALE legt den Faktor fest (0 = nicht senden).
+void sendContentScale(Instance *in, AEffect *effect)
+{
+    double scale = in->scale;
+    if (const char *env = getenv("RESOLVE_VST_CONTENT_SCALE"))
+        scale = atof(env);
+    if (scale <= 0)
+        return;
+    long result = in->dispatcher(effect, effVendorSpecific, kPreS, kAeCs, nullptr, float(scale));
+    logf("  Inhaltsskalierung %.2f an Plugin %p (Antwort %ld)", scale, static_cast<void *>(effect), result);
+}
+
 short scaled(short v, double s)
 {
     return static_cast<short>(lround(v / s));
@@ -209,6 +228,7 @@ long dispatch(AEffect *effect, int opcode, int index, long value, void *ptr, flo
         in->scale = editorScale(reinterpret_cast<uintptr_t>(ptr));
         logf("Editor öffnen: Plugin %p, Fenster %#lx, Skalierung %.2f", static_cast<void *>(effect),
              static_cast<unsigned long>(reinterpret_cast<uintptr_t>(ptr)), in->scale);
+        sendContentScale(in, effect);
         return in->dispatcher(effect, opcode, index, value, ptr, opt);
     case effEditGetRect: {
         long result = in->dispatcher(effect, opcode, index, value, ptr, opt);
@@ -320,11 +340,17 @@ int currentWineDpi(const std::string &prefix)
     return dpi;
 }
 
+// Standardmäßig aus: JUCE-Plugins (MPC Beats) ignorieren die Wine-DPI und skalieren über
+// sendContentScale, und der Wert gilt für das ganze Prefix, also auch in anderen Hosts.
+// RESOLVE_VST_WINE_DPI=auto nimmt 96 × Resolves Faktor, eine Zahl setzt sie fest.
 int wantedWineDpi()
 {
-    if (const char *env = getenv("RESOLVE_VST_WINE_DPI"))
-        return atoi(env); // 0 = nicht anfassen
-    return int(lround(96 * editorScale()));
+    const char *env = getenv("RESOLVE_VST_WINE_DPI");
+    if (!env || !*env)
+        return 0;
+    if (strcmp(env, "auto") == 0)
+        return int(lround(96 * editorScale()));
+    return atoi(env);
 }
 
 bool setWineDpi(const std::string &prefix, int dpi)
