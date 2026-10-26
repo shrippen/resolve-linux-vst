@@ -4,5 +4,5 @@
 set -euo pipefail
 
 cd "$(dirname "$(readlink -f "$0")")"
-make --no-print-directory -s
+make --no-print-directory -s all aac
 exec ./resolve-vst "$@"

@@ -8,11 +8,10 @@
 //    Symbol hier gewinnt automatisch.
 //  - Im VstScanner (Executable ohne PIE, direkter Aufruf) wird der Anfang der leeren
 //    Funktion beim Laden im Speicher auf unsere Funktion umgebogen. Die Adresse steht in
-//    der Symboltabelle von /proc/self/exe.
+//    der Symboltabelle von /proc/self/exe (ElfFile, sites.cpp).
 
 #include <dirent.h>
 #include <dlfcn.h>
-#include <elf.h>
 #include <fnmatch.h>
 #include <fcntl.h>
 #include <sys/mman.h>
@@ -37,6 +36,7 @@
 #include <type_traits>
 #include <vector>
 
+#include "sites.h"
 #include "vst2.h"
 
 #define EXPORT __attribute__((visibility("default"), used, noinline))
@@ -953,49 +953,6 @@ void VSTPluginLoader::Close()
 
 namespace {
 
-// Sucht eine Funktion oder Variable in der Symboltabelle (.symtab) einer ELF-Datei. Nur für Executables
-// ohne PIE (ET_EXEC), dort ist st_value die Laufzeitadresse.
-uintptr_t findExecSymbol(const char *file, const char *name)
-{
-    int fd = open(file, O_RDONLY | O_CLOEXEC);
-    if (fd < 0)
-        return 0;
-    struct stat st;
-    if (fstat(fd, &st) != 0) {
-        close(fd);
-        return 0;
-    }
-    void *map = mmap(nullptr, st.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
-    close(fd);
-    if (map == MAP_FAILED)
-        return 0;
-
-    uintptr_t result = 0;
-    auto *base = static_cast<const unsigned char *>(map);
-    auto *eh = reinterpret_cast<const Elf64_Ehdr *>(base);
-    if (st.st_size >= off_t(sizeof(Elf64_Ehdr)) && memcmp(eh->e_ident, ELFMAG, SELFMAG) == 0
-        && eh->e_ident[EI_CLASS] == ELFCLASS64 && eh->e_type == ET_EXEC) {
-        auto *sh = reinterpret_cast<const Elf64_Shdr *>(base + eh->e_shoff);
-        for (int i = 0; i < eh->e_shnum && !result; ++i) {
-            if (sh[i].sh_type != SHT_SYMTAB)
-                continue;
-            auto *syms = reinterpret_cast<const Elf64_Sym *>(base + sh[i].sh_offset);
-            auto *strs = reinterpret_cast<const char *>(base + sh[sh[i].sh_link].sh_offset);
-            size_t count = sh[i].sh_size / sizeof(Elf64_Sym);
-            for (size_t j = 0; j < count; ++j) {
-                const int type = ELF64_ST_TYPE(syms[j].st_info);
-                if ((type == STT_FUNC || type == STT_OBJECT) && syms[j].st_value
-                    && strcmp(strs + syms[j].st_name, name) == 0) {
-                    result = syms[j].st_value;
-                    break;
-                }
-            }
-        }
-    }
-    munmap(map, st.st_size);
-    return result;
-}
-
 // Überschreibt den Anfang von `target` mit `movabs rax, dest; jmp rax` (12 Byte).
 bool patchJump(uintptr_t target, void *dest)
 {
@@ -1085,11 +1042,15 @@ void patchExecutable()
         {"_ZNK15AudioPluginHost23GetPluginCategoryMaskInEi", reinterpret_cast<void *>(&categoryMaskIn)},
         {"_ZNK15AudioPluginHost24GetPluginCategoryMaskOutEi", reinterpret_cast<void *>(&categoryMaskOut)},
     };
+    // Symboltabelle (.symtab) des Executables; nur ohne PIE ist st_value die Laufzeitadresse.
+    const ElfFile elf(exe);
+    if (!elf.isExecutable())
+        return;
     // Vor dem Umleiten: Tabellen der Kategorie-Masken (nur im VstScanner im Executable).
-    gMaskIn = reinterpret_cast<const MaskMap *>(findExecSymbol(exe, "_ZN15AudioPluginHost19_pluginCategoryMaskE"));
-    gMaskOut = reinterpret_cast<const MaskMap *>(findExecSymbol(exe, "_ZN15AudioPluginHost18_pluginCategoryMapE"));
+    gMaskIn = reinterpret_cast<const MaskMap *>(elf.symbol("_ZN15AudioPluginHost19_pluginCategoryMaskE"));
+    gMaskOut = reinterpret_cast<const MaskMap *>(elf.symbol("_ZN15AudioPluginHost18_pluginCategoryMapE"));
     for (const auto &p : patches) {
-        uintptr_t addr = findExecSymbol(exe, p.name);
+        uintptr_t addr = elf.symbol(p.name);
         if (!addr)
             continue;
         if (reinterpret_cast<void *>(addr) == p.replacement)

@@ -1,7 +1,31 @@
-/* Nur die Funktionen exportieren, die Resolves leere Rümpfe ersetzen. */
+/* Nur die Funktionen exportieren, die Resolve ersetzen soll: die leeren Rümpfe des
+   VST-Laders, Decodersuche und Schreiben bei FFmpeg und den Start von main (aac.cpp) und
+   Dateizugriffe für NEV (nev.cpp). */
 {
     global:
         _ZN15VSTPluginLoader4LoadEPKwPFlP7AEffectiilPvfERb;
         _ZN15VSTPluginLoader5CloseEv;
+        avcodec_find_decoder;
+        avcodec_find_decoder_by_name;
+        av_parser_init;
+        avformat_write_header;
+        __libc_start_main;
+        open;
+        open64;
+        fopen;
+        fopen64;
+        stat;
+        stat64;
+        lstat;
+        lstat64;
+        __xstat;
+        __xstat64;
+        __lxstat;
+        __lxstat64;
+        access;
+        realpath;
+        readdir;
+        readdir64;
+        readdir_r;
     local: *;
 };
