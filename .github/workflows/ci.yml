@@ -1,0 +1,109 @@
+# Public mirror: Gitea pushes every branch and tag here on each commit.
+# This builds and tests and reports the result back to the commit on Gitea
+# as the status "github / test", where the pull requests live. Tags v*
+# also build the release archive and attach it to the GitHub release
+# (install.sh downloads it from there).
+#
+# Not here, because it needs DaVinci Resolve: resolve-vst check (the
+# hooks in the installed Resolve) and the end-to-end tests in the README
+# (editor-test with real plug-ins, rendering with AAC). Run them locally.
+#
+# Needs the secret GITEA_TOKEN: a Gitea token with write access to the
+# repository (commit statuses).
+name: ci
+
+on:
+  push:
+    branches: ["**"]
+    tags: ["v*"]
+
+# No concurrency group: every commit runs to the end and keeps its own
+# status, a newer push does not cancel an older run.
+
+permissions:
+  contents: read
+
+env:
+  GITEA_STATUS: https://git.arianw.de/api/v1/repos/shrippen/resolve-vst/statuses/${{ github.sha }}
+  RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+jobs:
+  test:
+    timeout-minutes: 15
+    runs-on: ubuntu-latest
+    outputs:
+      started: ${{ steps.start.outputs.t }}
+    steps:
+      # A missing status is no reason to fail the checks.
+      - id: start
+        name: Report pending to Gitea
+        run: |
+          echo "t=$(date +%s)" >> "$GITHUB_OUTPUT"
+          curl -fsS -X POST "$GITEA_STATUS" \
+            -H "Authorization: token $GITEA_TOKEN" -H "Content-Type: application/json" \
+            -d "{\"state\":\"pending\",\"context\":\"github / test\",\"description\":\"running\",\"target_url\":\"$RUN_URL\"}" \
+            || echo "::warning::Gitea status not reported"
+        env:
+          GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          submodules: true
+      - run: make -j"$(nproc)" CXXFLAGS="-O2 -g -Wall -Wextra -Werror"
+      - run: make test
+      - run: bash -n resolve-vst install.sh start.sh
+
+  # Also runs when test failed or was cancelled, so Gitea never keeps a
+  # stale "pending".
+  report:
+    needs: test
+    if: always()
+    timeout-minutes: 5
+    runs-on: ubuntu-latest
+    steps:
+      - name: Report result to Gitea
+        run: |
+          case "$RESULT" in
+            success) state=success ;;
+            failure) state=failure ;;
+            *) state=error ;;
+          esac
+          desc=$RESULT
+          if [ -n "$STARTED" ]; then desc="$RESULT in $(( ($(date +%s) - STARTED) / 60 )) min"; fi
+          curl -fsS -X POST "$GITEA_STATUS" \
+            -H "Authorization: token $GITEA_TOKEN" -H "Content-Type: application/json" \
+            -d "{\"state\":\"$state\",\"context\":\"github / test\",\"description\":\"$desc\",\"target_url\":\"$RUN_URL\"}"
+        env:
+          RESULT: ${{ needs.test.result }}
+          STARTED: ${{ needs.test.outputs.started }}
+          GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
+
+  # Release archive: the oldest Ubuntu runner keeps glibc low (2.35), so the
+  # library loads on older distributions too. Resolve brings its own libs.
+  release:
+    needs: test
+    if: github.server_url == 'https://github.com' && startsWith(github.ref, 'refs/tags/v')
+    timeout-minutes: 30
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          submodules: true
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq nasm
+      - name: Build archive
+        run: |
+          make -j"$(nproc)" dist VERSION="${GITHUB_REF_NAME#v}" MAKEFLAGS=-j"$(nproc)"
+          cp "build/dist/resolve-vst-${GITHUB_REF_NAME#v}-linux-x86_64.tar.gz" resolve-vst-linux-x86_64.tar.gz
+          sha256sum resolve-vst-linux-x86_64.tar.gz > resolve-vst-linux-x86_64.tar.gz.sha256
+      # The release notes live on Gitea and on the landing page; GitHub gets
+      # a pointer and the archive.
+      - name: Attach to the GitHub release
+        run: |
+          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 \
+            || gh release create "$GITHUB_REF_NAME" --verify-tag --title "resolve-vst ${GITHUB_REF_NAME#v}" \
+                 --notes "Release notes: https://shrippen.github.io/resolve-vst/#changes"
+          gh release upload "$GITHUB_REF_NAME" --clobber \
+            resolve-vst-linux-x86_64.tar.gz resolve-vst-linux-x86_64.tar.gz.sha256
+        env:
+          GH_TOKEN: ${{ github.token }}

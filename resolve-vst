@@ -1,15 +1,18 @@
 #!/usr/bin/env bash
-# resolve-vst: DaVinci Resolve mit VST-Lader starten.
+# resolve-vst: start DaVinci Resolve with the resolve-vst loader.
 #
-#   resolve-vst [Resolve-Argumente]   Links auffrischen, Resolve starten
-#   resolve-vst link                  nur die Links auffrischen
-#   resolve-vst list                  gefundene Plugins anzeigen (VST3 mit Klassen)
-#   resolve-vst restore               geänderte Wine-DPI zurücksetzen (geschieht sonst
-#                                     automatisch, wenn Resolve endet)
-#   resolve-vst categories            Kategorien neuer Plugins in Resolves Liste eintragen
-#                                     (geschieht sonst bei jedem Start)
-#   resolve-vst rescan                Resolves Plugin-Liste beiseitelegen: Resolve scannt beim
-#                                     nächsten Start alle Plugins neu
+#   resolve-vst [Resolve arguments]   refresh the plug-in links, start Resolve
+#   resolve-vst link                  only refresh the links
+#   resolve-vst list                  list the plug-ins found (VST3 with their classes)
+#   resolve-vst restore               reset a changed Wine DPI (otherwise automatic when
+#                                     Resolve exits)
+#   resolve-vst categories            write categories of new plug-ins into Resolve's list
+#                                     (otherwise done on every start)
+#   resolve-vst rescan                set Resolve's plug-in list aside: Resolve scans all
+#                                     plug-ins on the next start
+#   resolve-vst check                 check that the hooks still match the installed Resolve
+#                                     (after a Resolve update)
+#   resolve-vst help                  this text
 #
 # Resolves Scanner nimmt nur Einträge mit der Endung .vst (macOS-Stil). Darum legt das
 # Skript für jede VST2-Bibliothek einen Symlink Name.vst in $RESOLVE_VST_LINKS an; diesen
@@ -21,9 +24,11 @@ set -euo pipefail
 here=$(dirname "$(readlink -f "$0")")
 lib=${RESOLVE_VST_LIB:-}
 classes=""
+check=""
 for dir in "$here/build" "$here/../lib/resolve-vst"; do
     [[ -z $lib && -f $dir/libresolve-vst.so ]] && lib=$(readlink -f "$dir/libresolve-vst.so")
     [[ -z $classes && -x $dir/vst3-classes ]] && classes=$(readlink -f "$dir/vst3-classes")
+    [[ -z $check && -x $dir/resolve-check ]] && check=$(readlink -f "$dir/resolve-check")
 done
 resolve=${RESOLVE_BIN:-/opt/resolve/bin/resolve}
 links=${RESOLVE_VST_LINKS:-${XDG_DATA_HOME:-$HOME/.local/share}/resolve-vst/vst}
@@ -114,7 +119,7 @@ entries() {
         emit "$target" "$file"
     done < <(plugins)
 
-    [[ -n $classes ]] || { echo "resolve-vst: vst3-classes nicht gefunden (make?), keine VST3-Plugins" >&2; return; }
+    [[ -n $classes ]] || { echo "resolve-vst: vst3-classes not found (make?), no VST3 plug-ins" >&2; return; }
     local -a list=()
     mapfile -t list < <(bundles)
     # Erst alle Bundles auslesen, parallel (yabridge braucht je Bundle einige Sekunden).
@@ -147,7 +152,7 @@ link() {
     local list path source id n2=0 n3=0
     list=$(entries)
     if [[ -f $links/.entries && $(<"$links/.entries") == "$list" ]]; then
-        echo "resolve-vst: Plugins unverändert ($(grep -c . <<<"$list" || true) in $links)" >&2
+        echo "resolve-vst: plug-ins unchanged ($(grep -c . <<<"$list" || true) in $links)" >&2
         return
     fi
     rm -rf "$links"
@@ -169,7 +174,7 @@ link() {
         fi
     done <<<"$list"
     printf '%s\n' "$list" >"$links/.entries"
-    echo "resolve-vst: $n2 VST2- und $n3 VST3-Plugins in $links" >&2
+    echo "resolve-vst: $n2 VST2 and $n3 VST3 plug-ins in $links" >&2
 }
 
 # Kategorien in Resolve: Resolve sortiert Plugins nach eigenen Kategorien, gespeichert als
@@ -235,7 +240,7 @@ categories() {
     if ((n > 0)); then
         [[ -f $fx_config.resolve-vst.bak ]] || cp -p "$fx_config" "$fx_config.resolve-vst.bak"
         mv "$tmp" "$fx_config"
-        echo "resolve-vst: Kategorien für $n Plugins gesetzt" >&2
+        echo "resolve-vst: categories set for $n plug-ins" >&2
     else
         rm -f "$tmp"
     fi
@@ -255,9 +260,9 @@ restore_wine_dpi() {
             args=(reg add "$key" /v LogPixels /t REG_DWORD /d "$dpi" /f)
         fi
         if WINEPREFIX=$prefix WINEDEBUG=-all "$wine" "${args[@]}" >/dev/null 2>&1; then
-            echo "resolve-vst: Wine-DPI in $prefix wieder ${dpi/#-1/Standard}" >&2
+            echo "resolve-vst: Wine DPI in $prefix back to ${dpi/#-1/default}" >&2
         else
-            echo "resolve-vst: Wine-DPI in $prefix nicht zurückgesetzt" >&2
+            echo "resolve-vst: Wine DPI in $prefix not reset" >&2
             keep+="$prefix"$'\t'"$dpi"$'\n'
         fi
     done <"$restore"
@@ -265,6 +270,9 @@ restore_wine_dpi() {
 }
 
 case ${1:-} in
+help | -h | --help)
+    sed -n '2,/^$/p' "$0" | sed 's/^# \{0,1\}//'
+    ;;
 link)
     link
     ;;
@@ -284,24 +292,28 @@ restore)
 categories)
     categories
     ;;
+check)
+    [[ -n $check ]] || { echo "resolve-vst: resolve-check not found (make?)" >&2; exit 1; }
+    exec "$check" "$(dirname "$(dirname "$(readlink -f "$resolve")")")"
+    ;;
 rescan)
     # Resolve scannt nur Plugins mit neuer Dateizeit; ohne FXConfiguration.xml alle. Die
     # Merkliste der Kategorien muss mit weg, sonst blieben die neu gescannten Plugins (gleiche
     # Zeit) unsortiert.
     if pgrep -x resolve >/dev/null; then
-        echo "resolve-vst: Resolve läuft, erst beenden" >&2
+        echo "resolve-vst: Resolve is running, quit it first" >&2
         exit 1
     fi
     if [[ -f $fx_config ]]; then
         backup=$fx_config.$(date +%Y%m%d-%H%M%S).bak
         mv "$fx_config" "$backup"
-        echo "resolve-vst: Plugin-Liste gesichert als $backup" >&2
+        echo "resolve-vst: plug-in list saved as $backup" >&2
     fi
     rm -f "$categorized"
-    echo "resolve-vst: Resolve scannt beim nächsten Start alle Plugins neu" >&2
+    echo "resolve-vst: Resolve rescans all plug-ins on the next start" >&2
     ;;
 *)
-    [[ -n $lib ]] || { echo "resolve-vst: libresolve-vst.so nicht gefunden (make?)" >&2; exit 1; }
+    [[ -n $lib ]] || { echo "resolve-vst: libresolve-vst.so not found (make?)" >&2; exit 1; }
     link
     categories
     # Wie im eigenen DaVinciResolve.desktop: Resolves Qt 5 skaliert sonst nicht nach der
@@ -318,7 +330,7 @@ rescan)
     # Nach einem Absturz hängen yabridge-Plugingruppen (z. B. Waves) beim nächsten Editor bis
     # zu zwei Minuten, weil sie den verschwundenen Host noch bedienen: beenden.
     if ((status >= 128)) && pkill -f 'yabridge-host\.exe\.so group '; then
-        echo "resolve-vst: Resolve abgestürzt, yabridge-Plugingruppen beendet" >&2
+        echo "resolve-vst: Resolve crashed, yabridge plug-in groups stopped" >&2
     fi
     restore_wine_dpi
     exit "$status"

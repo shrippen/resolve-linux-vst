@@ -1,0 +1,39 @@
+# PR-Agent settings for resolve-vst (.gitea/workflows/pr-agent.yml); the rest
+# are PR-Agent's defaults.
+[config]
+git_provider = "gitea"
+response_language = "de-DE"
+max_model_tokens = 128000
+fallback_models = []
+publish_output_progress = false
+# Claude Opus 4.7+ and Claude 5 take no temperature, only adaptive thinking
+# with an effort; the effort applies to other reasoning models too.
+enable_claude_adaptive_thinking = true
+reasoning_effort = "high"
+# The repository rules go along as context.
+repo_context_files = ["agent.md"]
+
+[pr_reviewer]
+num_max_findings = 5
+require_can_be_split_review = true
+enable_review_labels_effort = false
+enable_review_labels_security = false
+extra_instructions = """
+You review pull requests of resolve-vst, an LD_PRELOAD library (C++17, no
+exceptions, no RTTI) for DaVinci Resolve on Linux: a VST2 loader and a
+VST3-to-VST2 adapter, AAC decoding and encoding fixes through FFmpeg
+interposition, Nikon N-RAW as R3D, plus the bash launcher resolve-vst.
+Resolve's code is patched in memory at sites found by byte patterns
+(src/sites.cpp). The PRs are written by an AI agent; review them as a
+careful second reader, not as their author.
+
+Report only findings that matter:
+- Bugs: a concrete input or state and the wrong result or crash it gives
+  (Resolve crashing or hanging is the worst case). Name file and line.
+- Code that runs in Resolve's audio thread and allocates, locks or logs.
+- Struct offsets or patterns that are not checked before use.
+- Breaches of the repository rules (agent.md).
+
+Skip style, naming and formatting, praise, and guesses you cannot back
+with the diff. When you find nothing that matters, say so in one line.
+"""
