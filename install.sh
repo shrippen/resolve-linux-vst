@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # resolve-vst installer.
 #
-#   curl -fsSL https://raw.githubusercontent.com/shrippen/resolve-vst/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/shrippen/resolve-linux-vst/main/install.sh | bash
 #
 # Downloads the latest release from GitHub and installs it into ~/.local (no root needed).
 #
@@ -10,7 +10,7 @@
 #   install.sh --uninstall [--prefix DIR]         remove it again
 set -euo pipefail
 
-repo=shrippen/resolve-vst
+repo=shrippen/resolve-linux-vst
 asset=resolve-vst-linux-x86_64.tar.gz
 prefix=$HOME/.local
 version=""

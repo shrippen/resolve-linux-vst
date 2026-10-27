@@ -8,7 +8,7 @@
 </p>
 
 <p align="center">
-  <a href="https://shrippen.github.io/resolve-vst/">Website</a> ·
+  <a href="https://shrippen.github.io/resolve-linux-vst/">Website</a> ·
   <a href="#install">Install</a> ·
   <a href="#quick-start">Quick start</a> ·
   <a href="docs/HOW-IT-WORKS.md">How it works</a> ·
@@ -45,7 +45,7 @@ Tested with DaVinci Resolve Studio 21.1.1 on Arch Linux.
 ## Install
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/shrippen/resolve-vst/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/shrippen/resolve-linux-vst/main/install.sh | bash
 ```
 
 The installer downloads the latest release from GitHub (checksum verified), installs it into
@@ -64,8 +64,8 @@ Options: `install.sh --version 0.1.0`, `--prefix DIR`, `--uninstall`.
 Needs `g++` (C++17), `make`, `curl` and `nasm` or `yasm` (for the AAC decoder).
 
 ```sh
-git clone --recursive https://github.com/shrippen/resolve-vst.git
-cd resolve-vst
+git clone --recursive https://github.com/shrippen/resolve-linux-vst.git
+cd resolve-linux-vst
 ./install.sh --source        # make, make aac, make install into ~/.local
 ```
 
@@ -239,7 +239,7 @@ are; [How it works](docs/HOW-IT-WORKS.md#finding-the-hooks-again) explains how t
 ## Uninstall
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/shrippen/resolve-vst/main/install.sh | bash -s -- --uninstall
+curl -fsSL https://raw.githubusercontent.com/shrippen/resolve-linux-vst/main/install.sh | bash -s -- --uninstall
 ```
 
 Your settings stay in `~/.config/resolve-vst`, `~/.local/share/resolve-vst` and

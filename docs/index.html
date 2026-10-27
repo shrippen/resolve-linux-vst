@@ -7,11 +7,11 @@
 <meta name="description" content="VST2 and VST3 plug-ins, AAC import and render, and Nikon N-RAW for DaVinci Resolve on Linux. One preload library, no changes to Resolve's files.">
 <meta property="og:title" content="resolve-vst — VST plug-ins, AAC and N-RAW for DaVinci Resolve on Linux">
 <meta property="og:description" content="VST2 and VST3 plug-ins, AAC import and render, and Nikon N-RAW for DaVinci Resolve on Linux. One preload library, no changes to Resolve's files.">
-<meta property="og:image" content="https://shrippen.github.io/resolve-vst/social-preview.png">
+<meta property="og:image" content="https://shrippen.github.io/resolve-linux-vst/social-preview.png">
 <meta property="og:image:width" content="1280">
 <meta property="og:image:height" content="640">
 <meta name="twitter:card" content="summary_large_image">
-<meta property="og:url" content="https://shrippen.github.io/resolve-vst/">
+<meta property="og:url" content="https://shrippen.github.io/resolve-linux-vst/">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <!-- Umami tracker: mandatory on every landing page, same tag and ID everywhere, do not change -->
 <script defer src="https://um.arianw.de/script.js" data-website-id="056d39ee-6a9d-4b14-9902-5a1ac399df08"></script>
@@ -30,7 +30,7 @@
     <a href="#how"><span lang="en">How it works</span><span lang="de">So geht's</span></a>
     <a href="#install"><span lang="en">Install</span><span lang="de">Installation</span></a>
     <a href="#changes"><span lang="en">Changes</span><span lang="de">Änderungen</span></a>
-    <a class="nav-hl" href="https://github.com/shrippen/resolve-vst">GitHub</a>
+    <a class="nav-hl" href="https://github.com/shrippen/resolve-linux-vst">GitHub</a>
     <div class="lang" role="group" aria-label="Language">
       <button type="button" data-lang="en" aria-pressed="true">EN</button>
       <button type="button" data-lang="de" aria-pressed="false">DE</button>
@@ -49,14 +49,14 @@
     <div class="install-card">
       <label><span lang="en">Install</span><span lang="de">Installation</span></label>
       <div class="cmd-row">
-        <div class="cmd-box">curl -fsSL https://raw.githubusercontent.com/shrippen/resolve-vst/main/install.sh | bash</div>
+        <div class="cmd-box">curl -fsSL https://raw.githubusercontent.com/shrippen/resolve-linux-vst/main/install.sh | bash</div>
         <button class="copy-btn" type="button" title="Copy" aria-label="Copy"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
       </div>
       <p class="install-note" lang="en">Installs into <code>~/.local</code>, no root. Adds a menu entry “DaVinci Resolve (VST)” and checks your Resolve version.</p>
       <p class="install-note" lang="de">Installiert nach <code>~/.local</code>, ohne root. Legt den Menüeintrag „DaVinci Resolve (VST)“ an und prüft deine Resolve-Version.</p>
       <div class="install-links">
-        <a class="btn btn-primary" href="https://github.com/shrippen/resolve-vst/releases/latest">Download</a>
-        <a class="btn btn-ghost" href="https://github.com/shrippen/resolve-vst">GitHub</a>
+        <a class="btn btn-primary" href="https://github.com/shrippen/resolve-linux-vst/releases/latest">Download</a>
+        <a class="btn btn-ghost" href="https://github.com/shrippen/resolve-linux-vst">GitHub</a>
       </div>
     </div>
   </div>
@@ -153,20 +153,20 @@
       <tr><td><span lang="en">No N-RAW decoder</span><span lang="de">Kein N-RAW-Decoder</span></td><td><span lang="en">Shows <code>.nev</code> as <code>.R3D</code> to the RED decoder</span><span lang="de">Zeigt <code>.nev</code> dem RED-Decoder als <code>.R3D</code></span></td></tr>
     </tbody>
   </table></div>
-  <p lang="en">The details, down to the instructions it looks for: <a href="https://github.com/shrippen/resolve-vst/blob/main/docs/HOW-IT-WORKS.md">How it works</a>.</p>
-  <p lang="de">Die Einzelheiten, bis zu den Befehlen, nach denen es sucht: <a href="https://github.com/shrippen/resolve-vst/blob/main/docs/HOW-IT-WORKS.md">How it works</a> (Englisch).</p>
+  <p lang="en">The details, down to the instructions it looks for: <a href="https://github.com/shrippen/resolve-linux-vst/blob/main/docs/HOW-IT-WORKS.md">How it works</a>.</p>
+  <p lang="de">Die Einzelheiten, bis zu den Befehlen, nach denen es sucht: <a href="https://github.com/shrippen/resolve-linux-vst/blob/main/docs/HOW-IT-WORKS.md">How it works</a> (Englisch).</p>
 </section>
 
 <section class="section" id="install">
   <h2 lang="en">Install and set up</h2><h2 lang="de">Installieren und einrichten</h2>
   <ol class="steps" lang="en">
-    <li>Run the installer: <code>curl -fsSL https://raw.githubusercontent.com/shrippen/resolve-vst/main/install.sh | bash</code>. It needs Linux on x86_64, Resolve in <code>/opt/resolve</code>, and <code>nm</code> (binutils).</li>
+    <li>Run the installer: <code>curl -fsSL https://raw.githubusercontent.com/shrippen/resolve-linux-vst/main/install.sh | bash</code>. It needs Linux on x86_64, Resolve in <code>/opt/resolve</code>, and <code>nm</code> (binutils).</li>
     <li>Start Resolve with <strong>DaVinci Resolve (VST)</strong> from your menu, or run <code>resolve-vst</code>.</li>
     <li>In Resolve, <strong>Preferences → User → Audio Plugins → VST Plugin Paths</strong>: add <code>~/.local/share/resolve-vst/vst</code> and let it scan.</li>
     <li>Your plug-ins are in the <strong>Effects Library → Audio FX</strong>. AAC and N-RAW clips need no setup.</li>
   </ol>
   <ol class="steps" lang="de">
-    <li>Installer ausführen: <code>curl -fsSL https://raw.githubusercontent.com/shrippen/resolve-vst/main/install.sh | bash</code>. Braucht Linux auf x86_64, Resolve in <code>/opt/resolve</code> und <code>nm</code> (binutils).</li>
+    <li>Installer ausführen: <code>curl -fsSL https://raw.githubusercontent.com/shrippen/resolve-linux-vst/main/install.sh | bash</code>. Braucht Linux auf x86_64, Resolve in <code>/opt/resolve</code> und <code>nm</code> (binutils).</li>
     <li>Resolve über <strong>DaVinci Resolve (VST)</strong> im Menü starten oder <code>resolve-vst</code> ausführen.</li>
     <li>In Resolve unter <strong>Einstellungen → Benutzer → Audio-Plugins → VST-Plugin-Pfade</strong> den Ordner <code>~/.local/share/resolve-vst/vst</code> hinzufügen und scannen lassen.</li>
     <li>Die Plugins stehen in der <strong>Effektbibliothek → Audio-FX</strong>. AAC- und N-RAW-Clips brauchen keine Einrichtung.</li>
@@ -177,8 +177,8 @@
 <span class="c"># after a Resolve update</span>
 <span class="k">resolve-vst check</span>
 <span class="c"># build from source instead</span>
-<span class="k">git clone --recursive</span> https://github.com/shrippen/resolve-vst.git
-<span class="k">cd</span> resolve-vst &amp;&amp; <span class="k">./install.sh --source</span></div>
+<span class="k">git clone --recursive</span> https://github.com/shrippen/resolve-linux-vst.git
+<span class="k">cd</span> resolve-linux-vst &amp;&amp; <span class="k">./install.sh --source</span></div>
 </section>
 
 <section class="section" id="faq">
@@ -226,7 +226,7 @@
       <div><h4><span lang="en">Project</span><span lang="de">Projekt</span></h4>
         <a href="#features"><span lang="en">Features</span><span lang="de">Funktionen</span></a><a href="#how"><span lang="en">How it works</span><span lang="de">So geht's</span></a><a href="#install"><span lang="en">Install</span><span lang="de">Installation</span></a><a href="#changes"><span lang="en">Changes</span><span lang="de">Änderungen</span></a></div>
       <div><h4><span lang="en">Source</span><span lang="de">Quelltext</span></h4>
-        <a href="https://github.com/shrippen/resolve-vst">GitHub</a><a href="https://github.com/shrippen/resolve-vst/issues">Issues</a><a href="https://github.com/shrippen/resolve-vst/releases">Releases</a><a href="https://github.com/shrippen/resolve-vst/blob/main/docs/HOW-IT-WORKS.md">How it works</a></div>
+        <a href="https://github.com/shrippen/resolve-linux-vst">GitHub</a><a href="https://github.com/shrippen/resolve-linux-vst/issues">Issues</a><a href="https://github.com/shrippen/resolve-linux-vst/releases">Releases</a><a href="https://github.com/shrippen/resolve-linux-vst/blob/main/docs/HOW-IT-WORKS.md">How it works</a></div>
     </nav>
   </div>
   <div class="foot-meta"><p>MIT · shrippen · v0.1.0 · <span lang="en">not affiliated with Blackmagic Design</span><span lang="de">kein Projekt von Blackmagic Design</span></p></div>

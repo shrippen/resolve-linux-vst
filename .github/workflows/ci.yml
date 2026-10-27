@@ -24,7 +24,7 @@ permissions:
   contents: read
 
 env:
-  GITEA_STATUS: https://git.arianw.de/api/v1/repos/shrippen/resolve-vst/statuses/${{ github.sha }}
+  GITEA_STATUS: https://git.arianw.de/api/v1/repos/shrippen/resolve-linux-vst/statuses/${{ github.sha }}
   RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
 jobs:
@@ -102,7 +102,7 @@ jobs:
         run: |
           gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 \
             || gh release create "$GITHUB_REF_NAME" --verify-tag --title "resolve-vst ${GITHUB_REF_NAME#v}" \
-                 --notes "Release notes: https://shrippen.github.io/resolve-vst/#changes"
+                 --notes "Release notes: https://shrippen.github.io/resolve-linux-vst/#changes"
           gh release upload "$GITHUB_REF_NAME" --clobber \
             resolve-vst-linux-x86_64.tar.gz resolve-vst-linux-x86_64.tar.gz.sha256
         env:
