@@ -115,7 +115,9 @@ $(AAC_LIB): $(FFMPEG_TAR) tools/ffmpeg-binutils.patch
 .PHONY: aac
 
 # Release-Archiv (GitHub Actions, .github/workflows/ci.yml): derselbe Baum wie unter PREFIX,
-# install.sh kopiert ihn nach ~/.local. Mit AAC-Decoder.
+# install.sh kopiert ihn nach ~/.local. Mit AAC-Decoder und den Lizenztexten, die den Binaries
+# beiliegen müssen (LGPL für FFmpeg, MIT für Steinberg). Die FFmpeg-Quellen landen daneben in
+# build/dist, die CI hängt sie ans Release (LGPL-2.1 §6: Quellen von derselben Stelle).
 VERSION ?= $(shell git describe --tags --always 2>/dev/null | sed 's/^v//')
 DIST    := resolve-linux-vst-$(VERSION)-x86_64
 
@@ -123,7 +125,10 @@ dist: all aac
 	rm -rf $(BUILD)/dist
 	$(MAKE) --no-print-directory install PREFIX=$(abspath $(BUILD)/dist/$(DIST))
 	install -Dm644 tools/ffmpeg-binutils.patch $(BUILD)/dist/$(DIST)/share/doc/resolve-linux-vst/ffmpeg-binutils.patch
+	tar -xOf $(FFMPEG_TAR) ffmpeg-$(FFMPEG_VERSION)/COPYING.LGPLv2.1 > $(BUILD)/dist/$(DIST)/share/doc/resolve-linux-vst/COPYING.LGPLv2.1
+	install -Dm644 $(VST3)/LICENSE.txt $(BUILD)/dist/$(DIST)/share/doc/resolve-linux-vst/LICENSE.vst3_pluginterfaces
 	tar -C $(BUILD)/dist -czf $(BUILD)/dist/$(DIST).tar.gz $(DIST)
+	cp $(FFMPEG_TAR) $(BUILD)/dist/
 	@echo $(BUILD)/dist/$(DIST).tar.gz
 
 .PHONY: dist

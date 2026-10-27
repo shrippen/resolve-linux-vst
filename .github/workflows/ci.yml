@@ -97,13 +97,15 @@ jobs:
           cp "build/dist/resolve-linux-vst-${GITHUB_REF_NAME#v}-x86_64.tar.gz" resolve-linux-vst-x86_64.tar.gz
           sha256sum resolve-linux-vst-x86_64.tar.gz > resolve-linux-vst-x86_64.tar.gz.sha256
       # The release notes live on Gitea and on the landing page; GitHub gets
-      # a pointer and the archive.
+      # a pointer, the archive and the FFmpeg sources of its AAC decoder
+      # (LGPL: source from the same place as the binary).
       - name: Attach to the GitHub release
         run: |
           gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 \
             || gh release create "$GITHUB_REF_NAME" --verify-tag --title "resolve-linux-vst ${GITHUB_REF_NAME#v}" \
                  --notes "Release notes: https://shrippen.github.io/resolve-linux-vst/#changes"
           gh release upload "$GITHUB_REF_NAME" --clobber \
-            resolve-linux-vst-x86_64.tar.gz resolve-linux-vst-x86_64.tar.gz.sha256
+            resolve-linux-vst-x86_64.tar.gz resolve-linux-vst-x86_64.tar.gz.sha256 \
+            build/dist/ffmpeg-6.0.tar.xz tools/ffmpeg-binutils.patch
         env:
           GH_TOKEN: ${{ github.token }}
