@@ -9,8 +9,11 @@
 // Inhaltsskalierung und Rahmen wie in Resolve). Größen sind wie bei Resolves Qt logische
 // Pixel und werden mit RESOLVE_LINUX_VST_EDITOR_SCALE multipliziert (ohne Qt gibt es sonst keinen
 // Faktor). Am Ende: Fensterbaum auf stdout, Aufnahme des Editorfensters per ffmpeg.
-// Die Wine-DPI stellt das Programm nicht ein (es heißt nicht resolve).
+// Die Wine-DPI stellt das Programm nicht ein (es heißt nicht resolve). EDITOR_TEST_OFFSCREEN=1 öffnet
+// das Fenster außerhalb der Bildschirme. Wie in Resolve mit LD_PRELOAD=build/libresolve-linux-vst.so
+// starten, sonst gehen Aufrufe des Plugins an libX11 an der Bibliothek vorbei (x11.cpp).
 #include <X11/Xlib.h>
+#include <X11/Xutil.h>
 #include <glib.h>
 
 #include <cmath>
@@ -118,7 +121,14 @@ int main(int argc, char **argv)
         fprintf(stderr, "keine X11-Verbindung\n");
         return 1;
     }
-    win = XCreateSimpleWindow(dpy, DefaultRootWindow(dpy), 0, 0, 800, 600, 0, 0, 0x404040);
+    // EDITOR_TEST_OFFSCREEN=1: Fenster ohne Fenstermanager außerhalb aller Bildschirme, die
+    // Aufnahme kommt dann per XGetImage aus dem Fenster statt vom Bildschirm.
+    const bool offscreen = getenv("EDITOR_TEST_OFFSCREEN") && strcmp(getenv("EDITOR_TEST_OFFSCREEN"), "0") != 0;
+    XSetWindowAttributes wa{};
+    wa.background_pixel = 0x404040;
+    wa.override_redirect = offscreen;
+    win = XCreateWindow(dpy, DefaultRootWindow(dpy), offscreen ? -20000 : 0, offscreen ? -20000 : 0, 800, 600, 0,
+                        CopyFromParent, InputOutput, CopyFromParent, CWBackPixel | CWOverrideRedirect, &wa);
     XStoreName(dpy, win, "editor-test");
     XMapWindow(dpy, win);
     XFlush(dpy);
@@ -194,19 +204,39 @@ int main(int argc, char **argv)
     XWindowAttributes before;
     XGetWindowAttributes(dpy, win, &before);
     printf("Fenster %s\n", before.map_state == IsViewable ? "sichtbar" : "nicht sichtbar, wird gezeigt");
-    XMapRaised(dpy, win);
-    XSync(dpy, False);
-    usleep(300000);
-    XWindowAttributes a;
-    XGetWindowAttributes(dpy, win, &a);
-    int x = 0, y = 0;
-    Window child;
-    XTranslateCoordinates(dpy, win, DefaultRootWindow(dpy), 0, 0, &x, &y, &child);
-    printf("Fenster bei %d,%d\n", x, y);
-    const std::string cmd = "ffmpeg -loglevel error -y -f x11grab -video_size " + std::to_string(a.width) + "x"
-                            + std::to_string(a.height) + " -i " + getenv("DISPLAY") + "+" + std::to_string(x) + ","
-                            + std::to_string(y) + " -frames:v 1 '" + argv[2] + "'";
-    int status = system(cmd.c_str());
+    int status = 0;
+    if (offscreen) {
+        XWindowAttributes a;
+        XGetWindowAttributes(dpy, win, &a);
+        XImage *img = XGetImage(dpy, win, 0, 0, unsigned(a.width), unsigned(a.height), AllPlanes, ZPixmap);
+        if (!img || img->bits_per_pixel != 32) {
+            fprintf(stderr, "XGetImage fehlgeschlagen\n");
+            status = 1;
+        } else {
+            const std::string cmd = "ffmpeg -loglevel error -y -f rawvideo -pix_fmt bgr0 -video_size " + std::to_string(a.width)
+                                    + "x" + std::to_string(a.height) + " -i - -frames:v 1 '" + argv[2] + "'";
+            FILE *ff = popen(cmd.c_str(), "w");
+            for (int row = 0; ff && row < a.height; ++row)
+                fwrite(img->data + row * img->bytes_per_line, 4, size_t(a.width), ff);
+            status = ff ? pclose(ff) : 1;
+        }
+        if (img)
+            XDestroyImage(img);
+    } else {
+        XMapRaised(dpy, win);
+        XSync(dpy, False);
+        usleep(300000);
+        XWindowAttributes a;
+        XGetWindowAttributes(dpy, win, &a);
+        int x = 0, y = 0;
+        Window child;
+        XTranslateCoordinates(dpy, win, DefaultRootWindow(dpy), 0, 0, &x, &y, &child);
+        printf("Fenster bei %d,%d\n", x, y);
+        const std::string cmd = "ffmpeg -loglevel error -y -f x11grab -video_size " + std::to_string(a.width) + "x"
+                                + std::to_string(a.height) + " -i " + getenv("DISPLAY") + "+" + std::to_string(x) + ","
+                                + std::to_string(y) + " -frames:v 1 '" + argv[2] + "'";
+        status = system(cmd.c_str());
+    }
     // Sauber schließen wie Resolve (eine yabridge-Plugingruppe hängt sonst beim nächsten
     // Editor). Manche Plugins (MPC Beats) hängen beim Schließen ohne Ereignisschleife des
     // Hosts: nach 10 s ohne Aufräumen beenden.

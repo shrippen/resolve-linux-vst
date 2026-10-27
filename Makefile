@@ -9,7 +9,7 @@ LDLIBS   += -ldl
 
 BUILD ?= build
 
-SOURCES := src/resolve_linux_vst.cpp src/vst3.cpp src/aac.cpp src/nev.cpp src/sites.cpp $(VST3)/base/funknown.cpp
+SOURCES := src/resolve_linux_vst.cpp src/vst3.cpp src/aac.cpp src/nev.cpp src/x11.cpp src/sites.cpp $(VST3)/base/funknown.cpp
 
 all: $(BUILD)/libresolve-linux-vst.so $(BUILD)/vst3-classes $(BUILD)/resolve-check
 

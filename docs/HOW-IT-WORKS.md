@@ -124,6 +124,12 @@ their base size again after opening but draw scaled, so the editor gets cut off.
 resizes the child windows of Resolve's editor window to the target size right after opening and
 during the first seconds of `effEditIdle`, through xcb (Xlib would end the process on X errors).
 
+**Size 0.** X rejects a window size of 0 with `BadValue`. MiniMeters sets its window to 0×0 when
+its state holds no window size (a project saved before the editor was ever open; the Audio-Server
+variant never stores one), and its own X error handler then calls `abort()`, taking Resolve with
+it. The library replaces `XResizeWindow` and `XMoveResizeWindow` and drops calls with width or
+height 0; the window keeps its size (`src/x11.cpp`). Resolve's Qt uses xcb and is not affected.
+
 **Measured plug-in behaviour** (behind the built-in defaults):
 
 - **MPC Beats** (JUCE under Wine 9.21 and 11.11) draws with the screen factor (`Xft.dpi`), not the
@@ -232,10 +238,16 @@ RESOLVE_LINUX_VST_EDITOR_SCALE=3.75 build/editor-test ~/.vst/yabridge/'MPC Beats
 build/editor-test ~/.local/share/resolve-linux-vst/vst/VST3/TB/TB_Compressor_v4.vst tb.png
 ```
 
-It does not set the Wine DPI; set it by hand first. Under KWin (Wayland) the test window is not
-always shown; record it in its own X server instead (`Xvfb :97 -screen 0 3840x2400x24 &`,
-`DISPLAY=:97 build/editor-test …`). Without a window manager some plug-ins fail on missing X
-atoms (MiniMeters aborts).
+Start it with `LD_PRELOAD=build/libresolve-linux-vst.so` to get the library first in the symbol
+order as in Resolve; otherwise the plug-in's calls into libX11 bypass it (size 0, above). It does
+not set the Wine DPI; set it by hand first.
+
+`EDITOR_TEST_OFFSCREEN=1` opens the test window outside all screens (override-redirect, no window
+manager involved) and takes the screenshot from the window with `XGetImage`. Plug-ins drawing
+with Vulkan or OpenGL (MiniMeters) come out as an empty frame then. Under KWin (Wayland) the
+on-screen window is not always shown; record it in its own X server instead
+(`Xvfb :97 -screen 0 3840x2400x24 &`, `DISPLAY=:97 build/editor-test …`). Without a window manager
+some plug-ins fail on missing X atoms (MiniMeters aborts).
 
 ## Status
 

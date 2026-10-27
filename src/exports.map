@@ -1,6 +1,6 @@
 /* Nur die Funktionen exportieren, die Resolve ersetzen soll: die leeren Rümpfe des
    VST-Laders, Decodersuche und Schreiben bei FFmpeg und den Start von main (aac.cpp) und
-   Dateizugriffe für NEV (nev.cpp). */
+   Dateizugriffe für NEV (nev.cpp) und Fenstergrößen von Plugins (x11.cpp). */
 {
     global:
         _ZN15VSTPluginLoader4LoadEPKwPFlP7AEffectiilPvfERb;
@@ -27,5 +27,7 @@
         readdir;
         readdir64;
         readdir_r;
+        XResizeWindow;
+        XMoveResizeWindow;
     local: *;
 };
