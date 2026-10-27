@@ -1,4 +1,4 @@
-// resolve-vst: VST2-Lader für DaVinci Resolve unter Linux.
+// resolve-linux-vst: VST2-Lader für DaVinci Resolve unter Linux.
 //
 // Resolve bringt unter Linux einen vollständigen VST2-Host mit (VSTHost, VSTPlugin,
 // VSTPluginManager), aber VSTPluginLoader::Load() ist ein leerer Rumpf, der immer nullptr
@@ -66,8 +66,8 @@ __attribute__((format(printf, 1, 2))) void logf(const char *fmt, ...)
     va_end(ap);
 }
 
-// $XDG_STATE_HOME/resolve-vst (Standard ~/.local/state/resolve-vst), wird angelegt.
-// Dieselbe Regel steht in resolve-vst.
+// $XDG_STATE_HOME/resolve-linux-vst (Standard ~/.local/state/resolve-linux-vst), wird angelegt.
+// Dieselbe Regel steht in resolve-linux-vst.
 std::string stateDir()
 {
     std::string base;
@@ -78,17 +78,17 @@ std::string stateDir()
     else
         return {};
     mkdir(base.c_str(), 0755);
-    mkdir((base + "/resolve-vst").c_str(), 0755);
-    return base + "/resolve-vst";
+    mkdir((base + "/resolve-linux-vst").c_str(), 0755);
+    return base + "/resolve-linux-vst";
 }
 
 void openLog()
 {
     std::string path;
-    if (const char *env = getenv("RESOLVE_VST_LOG"))
+    if (const char *env = getenv("RESOLVE_LINUX_VST_LOG"))
         path = env;
     else if (const std::string dir = stateDir(); !dir.empty())
-        path = dir + "/resolve-vst.log";
+        path = dir + "/resolve-linux-vst.log";
     if (!path.empty() && path != "-")
         gLog = fopen(path.c_str(), "a");
     else if (path == "-")
@@ -184,8 +184,8 @@ bool matches(const std::string &pattern, const Names &names)
     return false;
 }
 
-// Einstellung je Plugin aus $XDG_CONFIG_HOME/resolve-vst/plugins.conf (Standard
-// ~/.config/resolve-vst/plugins.conf), sonst aus kDefaults, leer wenn nicht gesetzt:
+// Einstellung je Plugin aus $XDG_CONFIG_HOME/resolve-linux-vst/plugins.conf (Standard
+// ~/.config/resolve-linux-vst/plugins.conf), sonst aus kDefaults, leer wenn nicht gesetzt:
 //
 //   [MPC Beats64]          # Name (siehe Names) oder Shell-Muster wie [WaveShell*]
 //   wine-dpi = 96
@@ -201,7 +201,7 @@ std::string pluginSetting(const Names &plugin, const char *key)
     else if (const char *home = getenv("HOME"))
         conf = std::string(home) + "/.config";
     std::string value;
-    FILE *f = fopen((conf + "/resolve-vst/plugins.conf").c_str(), "r");
+    FILE *f = fopen((conf + "/resolve-linux-vst/plugins.conf").c_str(), "r");
     bool inSection = false;
     char line[1024];
     while (f && fgets(line, sizeof line, f)) {
@@ -293,10 +293,10 @@ T qtFunction(const char *name)
 }
 
 // Skalierungsfaktor (devicePixelRatio) des Fensters, in das das Plugin zeichnet; ohne
-// Fenster der des Hauptbildschirms. RESOLVE_VST_EDITOR_SCALE legt ihn fest (1 = aus).
+// Fenster der des Hauptbildschirms. RESOLVE_LINUX_VST_EDITOR_SCALE legt ihn fest (1 = aus).
 double editorScale(unsigned long long windowId = 0)
 {
-    if (const char *env = getenv("RESOLVE_VST_EDITOR_SCALE")) {
+    if (const char *env = getenv("RESOLVE_LINUX_VST_EDITOR_SCALE")) {
         double s = atof(env);
         if (s > 0)
             return s;
@@ -333,13 +333,13 @@ double editorScale(unsigned long long windowId = 0)
 // die sie nicht kennen, ignorieren den Aufruf. Manche nehmen die Zeichengröße trotzdem vom
 // Bildschirm und rechnen nur die Fenstergröße mit dem Faktor (MPC Beats unter Wine): Dann
 // bleibt ein Rand. Darum je Plugin abschaltbar.
-// content-scale in plugins.conf, sonst RESOLVE_VST_CONTENT_SCALE: auto (Standard) = Resolves
+// content-scale in plugins.conf, sonst RESOLVE_LINUX_VST_CONTENT_SCALE: auto (Standard) = Resolves
 // Faktor, Zahl = fest, 0 = nicht senden.
 void sendContentScale(Instance *in, AEffect *effect)
 {
     std::string setting = pluginSetting(in->names, "content-scale");
     if (setting.empty())
-        if (const char *env = getenv("RESOLVE_VST_CONTENT_SCALE"))
+        if (const char *env = getenv("RESOLVE_LINUX_VST_CONTENT_SCALE"))
             setting = env;
     if (setting.empty() && in->zoom != 1.0) {
         logf("  keine Inhaltsskalierung für %s: Wine vergrößert (%.2f)", in->names[0].c_str(), in->zoom);
@@ -368,7 +368,7 @@ long nowMs()
 // Grundgröße. Darum bringt der Lader die Unterfenster von Resolves Editorfenster auf die
 // Zielgröße: die Größe vor dem Öffnen bzw. die letzte von audioMasterSizeWindow.
 // Über xcb, nicht Xlib: Xlib beendet bei X-Fehlern (Fenster schon weg) sonst den Prozess,
-// ein eigener Fehler-Handler gälte für ganz Resolve. RESOLVE_VST_FIX_FRAME=0 schaltet ab.
+// ein eigener Fehler-Handler gälte für ganz Resolve. RESOLVE_LINUX_VST_FIX_FRAME=0 schaltet ab.
 
 struct XcbCookie {
     unsigned sequence;
@@ -406,7 +406,7 @@ struct Xcb {
 
 bool frameFixEnabled()
 {
-    const char *env = getenv("RESOLVE_VST_FIX_FRAME");
+    const char *env = getenv("RESOLVE_LINUX_VST_FIX_FRAME");
     return !env || strcmp(env, "0") != 0;
 }
 
@@ -602,7 +602,7 @@ void wrap(AEffect *effect, const Names &names, double zoom)
 // Laden jedes yabridge-Plugins auf den Wert für dieses Plugin gestellt (wantedWineDpi), in
 // resolve und im VstScanner: Plugin-Prozesse können ihn überleben (eine yabridge-Plugingruppe
 // wie die von Waves läuft weiter und wird später von Resolve benutzt). Den Vorwert merkt sich
-// stateDir()/wine-dpi-restore; resolve-vst setzt ihn zurück, sobald Resolve beendet ist.
+// stateDir()/wine-dpi-restore; resolve-linux-vst setzt ihn zurück, sobald Resolve beendet ist.
 
 bool isResolveProcess()
 {
@@ -750,7 +750,7 @@ double wineZoomSetting(const Names &names)
 }
 
 // DPI für ein Plugin: aus wine-zoom, sonst wine-dpi in plugins.conf, sonst
-// RESOLVE_VST_WINE_DPI, sonst auto. Jedes yabridge-Plugin läuft in einem eigenen
+// RESOLVE_LINUX_VST_WINE_DPI, sonst auto. Jedes yabridge-Plugin läuft in einem eigenen
 // Wine-Prozess und liest die DPI bei dessen Start, darum kann sie je Plugin verschieden sein
 // (nicht bei yabridge-Plugingruppen).
 int wantedWineDpi(const Names &names)
@@ -759,7 +759,7 @@ int wantedWineDpi(const Names &names)
         return std::max(1, int(lround(kWineBaseDpi / zoom)));
     std::string setting = pluginSetting(names, "wine-dpi");
     if (setting.empty())
-        if (const char *env = getenv("RESOLVE_VST_WINE_DPI"))
+        if (const char *env = getenv("RESOLVE_LINUX_VST_WINE_DPI"))
             setting = env;
     int dpi = setting.empty() ? -1 : parseWineDpi(setting.c_str());
     return dpi >= 0 ? dpi : parseWineDpi("auto");
@@ -907,7 +907,7 @@ AEffect *VSTPluginLoader::Load(const wchar_t *wpath, audioMasterCallback callbac
     syncWineDpi(names, prefix);
 
     int flags = RTLD_NOW | RTLD_LOCAL;
-    if (const char *deep = getenv("RESOLVE_VST_DEEPBIND"); deep && *deep == '1')
+    if (const char *deep = getenv("RESOLVE_LINUX_VST_DEEPBIND"); deep && *deep == '1')
         flags |= RTLD_DEEPBIND;
     void *handle = dlopen(file.c_str(), flags);
     if (!handle) {
@@ -987,7 +987,7 @@ void *memberAddress(F f)
 // über Tabellen (std::map<int, int>, Bit der Datei ↔ Bit intern: Schlüssel & Maske ergibt
 // den Wert), die PluginHost::Initialize füllt; im Scanner geschieht das nie, die Tabellen
 // bleiben leer, und bei jedem Start von Resolve schreibt der Scanner alle Masken als 0 zurück
-// (auch die von resolve-vst categories). Ersatz: wie das Original, bei leerer Tabelle aber
+// (auch die von resolve-linux-vst categories). Ersatz: wie das Original, bei leerer Tabelle aber
 // die Maske unverändert.
 struct MaskNode {
     MaskNode *left, *right, *parent;

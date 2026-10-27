@@ -1,17 +1,17 @@
-# resolve-vst: notes for agents
+# resolve-linux-vst: notes for agents
 
-A preload library (`libresolve-vst.so`) plus the launcher script `resolve-vst` that add VST2/VST3
+A preload library (`libresolve-linux-vst.so`) plus the launcher script `resolve-linux-vst` that add VST2/VST3
 plug-ins, AAC import and render, and Nikon N-RAW to DaVinci Resolve Studio on Linux. Internals:
 [`docs/HOW-IT-WORKS.md`](docs/HOW-IT-WORKS.md); user docs: [`README.md`](README.md).
 
 - Build `make`, AAC decoder `make aac`, tests `make test`, hook check against the installed
-  Resolve `build/resolve-check` (or `resolve-vst check`). Release tarball `make dist`.
+  Resolve `build/resolve-check` (or `resolve-linux-vst check`). Release tarball `make dist`.
 - Hooks without symbols are found by byte patterns (`src/sites.cpp`), never by fixed addresses.
   A pattern that no longer matches must switch off only its own feature and log why.
 - Resolve's files are never changed on disk; everything happens in memory at run time.
 - Code comments and the library log are German; everything a user sees (CLI, installer,
   README, landing page) is English, the landing page also German.
-- Tested against Resolve Studio 21.1.1. After a Resolve update run `resolve-vst check` first.
+- Tested against Resolve Studio 21.1.1. After a Resolve update run `resolve-linux-vst check` first.
 
 ## GUI rule
 
@@ -35,5 +35,5 @@ plug-ins, AAC import and render, and Nikon N-RAW to DaVinci Resolve Studio on Li
   uses Kante Gold without a decision recorded here.
 - A project without a GUI (library, CLI, scripts) has nothing to do here.
 
-resolve-vst has no GUI of its own (it adds plug-ins to Resolve), so the only GUI is the landing
+resolve-linux-vst has no GUI of its own (it adds plug-ins to Resolve), so the only GUI is the landing
 page `docs/index.html`; there is no demo mode and there are no screenshots.

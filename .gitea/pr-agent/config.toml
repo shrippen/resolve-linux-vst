@@ -1,4 +1,4 @@
-# PR-Agent settings for resolve-vst (.gitea/workflows/pr-agent.yml); the rest
+# PR-Agent settings for resolve-linux-vst (.gitea/workflows/pr-agent.yml); the rest
 # are PR-Agent's defaults.
 [config]
 git_provider = "gitea"
@@ -19,10 +19,10 @@ require_can_be_split_review = true
 enable_review_labels_effort = false
 enable_review_labels_security = false
 extra_instructions = """
-You review pull requests of resolve-vst, an LD_PRELOAD library (C++17, no
+You review pull requests of resolve-linux-vst, an LD_PRELOAD library (C++17, no
 exceptions, no RTTI) for DaVinci Resolve on Linux: a VST2 loader and a
 VST3-to-VST2 adapter, AAC decoding and encoding fixes through FFmpeg
-interposition, Nikon N-RAW as R3D, plus the bash launcher resolve-vst.
+interposition, Nikon N-RAW as R3D, plus the bash launcher resolve-linux-vst.
 Resolve's code is patched in memory at sites found by byte patterns
 (src/sites.cpp). The PRs are written by an AI agent; review them as a
 careful second reader, not as their author.

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# resolve-vst installer.
+# resolve-linux-vst installer.
 #
 #   curl -fsSL https://raw.githubusercontent.com/shrippen/resolve-linux-vst/main/install.sh | bash
 #
@@ -11,12 +11,12 @@
 set -euo pipefail
 
 repo=shrippen/resolve-linux-vst
-asset=resolve-vst-linux-x86_64.tar.gz
+asset=resolve-linux-vst-x86_64.tar.gz
 prefix=$HOME/.local
 version=""
 mode=release
 
-die() { echo "resolve-vst: $*" >&2; exit 1; }
+die() { echo "resolve-linux-vst: $*" >&2; exit 1; }
 say() { echo "==> $*"; }
 
 while (($#)); do
@@ -31,12 +31,12 @@ while (($#)); do
     shift
 done
 
-files=(bin/resolve-vst lib/resolve-vst share/applications/resolve-vst.desktop share/doc/resolve-vst)
+files=(bin/resolve-linux-vst lib/resolve-linux-vst share/applications/resolve-linux-vst.desktop share/doc/resolve-linux-vst)
 
 if [[ $mode == uninstall ]]; then
     for f in "${files[@]}"; do rm -rf "${prefix:?}/$f"; done
-    say "Removed resolve-vst from $prefix."
-    echo "    Your settings stay: ~/.config/resolve-vst, ~/.local/share/resolve-vst, ~/.local/state/resolve-vst."
+    say "Removed resolve-linux-vst from $prefix."
+    echo "    Your settings stay: ~/.config/resolve-linux-vst, ~/.local/share/resolve-linux-vst, ~/.local/state/resolve-linux-vst."
     exit 0
 fi
 
@@ -67,7 +67,7 @@ else
     else
         base=https://github.com/$repo/releases/latest/download
     fi
-    work=${XDG_CACHE_HOME:-$HOME/.cache}/resolve-vst/install
+    work=${XDG_CACHE_HOME:-$HOME/.cache}/resolve-linux-vst/install
     rm -rf "$work"
     mkdir -p "$work"
     trap 'rm -rf "$work"' EXIT
@@ -78,20 +78,20 @@ else
     (cd "$work" && sha256sum -c --quiet "$asset.sha256") || die "checksum mismatch, download broken"
 
     tar -C "$work" -xzf "$work/$asset"
-    tree=$(find "$work" -mindepth 1 -maxdepth 1 -type d -name 'resolve-vst-*' | head -n1)
+    tree=$(find "$work" -mindepth 1 -maxdepth 1 -type d -name 'resolve-linux-vst-*' | head -n1)
     [[ -n $tree ]] || die "unexpected archive layout"
     for f in "${files[@]}"; do rm -rf "${prefix:?}/$f"; done
     mkdir -p "$prefix"
     cp -a "$tree"/. "$prefix"/
-    sed -i "s|^Exec=.*|Exec=$prefix/bin/resolve-vst %u|" "$prefix/share/applications/resolve-vst.desktop"
+    sed -i "s|^Exec=.*|Exec=$prefix/bin/resolve-linux-vst %u|" "$prefix/share/applications/resolve-linux-vst.desktop"
 fi
 
 command -v update-desktop-database >/dev/null && update-desktop-database -q "$prefix/share/applications" 2>/dev/null || true
 say "Installed into $prefix"
 
 if [[ -x $resolve ]]; then
-    say "Checking your DaVinci Resolve (resolve-vst check)"
-    "$prefix/bin/resolve-vst" check || echo "warning: some hooks do not match this Resolve version, see the README (\"After a Resolve update\")" >&2
+    say "Checking your DaVinci Resolve (resolve-linux-vst check)"
+    "$prefix/bin/resolve-linux-vst" check || echo "warning: some hooks do not match this Resolve version, see the README (\"After a Resolve update\")" >&2
 fi
 
 case ":$PATH:" in
@@ -102,9 +102,9 @@ esac
 cat <<EOF
 
 Next steps
-  1. Start Resolve with "DaVinci Resolve (VST)" from your menu, or run: resolve-vst
+  1. Start Resolve with "DaVinci Resolve (VST)" from your menu, or run: resolve-linux-vst
   2. In Resolve: Preferences → User → Audio Plugins → VST Plugin Paths → add
-       ${RESOLVE_VST_LINKS:-$HOME/.local/share/resolve-vst/vst}
+       ${RESOLVE_LINUX_VST_LINKS:-$HOME/.local/share/resolve-linux-vst/vst}
      then let Resolve scan. Your plug-ins appear in the Effects Library under Audio FX.
 
 Docs: https://github.com/$repo#readme

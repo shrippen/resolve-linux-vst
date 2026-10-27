@@ -11,7 +11,7 @@
 //    X.NEV, geht der Zugriff an X.NEV. Nur lesend; realpath liefert wieder den Namen mit .R3D.
 //
 // Die Schreibweise bleibt: DSC_0001.NEV ↔ DSC_0001.R3D, a.nev ↔ a.r3d. Nur im Prozess
-// resolve, nicht im VstScanner; RESOLVE_VST_NEV=0 schaltet es ab. Resolve kennt die Clips
+// resolve, nicht im VstScanner; RESOLVE_LINUX_VST_NEV=0 schaltet es ab. Resolve kennt die Clips
 // danach unter X.R3D: Ohne den Lader sind sie offline.
 //
 // Resolve ist gegen glibc 2.28 gebaut, stat & Co. kommen dort als __xstat, __lxstat (und
@@ -163,7 +163,7 @@ bool isResolve()
 
 __attribute__((constructor)) void init()
 {
-    const char *env = getenv("RESOLVE_VST_NEV");
+    const char *env = getenv("RESOLVE_LINUX_VST_NEV");
     gActive = isResolve() && !(env && strcmp(env, "0") == 0);
 }
 

@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=DaVinci Resolve (VST)
+Comment=DaVinci Resolve with VST2/VST3 plug-ins, AAC and N-RAW (resolve-linux-vst)
+Comment[de]=DaVinci Resolve mit VST2/VST3-Plugins, AAC und N-RAW (resolve-linux-vst)
+Exec=resolve-linux-vst %u
+Icon=/opt/resolve/graphics/DV_Resolve.png
+Terminal=false
+Categories=AudioVideo;
+StartupWMClass=resolve

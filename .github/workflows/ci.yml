@@ -4,7 +4,7 @@
 # also build the release archive and attach it to the GitHub release
 # (install.sh downloads it from there).
 #
-# Not here, because it needs DaVinci Resolve: resolve-vst check (the
+# Not here, because it needs DaVinci Resolve: resolve-linux-vst check (the
 # hooks in the installed Resolve) and the end-to-end tests in the README
 # (editor-test with real plug-ins, rendering with AAC). Run them locally.
 #
@@ -50,7 +50,7 @@ jobs:
           submodules: true
       - run: make -j"$(nproc)" CXXFLAGS="-O2 -g -Wall -Wextra -Werror"
       - run: make test
-      - run: bash -n resolve-vst install.sh start.sh
+      - run: bash -n resolve-linux-vst install.sh start.sh
 
   # Also runs when test failed or was cancelled, so Gitea never keeps a
   # stale "pending".
@@ -94,16 +94,16 @@ jobs:
       - name: Build archive
         run: |
           make -j"$(nproc)" dist VERSION="${GITHUB_REF_NAME#v}" MAKEFLAGS=-j"$(nproc)"
-          cp "build/dist/resolve-vst-${GITHUB_REF_NAME#v}-linux-x86_64.tar.gz" resolve-vst-linux-x86_64.tar.gz
-          sha256sum resolve-vst-linux-x86_64.tar.gz > resolve-vst-linux-x86_64.tar.gz.sha256
+          cp "build/dist/resolve-linux-vst-${GITHUB_REF_NAME#v}-x86_64.tar.gz" resolve-linux-vst-x86_64.tar.gz
+          sha256sum resolve-linux-vst-x86_64.tar.gz > resolve-linux-vst-x86_64.tar.gz.sha256
       # The release notes live on Gitea and on the landing page; GitHub gets
       # a pointer and the archive.
       - name: Attach to the GitHub release
         run: |
           gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 \
-            || gh release create "$GITHUB_REF_NAME" --verify-tag --title "resolve-vst ${GITHUB_REF_NAME#v}" \
+            || gh release create "$GITHUB_REF_NAME" --verify-tag --title "resolve-linux-vst ${GITHUB_REF_NAME#v}" \
                  --notes "Release notes: https://shrippen.github.io/resolve-linux-vst/#changes"
           gh release upload "$GITHUB_REF_NAME" --clobber \
-            resolve-vst-linux-x86_64.tar.gz resolve-vst-linux-x86_64.tar.gz.sha256
+            resolve-linux-vst-x86_64.tar.gz resolve-linux-vst-x86_64.tar.gz.sha256
         env:
           GH_TOKEN: ${{ github.token }}

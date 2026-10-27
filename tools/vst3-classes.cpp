@@ -1,5 +1,5 @@
 // vst3-classes: listet die Effektklassen eines VST3-Bundles, je Zeile ID, Name und
-// Unterkategorien (Tab-getrennt). resolve-vst legt daraus die Einträge Name.vst an.
+// Unterkategorien (Tab-getrennt). resolve-linux-vst legt daraus die Einträge Name.vst an.
 //
 //   build/vst3-classes <Bundle.vst3>
 #include "../src/vst2.h"

@@ -1,15 +1,15 @@
-# How resolve-vst works
+# How resolve-linux-vst works
 
-resolve-vst is one library, `libresolve-vst.so`, that the launcher `resolve-vst` puts into
+resolve-linux-vst is one library, `libresolve-linux-vst.so`, that the launcher `resolve-linux-vst` puts into
 `LD_PRELOAD` for Resolve and its plug-in scanner, plus the launcher itself. It never changes
 Resolve's files. Code comments in `src/` are in German; this document is the English overview.
 
 ```
-resolve-vst (bash) ── links plug-ins, writes categories, sets Wine DPI back on exit
+resolve-linux-vst (bash) ── links plug-ins, writes categories, sets Wine DPI back on exit
       │ LD_PRELOAD
       ▼
-resolve / VstScanner ──► libresolve-vst.so
-                           ├─ VSTPluginLoader::Load/Close    VST2 loader (resolve_vst.cpp)
+resolve / VstScanner ──► libresolve-linux-vst.so
+                           ├─ VSTPluginLoader::Load/Close    VST2 loader (resolve_linux_vst.cpp)
                            ├─ VST3 adapter                    VST3 as VST2 (vst3.cpp)
                            ├─ dispatcher / host callback      HiDPI, Wine DPI, frame fix
                            ├─ avcodec_find_decoder, …         AAC decoder (aac.cpp)
@@ -25,7 +25,7 @@ Resolve on Linux contains the full VST2 host of the Windows and macOS versions (
 `/opt/resolve/bin/VstScanner`). Only `VSTPluginLoader::Load()`, which opens the plug-in library
 and calls `VSTPluginMain`, is an empty body that always returns `nullptr`.
 
-`libresolve-vst.so` provides that function with the same mangled name:
+`libresolve-linux-vst.so` provides that function with the same mangled name:
 
 - **resolve** calls `Load` through the PLT of `libFairlightPage.so`; the preloaded symbol wins.
 - **VstScanner** is a non-PIE executable that calls it directly. At load time the library looks
@@ -44,7 +44,7 @@ Resolve has no VST3 support on Linux at all (`VST3Host` consists of empty bodies
 loads a VST3 plug-in and presents it as a VST2 plug-in to Resolve's host:
 
 - **Entries:** a bundle can contain several plug-ins (classes). The launcher lists them with
-  `vst3-classes` (cached in `~/.cache/resolve-vst/vst3`, because listing a yabridge bundle starts
+  `vst3-classes` (cached in `~/.cache/resolve-linux-vst/vst3`, because listing a yabridge bundle starts
   Wine) and creates a folder `VST3/…/Name.vst` per class, holding `bundle` (symlink to the bundle)
   and `class` (class ID).
 - **Audio:** `processReplacing` → `IAudioProcessor::process`, 32-bit. Main bus only (stereo where
@@ -82,9 +82,9 @@ The launcher fills them in before every start:
 - **VST2:** from the VST2 category (Synth → Instrument, Analysis → Metering, RoomFx → Reverb, …).
 
 Only masks that are 0, and once per plug-in (remembered with `<FileTime>` in
-`~/.local/state/resolve-vst/categorized`), so your own changes in Resolve stay until Resolve
+`~/.local/state/resolve-linux-vst/categorized`), so your own changes in Resolve stay until Resolve
 rescans the plug-in. Before the first change the launcher saves
-`FXConfiguration.xml.resolve-vst.bak`.
+`FXConfiguration.xml.resolve-linux-vst.bak`.
 
 Two Resolve bugs stood in the way:
 
@@ -115,7 +115,7 @@ How large the plug-in draws is up to the plug-in:
 
 **Wine DPI.** Before loading a yabridge plug-in the library sets the prefix's DPI (through
 `$WINELOADER` like yabridge, only if it differs). Wine has no per-process DPI, so the previous
-value is remembered in `~/.local/state/resolve-vst/wine-dpi-restore` and the launcher restores it
+value is remembered in `~/.local/state/resolve-linux-vst/wine-dpi-restore` and the launcher restores it
 when Resolve exits, also after a crash.
 
 **Frame fix.** yabridge embeds the Wine window in an intermediate window that gets its size from
@@ -163,7 +163,7 @@ built the table) the library changes three things in memory:
   with a 10-minute clip rendered as PCM), and the position relative to the picture is the same.
 
 Before changing anything it checks the table's contents; if anything does not match it changes
-nothing and logs why, and AAC tracks stay silent as without resolve-vst.
+nothing and logs why, and AAC tracks stay silent as without resolve-linux-vst.
 
 ## AAC render
 
@@ -173,7 +173,7 @@ cookie. FFmpeg's mov muxer then writes an `esds` without DecoderSpecificInfo:
 
 ```
 Resolve:        03 … 04 [40 15 …]              06 … 02    ffprobe: profile=-1
-resolve-vst:    03 … 04 [40 15 …] 05 … 11 90   06 … 02    ffprobe: profile=LC
+resolve-linux-vst:    03 … 04 [40 15 …] 05 … 11 90   06 … 02    ffprobe: profile=LC
 ```
 
 The library replaces `avformat_write_header` (called by Resolve through the PLT): AAC streams
@@ -203,7 +203,7 @@ A real `X.R3D` next to it wins; case is kept (`a.nev` ↔ `a.r3d`). Only in the 
 | AAC track switch, decoder open, codec table in `resolve` (stripped) | byte patterns in `src/sites.cpp` | the compiler generates that code differently |
 | `avcodec_find_decoder`, `av_parser_init`, `avformat_write_header` | dynamic symbols, versions `LIBAVCODEC_60` / `LIBAVFORMAT_60` | Resolve ships another FFmpeg major version or stops calling them itself |
 
-`resolve-vst check` (`build/resolve-check`) checks all of them without starting Resolve. At start
+`resolve-linux-vst check` (`build/resolve-check`) checks all of them without starting Resolve. At start
 the library runs the same pattern search (about 50 ms over Resolve's 160 MB of code) and logs the
 result (`AAC: Resolve angepasst …`).
 
@@ -224,12 +224,12 @@ quote the instructions of 21.1.1. `make test` checks the search against syntheti
 ## Testing without Resolve
 
 `make editor-test` builds `build/editor-test`. It loads a plug-in the way Resolve does (through
-`libresolve-vst.so`), runs some blocks of audio, reads a parameter, writes the state back, opens
+`libresolve-linux-vst.so`), runs some blocks of audio, reads a parameter, writes the state back, opens
 the editor and takes a screenshot. VST3 plug-ins go through their entry in the link folder.
 
 ```sh
-RESOLVE_VST_EDITOR_SCALE=3.75 build/editor-test ~/.vst/yabridge/'MPC Beats64.so' mpc.png
-build/editor-test ~/.local/share/resolve-vst/vst/VST3/TB/TB_Compressor_v4.vst tb.png
+RESOLVE_LINUX_VST_EDITOR_SCALE=3.75 build/editor-test ~/.vst/yabridge/'MPC Beats64.so' mpc.png
+build/editor-test ~/.local/share/resolve-linux-vst/vst/VST3/TB/TB_Compressor_v4.vst tb.png
 ```
 
 It does not set the Wine DPI; set it by hand first. Under KWin (Wayland) the test window is not

@@ -6,7 +6,7 @@
 // also nicht gegen ein eigenes FFmpeg 6.0 tauschen.
 //
 // Stattdessen lädt der Lader eine zweite, schlanke libavcodec 6.0 mit nur dem AAC-Decoder
-// (make aac, liegt in ffmpeg-aac/ neben libresolve-vst.so) mit RTLD_LOCAL: Sie nutzt Resolves
+// (make aac, liegt in ffmpeg-aac/ neben libresolve-linux-vst.so) mit RTLD_LOCAL: Sie nutzt Resolves
 // libavutil.so.58, ihre Symbole bleiben unsichtbar (FFmpeg linkt mit -Bsymbolic). Die
 // Funktionen hier ersetzen avcodec_find_decoder, avcodec_find_decoder_by_name und
 // av_parser_init (Resolve und libavformat rufen sie über die PLT): Findet Resolves libavcodec
@@ -80,16 +80,16 @@ std::string ownDirectory()
     return slash == std::string::npos ? std::string(".") : path.substr(0, slash);
 }
 
-// Die zweite libavcodec, einmal geladen. RESOLVE_VST_AAC: Pfad zur Bibliothek, 0 = aus.
+// Die zweite libavcodec, einmal geladen. RESOLVE_LINUX_VST_AAC: Pfad zur Bibliothek, 0 = aus.
 void *aacLibrary()
 {
     static void *handle = nullptr;
     static std::once_flag once;
     std::call_once(once, [] {
         std::string path;
-        if (const char *env = getenv("RESOLVE_VST_AAC"); env && *env) {
+        if (const char *env = getenv("RESOLVE_LINUX_VST_AAC"); env && *env) {
             if (strcmp(env, "0") == 0) {
-                logMessage("AAC: abgeschaltet (RESOLVE_VST_AAC=0)");
+                logMessage("AAC: abgeschaltet (RESOLVE_LINUX_VST_AAC=0)");
                 return;
             }
             path = env;
@@ -246,7 +246,7 @@ EXPORT int avformat_write_header(void *format, void **options)
         static std::once_flag logged;
         if (isResolveExecutable())
             std::call_once(logged, [] {
-                logMessage("AAC: libavformat ist nicht Version 60, AudioSpecificConfig beim Rendern nicht ergänzt; resolve-vst check");
+                logMessage("AAC: libavformat ist nicht Version 60, AudioSpecificConfig beim Rendern nicht ergänzt; resolve-linux-vst check");
             });
         return reinterpret_cast<F>(dlsym(RTLD_NEXT, "avformat_write_header"))(format, options);
     }
@@ -256,7 +256,7 @@ EXPORT int avformat_write_header(void *format, void **options)
 }
 
 // Anpassungen in Resolve (Executable ohne PIE). Die Stellen sucht sites.cpp über Byte-Muster
-// (Adressen hier aus 21.1.1); `resolve-vst check` prüft sie ohne Resolve zu starten.
+// (Adressen hier aus 21.1.1); `resolve-linux-vst check` prüft sie ohne Resolve zu starten.
 //
 // Weiche (Spur eines QuickTime-Clips → Decoder): Vergleiche auf den FourCC in r12d; was
 // keinen eigenen Zweig hat ('aac ', mp4a), landet im allgemeinen Zweig, der die Quelle holt
@@ -588,7 +588,7 @@ void patchResolve()
     AacSites sites;
     std::string error;
     if (!runningImage(&code) || !findAacSites(code, &sites, &error)) {
-        logMessage("AAC: Stelle in Resolve nicht gefunden (%s), MP4/MOV-Ton bleibt aus; resolve-vst check",
+        logMessage("AAC: Stelle in Resolve nicht gefunden (%s), MP4/MOV-Ton bleibt aus; resolve-linux-vst check",
                    error.c_str());
         return;
     }

@@ -9,9 +9,9 @@ LDLIBS   += -ldl
 
 BUILD ?= build
 
-SOURCES := src/resolve_vst.cpp src/vst3.cpp src/aac.cpp src/nev.cpp src/sites.cpp $(VST3)/base/funknown.cpp
+SOURCES := src/resolve_linux_vst.cpp src/vst3.cpp src/aac.cpp src/nev.cpp src/sites.cpp $(VST3)/base/funknown.cpp
 
-all: $(BUILD)/libresolve-vst.so $(BUILD)/vst3-classes $(BUILD)/resolve-check
+all: $(BUILD)/libresolve-linux-vst.so $(BUILD)/vst3-classes $(BUILD)/resolve-check
 
 # Die Header binden sich als "pluginterfaces/..." ein: Verweis unter build/include.
 $(BUILD)/include/pluginterfaces:
@@ -19,13 +19,13 @@ $(BUILD)/include/pluginterfaces:
 	@mkdir -p $(BUILD)/include
 	ln -sfn $(abspath $(VST3)) $@
 
-$(BUILD)/libresolve-vst.so: $(SOURCES) src/vst2.h src/sites.h src/exports.map | $(BUILD)/include/pluginterfaces
+$(BUILD)/libresolve-linux-vst.so: $(SOURCES) src/vst2.h src/sites.h src/exports.map | $(BUILD)/include/pluginterfaces
 	$(CXX) $(CXXFLAGS) $(VST3INC) $(LDFLAGS) -o $@ $(SOURCES) $(LDLIBS)
 
 $(BUILD)/vst3-classes: tools/vst3-classes.cpp src/vst3.cpp src/vst2.h | $(BUILD)/include/pluginterfaces
 	$(CXX) $(filter-out -fPIC,$(CXXFLAGS)) $(VST3INC) -o $@ tools/vst3-classes.cpp src/vst3.cpp $(VST3)/base/funknown.cpp $(LDLIBS)
 
-# Prüft ohne Resolve, ob die Stellen für den Lader noch passen (resolve-vst check).
+# Prüft ohne Resolve, ob die Stellen für den Lader noch passen (resolve-linux-vst check).
 $(BUILD)/resolve-check: tools/resolve-check.cpp src/sites.cpp src/sites.h
 	@mkdir -p $(BUILD)
 	$(CXX) $(filter-out -fPIC,$(CXXFLAGS)) -o $@ tools/resolve-check.cpp src/sites.cpp
@@ -40,7 +40,7 @@ test: $(BUILD)/sites-test
 
 # clean lässt den AAC-Decoder (FFmpeg-Build dauert) stehen, distclean nimmt alles.
 clean:
-	rm -f $(BUILD)/libresolve-vst.so $(BUILD)/vst3-classes $(BUILD)/resolve-check $(BUILD)/sites-test $(BUILD)/editor-test
+	rm -f $(BUILD)/libresolve-linux-vst.so $(BUILD)/vst3-classes $(BUILD)/resolve-check $(BUILD)/sites-test $(BUILD)/editor-test
 	rm -rf $(BUILD)/dist
 
 distclean:
@@ -51,26 +51,26 @@ distclean:
 PREFIX ?= $(HOME)/.local
 
 install: all
-	install -Dm755 $(BUILD)/libresolve-vst.so $(PREFIX)/lib/resolve-vst/libresolve-vst.so
-	install -Dm755 $(BUILD)/vst3-classes $(PREFIX)/lib/resolve-vst/vst3-classes
-	install -Dm755 $(BUILD)/resolve-check $(PREFIX)/lib/resolve-vst/resolve-check
-	if [ -f $(AAC_LIB) ]; then install -Dm755 $(AAC_LIB) $(PREFIX)/lib/resolve-vst/ffmpeg-aac/libavcodec.so.60; fi
-	install -Dm755 resolve-vst $(PREFIX)/bin/resolve-vst
-	install -Dm644 resolve-vst.desktop $(PREFIX)/share/applications/resolve-vst.desktop
-	sed -i 's|^Exec=.*|Exec=$(PREFIX)/bin/resolve-vst %u|' $(PREFIX)/share/applications/resolve-vst.desktop
-	install -Dm644 -t $(PREFIX)/share/doc/resolve-vst README.md LICENSE THIRD-PARTY.md
+	install -Dm755 $(BUILD)/libresolve-linux-vst.so $(PREFIX)/lib/resolve-linux-vst/libresolve-linux-vst.so
+	install -Dm755 $(BUILD)/vst3-classes $(PREFIX)/lib/resolve-linux-vst/vst3-classes
+	install -Dm755 $(BUILD)/resolve-check $(PREFIX)/lib/resolve-linux-vst/resolve-check
+	if [ -f $(AAC_LIB) ]; then install -Dm755 $(AAC_LIB) $(PREFIX)/lib/resolve-linux-vst/ffmpeg-aac/libavcodec.so.60; fi
+	install -Dm755 resolve-linux-vst $(PREFIX)/bin/resolve-linux-vst
+	install -Dm644 resolve-linux-vst.desktop $(PREFIX)/share/applications/resolve-linux-vst.desktop
+	sed -i 's|^Exec=.*|Exec=$(PREFIX)/bin/resolve-linux-vst %u|' $(PREFIX)/share/applications/resolve-linux-vst.desktop
+	install -Dm644 -t $(PREFIX)/share/doc/resolve-linux-vst README.md LICENSE THIRD-PARTY.md
 
 uninstall:
-	rm -rf $(PREFIX)/lib/resolve-vst $(PREFIX)/share/doc/resolve-vst
-	rm -f $(PREFIX)/bin/resolve-vst $(PREFIX)/share/applications/resolve-vst.desktop
+	rm -rf $(PREFIX)/lib/resolve-linux-vst $(PREFIX)/share/doc/resolve-linux-vst
+	rm -f $(PREFIX)/bin/resolve-linux-vst $(PREFIX)/share/applications/resolve-linux-vst.desktop
 
 .PHONY: install uninstall
 
 # Testprogramm: Editor eines Plugins wie in Resolve öffnen und aufnehmen (braucht X11, ffmpeg).
 editor-test: $(BUILD)/editor-test
 
-$(BUILD)/editor-test: tools/editor-test.cpp src/vst2.h $(BUILD)/libresolve-vst.so
-	$(CXX) -O2 -Wall -Wextra -o $@ $< -lX11 $$(pkg-config --cflags --libs glib-2.0) $(abspath $(BUILD)/libresolve-vst.so) -Wl,-rpath,$(abspath $(BUILD))
+$(BUILD)/editor-test: tools/editor-test.cpp src/vst2.h $(BUILD)/libresolve-linux-vst.so
+	$(CXX) -O2 -Wall -Wextra -o $@ $< -lX11 $$(pkg-config --cflags --libs glib-2.0) $(abspath $(BUILD)/libresolve-linux-vst.so) -Wl,-rpath,$(abspath $(BUILD))
 
 .PHONY: editor-test
 
@@ -112,12 +112,12 @@ $(AAC_LIB): $(FFMPEG_TAR) tools/ffmpeg-binutils.patch
 # Release-Archiv (GitHub Actions, .github/workflows/ci.yml): derselbe Baum wie unter PREFIX,
 # install.sh kopiert ihn nach ~/.local. Mit AAC-Decoder.
 VERSION ?= $(shell git describe --tags --always 2>/dev/null | sed 's/^v//')
-DIST    := resolve-vst-$(VERSION)-linux-x86_64
+DIST    := resolve-linux-vst-$(VERSION)-x86_64
 
 dist: all aac
 	rm -rf $(BUILD)/dist
 	$(MAKE) --no-print-directory install PREFIX=$(abspath $(BUILD)/dist/$(DIST))
-	install -Dm644 tools/ffmpeg-binutils.patch $(BUILD)/dist/$(DIST)/share/doc/resolve-vst/ffmpeg-binutils.patch
+	install -Dm644 tools/ffmpeg-binutils.patch $(BUILD)/dist/$(DIST)/share/doc/resolve-linux-vst/ffmpeg-binutils.patch
 	tar -C $(BUILD)/dist -czf $(BUILD)/dist/$(DIST).tar.gz $(DIST)
 	@echo $(BUILD)/dist/$(DIST).tar.gz
 

@@ -1,6 +1,6 @@
-// resolve-check: prüft, ob die Stellen, an denen sich libresolve-vst.so in Resolve einhängt, in
+// resolve-check: prüft, ob die Stellen, an denen sich libresolve-linux-vst.so in Resolve einhängt, in
 // der installierten Version noch da sind, ohne Resolve zu starten. Für die Zeit nach einem
-// Update von Resolve (`resolve-vst check`).
+// Update von Resolve (`resolve-linux-vst check`).
 //
 //   build/resolve-check [Resolve-Ordner]    (Standard /opt/resolve)
 //
@@ -105,7 +105,7 @@ int main(int argc, char **argv)
     const char *loader[] = {"_ZN15VSTPluginLoader4LoadEPKwPFlP7AEffectiilPvfERb", "_ZN15VSTPluginLoader5CloseEv"};
     checkSymbols(dir + "/libs/libFairlightPage.so", true, loader, 2);
 
-    // VstScanner: direkte Aufrufe, umgeleitet über die Symboltabelle (resolve_vst.cpp).
+    // VstScanner: direkte Aufrufe, umgeleitet über die Symboltabelle (resolve_linux_vst.cpp).
     const char *scanner[] = {
         "_ZN15VSTPluginLoader4LoadEPKwPFlP7AEffectiilPvfERb",
         "_ZN15VSTPluginLoader5CloseEv",

@@ -2,12 +2,12 @@
 //
 //   build/editor-test <plugin.so | Klasse.vst> <aufnahme.png> [Sekunden]
 //
-// VST3-Plugins über ihren Eintrag Klasse.vst aus resolve-vst link (VST3-Adapter). Vor dem
+// VST3-Plugins über ihren Eintrag Klasse.vst aus resolve-linux-vst link (VST3-Adapter). Vor dem
 // Editor laufen einige Blöcke Audio (Sinus) durch das Plugin, die Pegel stehen auf stdout.
 //
-// Lädt über VSTPluginLoader::Load aus libresolve-vst.so (also mit Dispatcher, Callback,
+// Lädt über VSTPluginLoader::Load aus libresolve-linux-vst.so (also mit Dispatcher, Callback,
 // Inhaltsskalierung und Rahmen wie in Resolve). Größen sind wie bei Resolves Qt logische
-// Pixel und werden mit RESOLVE_VST_EDITOR_SCALE multipliziert (ohne Qt gibt es sonst keinen
+// Pixel und werden mit RESOLVE_LINUX_VST_EDITOR_SCALE multipliziert (ohne Qt gibt es sonst keinen
 // Faktor). Am Ende: Fensterbaum auf stdout, Aufnahme des Editorfensters per ffmpeg.
 // Die Wine-DPI stellt das Programm nicht ein (es heißt nicht resolve).
 #include <X11/Xlib.h>
@@ -102,7 +102,7 @@ int main(int argc, char **argv)
         return 2;
     }
     setvbuf(stdout, nullptr, _IONBF, 0);
-    if (const char *env = getenv("RESOLVE_VST_EDITOR_SCALE"))
+    if (const char *env = getenv("RESOLVE_LINUX_VST_EDITOR_SCALE"))
         scale = atof(env);
     const int seconds = argc > 3 ? atoi(argv[3]) : 20;
     const std::wstring path(argv[1], argv[1] + strlen(argv[1]));
@@ -127,7 +127,7 @@ int main(int argc, char **argv)
     bool failed = false;
     AEffect *e = loader.Load(path.c_str(), host, failed);
     if (!e) {
-        fprintf(stderr, "Plugin nicht geladen (Log: ~/.local/state/resolve-vst/resolve-vst.log)\n");
+        fprintf(stderr, "Plugin nicht geladen (Log: ~/.local/state/resolve-linux-vst/resolve-linux-vst.log)\n");
         return 1;
     }
     e->dispatcher(e, 0, 0, 0, nullptr, 0);      // effOpen

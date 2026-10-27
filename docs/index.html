@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>resolve-vst — VST plug-ins, AAC and N-RAW for DaVinci Resolve on Linux</title>
+<title>resolve-linux-vst — VST plug-ins, AAC and N-RAW for DaVinci Resolve on Linux</title>
 <meta name="description" content="VST2 and VST3 plug-ins, AAC import and render, and Nikon N-RAW for DaVinci Resolve on Linux. One preload library, no changes to Resolve's files.">
-<meta property="og:title" content="resolve-vst — VST plug-ins, AAC and N-RAW for DaVinci Resolve on Linux">
+<meta property="og:title" content="resolve-linux-vst — VST plug-ins, AAC and N-RAW for DaVinci Resolve on Linux">
 <meta property="og:description" content="VST2 and VST3 plug-ins, AAC import and render, and Nikon N-RAW for DaVinci Resolve on Linux. One preload library, no changes to Resolve's files.">
 <meta property="og:image" content="https://shrippen.github.io/resolve-linux-vst/social-preview.png">
 <meta property="og:image:width" content="1280">
@@ -24,7 +24,7 @@
 <body>
 
 <nav class="nav"><div class="nav-inner">
-  <a class="nav-brand" href="#"><img src="icon.svg" alt="">resolve-vst</a>
+  <a class="nav-brand" href="#"><img src="icon.svg" alt="">resolve-linux-vst</a>
   <div class="nav-links">
     <a href="#features"><span lang="en">Features</span><span lang="de">Funktionen</span></a>
     <a href="#how"><span lang="en">How it works</span><span lang="de">So geht's</span></a>
@@ -41,7 +41,7 @@
 <header class="hero">
   <img class="hero-wm" src="icon-mono.svg" alt="" aria-hidden="true">
   <div class="hero-main">
-    <h1 style="--title-size-narrow:clamp(2.5rem,17vw,9rem)">resolve<br class="split">-vst</h1>
+    <h1 style="--title-size:clamp(2.6rem,6.4vw,6rem);--title-size-narrow:clamp(2rem,8.6vw,7rem)">resolve<br class="split">-linux-vst</h1>
     <p class="tagline" lang="en">VST2 and VST3 plug-ins for DaVinci Resolve on Linux, plus AAC audio and Nikon N-RAW. One small preload library fills in what the Linux build leaves out. Resolve's own files stay untouched.</p>
     <p class="tagline" lang="de">VST2- und VST3-Plugins für DaVinci Resolve unter Linux, dazu AAC-Ton und Nikon N-RAW. Eine kleine Preload-Bibliothek ergänzt, was der Linux-Version fehlt. Resolves eigene Dateien bleiben unangetastet.</p>
   </div>
@@ -63,7 +63,7 @@
 </header>
 
 <main>
-<div class="section"><div class="callout callout-warn"><span lang="en"><strong>Note:</strong> an independent project, not affiliated with Blackmagic Design. It hooks into Resolve internals, so an update of Resolve can switch parts of it off; <code>resolve-vst check</code> tells you which. Built with AI assistance.</span><span lang="de"><strong>Hinweis:</strong> ein unabhängiges Projekt, nicht von Blackmagic Design. Es hängt sich in Resolves Innereien ein, ein Update von Resolve kann deshalb Teile abschalten; <code>resolve-vst check</code> sagt dir, welche. Mit KI-Unterstützung entstanden.</span></div></div>
+<div class="section"><div class="callout callout-warn"><span lang="en"><strong>Note:</strong> an independent project, not affiliated with Blackmagic Design. It hooks into Resolve internals, so an update of Resolve can switch parts of it off; <code>resolve-linux-vst check</code> tells you which. Built with AI assistance.</span><span lang="de"><strong>Hinweis:</strong> ein unabhängiges Projekt, nicht von Blackmagic Design. Es hängt sich in Resolves Innereien ein, ein Update von Resolve kann deshalb Teile abschalten; <code>resolve-linux-vst check</code> sagt dir, welche. Mit KI-Unterstützung entstanden.</span></div></div>
 
 <section class="facts">
   <div class="fact"><b>2</b><span><span lang="en">Plug-in formats, VST2 and VST3, plus LV2 and CLAP through Carla</span><span lang="de">Plugin-Formate, VST2 und VST3, dazu LV2 und CLAP über Carla</span></span></div>
@@ -76,8 +76,8 @@
   <div class="feat" data-tier="red">
     <span class="feat-tag">VST2</span>
     <h3 lang="en">The missing loader</h3><h3 lang="de">Der fehlende Lader</h3>
-    <p lang="en">Resolve on Linux has the whole VST host, but the function that loads a plug-in is empty. resolve-vst supplies it: native Linux plug-ins and Windows plug-ins through yabridge appear in the Fairlight effects library.</p>
-    <p lang="de">Resolve unter Linux hat den ganzen VST-Host, nur die Funktion, die ein Plugin lädt, ist leer. resolve-vst liefert sie nach: Native Linux-Plugins und Windows-Plugins über yabridge erscheinen in der Fairlight-Effektbibliothek.</p>
+    <p lang="en">Resolve on Linux has the whole VST host, but the function that loads a plug-in is empty. resolve-linux-vst supplies it: native Linux plug-ins and Windows plug-ins through yabridge appear in the Fairlight effects library.</p>
+    <p lang="de">Resolve unter Linux hat den ganzen VST-Host, nur die Funktion, die ein Plugin lädt, ist leer. resolve-linux-vst liefert sie nach: Native Linux-Plugins und Windows-Plugins über yabridge erscheinen in der Fairlight-Effektbibliothek.</p>
   </div>
   <div class="feat" data-tier="yellow">
     <span class="feat-tag">VST3</span>
@@ -106,20 +106,20 @@
   <div class="feat" data-tier="blue">
     <span class="feat-tag">AAC</span>
     <h3 lang="en">Renders that play in the browser</h3><h3 lang="de">Renders, die im Browser spielen</h3>
-    <p lang="en">With an AAC encoder plug-in Resolve writes MP4s without the AAC profile, and browsers play them silently. resolve-vst adds the missing description before the file is written.</p>
-    <p lang="de">Mit einem AAC-Encoder-Plugin schreibt Resolve MP4s ohne AAC-Profil, Browser spielen sie stumm. resolve-vst ergänzt die fehlende Angabe, bevor die Datei geschrieben wird.</p>
+    <p lang="en">With an AAC encoder plug-in Resolve writes MP4s without the AAC profile, and browsers play them silently. resolve-linux-vst adds the missing description before the file is written.</p>
+    <p lang="de">Mit einem AAC-Encoder-Plugin schreibt Resolve MP4s ohne AAC-Profil, Browser spielen sie stumm. resolve-linux-vst ergänzt die fehlende Angabe, bevor die Datei geschrieben wird.</p>
   </div>
   <div class="feat" data-tier="red">
     <span class="feat-tag">N-RAW</span>
     <h3 lang="en">Nikon N-RAW</h3><h3 lang="de">Nikon N-RAW</h3>
-    <p lang="en">Resolve's RED decoder reads N-RAW once the file is called <code>.R3D</code>. resolve-vst shows every <code>.nev</code> that way, read-only, without renaming anything on disk.</p>
-    <p lang="de">Resolves RED-Decoder liest N-RAW, sobald die Datei <code>.R3D</code> heißt. resolve-vst zeigt jede <code>.nev</code> so, nur lesend, ohne auf der Platte etwas umzubenennen.</p>
+    <p lang="en">Resolve's RED decoder reads N-RAW once the file is called <code>.R3D</code>. resolve-linux-vst shows every <code>.nev</code> that way, read-only, without renaming anything on disk.</p>
+    <p lang="de">Resolves RED-Decoder liest N-RAW, sobald die Datei <code>.R3D</code> heißt. resolve-linux-vst zeigt jede <code>.nev</code> so, nur lesend, ohne auf der Platte etwas umzubenennen.</p>
   </div>
   <div class="feat" data-tier="yellow">
     <span class="feat-tag"><span lang="en">Updates</span><span lang="de">Updates</span></span>
     <h3 lang="en">Checks itself</h3><h3 lang="de">Prüft sich selbst</h3>
-    <p lang="en">Hooks without symbols are found by byte patterns, not fixed addresses. After a Resolve update, <code>resolve-vst check</code> shows what still matches, before you start it.</p>
-    <p lang="de">Einhängepunkte ohne Symbole findet es über Byte-Muster statt fester Adressen. Nach einem Resolve-Update zeigt <code>resolve-vst check</code>, was noch passt, bevor du startest.</p>
+    <p lang="en">Hooks without symbols are found by byte patterns, not fixed addresses. After a Resolve update, <code>resolve-linux-vst check</code> shows what still matches, before you start it.</p>
+    <p lang="de">Einhängepunkte ohne Symbole findet es über Byte-Muster statt fester Adressen. Nach einem Resolve-Update zeigt <code>resolve-linux-vst check</code>, was noch passt, bevor du startest.</p>
   </div>
   <div class="feat" data-tier="blue">
     <span class="feat-tag">Waves</span>
@@ -131,19 +131,19 @@
 
 <section class="section" id="how">
   <h2 lang="en">How it works</h2><h2 lang="de">So funktioniert es</h2>
-  <p lang="en">The launcher <code>resolve-vst</code> starts Resolve with <code>libresolve-vst.so</code> preloaded. Where Resolve calls a function by name, the library's function of the same name wins. Where Resolve's code lacks a hook, the library adjusts it in memory at startup, after checking that the code is what it expects.</p>
-  <p lang="de">Der Starter <code>resolve-vst</code> startet Resolve mit vorgeladener <code>libresolve-vst.so</code>. Wo Resolve eine Funktion beim Namen ruft, gewinnt die gleichnamige Funktion der Bibliothek. Wo Resolves Code keinen Einhängepunkt hat, passt die Bibliothek ihn beim Start im Speicher an, nachdem sie geprüft hat, dass der Code ist, was sie erwartet.</p>
+  <p lang="en">The launcher <code>resolve-linux-vst</code> starts Resolve with <code>libresolve-linux-vst.so</code> preloaded. Where Resolve calls a function by name, the library's function of the same name wins. Where Resolve's code lacks a hook, the library adjusts it in memory at startup, after checking that the code is what it expects.</p>
+  <p lang="de">Der Starter <code>resolve-linux-vst</code> startet Resolve mit vorgeladener <code>libresolve-linux-vst.so</code>. Wo Resolve eine Funktion beim Namen ruft, gewinnt die gleichnamige Funktion der Bibliothek. Wo Resolves Code keinen Einhängepunkt hat, passt die Bibliothek ihn beim Start im Speicher an, nachdem sie geprüft hat, dass der Code ist, was sie erwartet.</p>
   <div class="flow">
     <div class="flow-node"><b><span lang="en">Your plug-ins</span><span lang="de">Deine Plugins</span></b><span><span lang="en">VST2 and VST3, native or Windows via yabridge</span><span lang="de">VST2 und VST3, nativ oder Windows über yabridge</span></span></div>
     <span class="flow-arrow" aria-hidden="true"></span>
-    <div class="flow-node"><b>resolve-vst</b><span><span lang="en">Links them into one folder, sorts them into categories</span><span lang="de">Verlinkt sie in einen Ordner, ordnet sie Kategorien zu</span></span></div>
+    <div class="flow-node"><b>resolve-linux-vst</b><span><span lang="en">Links them into one folder, sorts them into categories</span><span lang="de">Verlinkt sie in einen Ordner, ordnet sie Kategorien zu</span></span></div>
     <span class="flow-arrow" aria-hidden="true"></span>
-    <div class="flow-node hl"><b>libresolve-vst.so</b><span><span lang="en">Loads them for Resolve, VST3 through the adapter</span><span lang="de">Lädt sie für Resolve, VST3 über den Adapter</span></span></div>
+    <div class="flow-node hl"><b>libresolve-linux-vst.so</b><span><span lang="en">Loads them for Resolve, VST3 through the adapter</span><span lang="de">Lädt sie für Resolve, VST3 über den Adapter</span></span></div>
     <span class="flow-arrow" aria-hidden="true"></span>
     <div class="flow-node"><b>DaVinci Resolve</b><span><span lang="en">Fairlight effects, editors, automation</span><span lang="de">Fairlight-Effekte, Editoren, Automation</span></span></div>
   </div>
   <div class="table-wrap"><table class="table">
-    <thead><tr><th><span lang="en">Gap in Resolve on Linux</span><span lang="de">Lücke in Resolve unter Linux</span></th><th><span lang="en">What resolve-vst does</span><span lang="de">Was resolve-vst tut</span></th></tr></thead>
+    <thead><tr><th><span lang="en">Gap in Resolve on Linux</span><span lang="de">Lücke in Resolve unter Linux</span></th><th><span lang="en">What resolve-linux-vst does</span><span lang="de">Was resolve-linux-vst tut</span></th></tr></thead>
     <tbody>
       <tr><td><code>VSTPluginLoader::Load</code> <span lang="en">is empty</span><span lang="de">ist leer</span></td><td><span lang="en">Supplies it; in the plug-in scanner it redirects the call in memory</span><span lang="de">Liefert sie; im Plugin-Scanner leitet es den Aufruf im Speicher um</span></td></tr>
       <tr><td><span lang="en">No VST3 host</span><span lang="de">Kein VST3-Host</span></td><td><span lang="en">VST3 plug-ins appear as VST2 plug-ins</span><span lang="de">VST3-Plugins erscheinen als VST2-Plugins</span></td></tr>
@@ -161,21 +161,21 @@
   <h2 lang="en">Install and set up</h2><h2 lang="de">Installieren und einrichten</h2>
   <ol class="steps" lang="en">
     <li>Run the installer: <code>curl -fsSL https://raw.githubusercontent.com/shrippen/resolve-linux-vst/main/install.sh | bash</code>. It needs Linux on x86_64, Resolve in <code>/opt/resolve</code>, and <code>nm</code> (binutils).</li>
-    <li>Start Resolve with <strong>DaVinci Resolve (VST)</strong> from your menu, or run <code>resolve-vst</code>.</li>
-    <li>In Resolve, <strong>Preferences → User → Audio Plugins → VST Plugin Paths</strong>: add <code>~/.local/share/resolve-vst/vst</code> and let it scan.</li>
+    <li>Start Resolve with <strong>DaVinci Resolve (VST)</strong> from your menu, or run <code>resolve-linux-vst</code>.</li>
+    <li>In Resolve, <strong>Preferences → User → Audio Plugins → VST Plugin Paths</strong>: add <code>~/.local/share/resolve-linux-vst/vst</code> and let it scan.</li>
     <li>Your plug-ins are in the <strong>Effects Library → Audio FX</strong>. AAC and N-RAW clips need no setup.</li>
   </ol>
   <ol class="steps" lang="de">
     <li>Installer ausführen: <code>curl -fsSL https://raw.githubusercontent.com/shrippen/resolve-linux-vst/main/install.sh | bash</code>. Braucht Linux auf x86_64, Resolve in <code>/opt/resolve</code> und <code>nm</code> (binutils).</li>
-    <li>Resolve über <strong>DaVinci Resolve (VST)</strong> im Menü starten oder <code>resolve-vst</code> ausführen.</li>
-    <li>In Resolve unter <strong>Einstellungen → Benutzer → Audio-Plugins → VST-Plugin-Pfade</strong> den Ordner <code>~/.local/share/resolve-vst/vst</code> hinzufügen und scannen lassen.</li>
+    <li>Resolve über <strong>DaVinci Resolve (VST)</strong> im Menü starten oder <code>resolve-linux-vst</code> ausführen.</li>
+    <li>In Resolve unter <strong>Einstellungen → Benutzer → Audio-Plugins → VST-Plugin-Pfade</strong> den Ordner <code>~/.local/share/resolve-linux-vst/vst</code> hinzufügen und scannen lassen.</li>
     <li>Die Plugins stehen in der <strong>Effektbibliothek → Audio-FX</strong>. AAC- und N-RAW-Clips brauchen keine Einrichtung.</li>
   </ol>
   <div class="codeblock"><span class="c"># where plug-ins come from</span>
 ~/.vst  ~/.lxvst  /usr/lib/vst      <span class="c"># VST2, Windows VST2 via yabridge in ~/.vst/yabridge</span>
 ~/.vst3  /usr/lib/vst3              <span class="c"># VST3, native or via yabridge</span>
 <span class="c"># after a Resolve update</span>
-<span class="k">resolve-vst check</span>
+<span class="k">resolve-linux-vst check</span>
 <span class="c"># build from source instead</span>
 <span class="k">git clone --recursive</span> https://github.com/shrippen/resolve-linux-vst.git
 <span class="k">cd</span> resolve-linux-vst &amp;&amp; <span class="k">./install.sh --source</span></div>
@@ -184,11 +184,11 @@
 <section class="section" id="faq">
   <h2 lang="en">Questions</h2><h2 lang="de">Fragen</h2>
   <div class="faq">
-    <details><summary><span lang="en">Does it change my Resolve installation?</span><span lang="de">Ändert es meine Resolve-Installation?</span></summary><div><p lang="en">No. Everything happens in memory while Resolve runs. Start Resolve without resolve-vst and it is the stock program again. Resolve's own plug-in list and preferences are the only files it writes to, and it keeps a backup of the list.</p><p lang="de">Nein. Alles passiert im Speicher, solange Resolve läuft. Startest du Resolve ohne resolve-vst, ist es wieder das unveränderte Programm. Geschrieben werden nur Resolves Plugin-Liste und Einstellungen, von der Liste mit Sicherung.</p></div></details>
-    <details><summary><span lang="en">What happens after a Resolve update?</span><span lang="de">Was passiert nach einem Resolve-Update?</span></summary><div><p lang="en">Run <code>resolve-vst check</code>. A hook that no longer matches switches off only its own feature; Resolve itself keeps working and the log says what was skipped. Code sites are found by byte patterns, so most updates need no change.</p><p lang="de"><code>resolve-vst check</code> ausführen. Ein Einhängepunkt, der nicht mehr passt, schaltet nur seine eigene Funktion ab; Resolve selbst läuft weiter, und das Log sagt, was ausgelassen wurde. Code-Stellen werden über Byte-Muster gefunden, die meisten Updates brauchen deshalb keine Änderung.</p></div></details>
-    <details><summary><span lang="en">Does it work with the free version of Resolve?</span><span lang="de">Geht es mit der kostenlosen Version von Resolve?</span></summary><div><p lang="en">It is tested with Resolve Studio 21.1.1 only. The free version shares most of the code, but it is untested; <code>resolve-vst check</code> shows which hooks it finds there.</p><p lang="de">Getestet ist es nur mit Resolve Studio 21.1.1. Die kostenlose Version teilt den meisten Code, ist aber ungetestet; <code>resolve-vst check</code> zeigt, welche Einhängepunkte es dort findet.</p></div></details>
+    <details><summary><span lang="en">Does it change my Resolve installation?</span><span lang="de">Ändert es meine Resolve-Installation?</span></summary><div><p lang="en">No. Everything happens in memory while Resolve runs. Start Resolve without resolve-linux-vst and it is the stock program again. Resolve's own plug-in list and preferences are the only files it writes to, and it keeps a backup of the list.</p><p lang="de">Nein. Alles passiert im Speicher, solange Resolve läuft. Startest du Resolve ohne resolve-linux-vst, ist es wieder das unveränderte Programm. Geschrieben werden nur Resolves Plugin-Liste und Einstellungen, von der Liste mit Sicherung.</p></div></details>
+    <details><summary><span lang="en">What happens after a Resolve update?</span><span lang="de">Was passiert nach einem Resolve-Update?</span></summary><div><p lang="en">Run <code>resolve-linux-vst check</code>. A hook that no longer matches switches off only its own feature; Resolve itself keeps working and the log says what was skipped. Code sites are found by byte patterns, so most updates need no change.</p><p lang="de"><code>resolve-linux-vst check</code> ausführen. Ein Einhängepunkt, der nicht mehr passt, schaltet nur seine eigene Funktion ab; Resolve selbst läuft weiter, und das Log sagt, was ausgelassen wurde. Code-Stellen werden über Byte-Muster gefunden, die meisten Updates brauchen deshalb keine Änderung.</p></div></details>
+    <details><summary><span lang="en">Does it work with the free version of Resolve?</span><span lang="de">Geht es mit der kostenlosen Version von Resolve?</span></summary><div><p lang="en">It is tested with Resolve Studio 21.1.1 only. The free version shares most of the code, but it is untested; <code>resolve-linux-vst check</code> shows which hooks it finds there.</p><p lang="de">Getestet ist es nur mit Resolve Studio 21.1.1. Die kostenlose Version teilt den meisten Code, ist aber ungetestet; <code>resolve-linux-vst check</code> zeigt, welche Einhängepunkte es dort findet.</p></div></details>
     <details><summary><span lang="en">Instruments, sidechain, LV2, CLAP?</span><span lang="de">Instrumente, Sidechain, LV2, CLAP?</span></summary><div><p lang="en">Effects only: no MIDI input, no sidechain inputs, no ARA. LV2 and CLAP plug-ins work through Carla, which is a VST2 plug-in itself and hosts them inside.</p><p lang="de">Nur Effekte: kein MIDI-Eingang, keine Sidechain-Eingänge, kein ARA. LV2- und CLAP-Plugins gehen über Carla, das selbst ein VST2-Plugin ist und sie darin lädt.</p></div></details>
-    <details><summary><span lang="en">Can I render AAC with it?</span><span lang="de">Kann ich damit AAC rendern?</span></summary><div><p lang="en">Encoding needs an encoder plug-in such as <a href="https://github.com/hexitnz/Resolve-Linux-Studio-AAC-FDK-Encoder-plugin">FDK-AAC</a>. resolve-vst makes its MP4 and MOV files complete, so browsers play the sound.</p><p lang="de">Zum Kodieren braucht es ein Encoder-Plugin wie <a href="https://github.com/hexitnz/Resolve-Linux-Studio-AAC-FDK-Encoder-plugin">FDK-AAC</a>. resolve-vst macht dessen MP4- und MOV-Dateien vollständig, damit Browser den Ton abspielen.</p></div></details>
+    <details><summary><span lang="en">Can I render AAC with it?</span><span lang="de">Kann ich damit AAC rendern?</span></summary><div><p lang="en">Encoding needs an encoder plug-in such as <a href="https://github.com/hexitnz/Resolve-Linux-Studio-AAC-FDK-Encoder-plugin">FDK-AAC</a>. resolve-linux-vst makes its MP4 and MOV files complete, so browsers play the sound.</p><p lang="de">Zum Kodieren braucht es ein Encoder-Plugin wie <a href="https://github.com/hexitnz/Resolve-Linux-Studio-AAC-FDK-Encoder-plugin">FDK-AAC</a>. resolve-linux-vst macht dessen MP4- und MOV-Dateien vollständig, damit Browser den Ton abspielen.</p></div></details>
   </div>
 </section>
 
@@ -204,10 +204,10 @@
           <li><span lang="en">Plug-in categories, HiDPI editor sizes and Wine DPI per plug-in</span><span lang="de">Plugin-Kategorien, Editorgrößen bei HiDPI und Wine-DPI je Plugin</span></li>
           <li><span lang="en">AAC import for MP4, MOV and M4A, and complete AAC renders that browsers play</span><span lang="de">AAC-Import für MP4, MOV und M4A und vollständige AAC-Renders, die Browser abspielen</span></li>
           <li><span lang="en">Nikon N-RAW through Resolve's RED decoder</span><span lang="de">Nikon N-RAW über Resolves RED-Decoder</span></li>
-          <li><span lang="en"><code>resolve-vst check</code>: after a Resolve update it shows which hooks still match</span><span lang="de"><code>resolve-vst check</code>: zeigt nach einem Resolve-Update, welche Einhängepunkte noch passen</span></li>
+          <li><span lang="en"><code>resolve-linux-vst check</code>: after a Resolve update it shows which hooks still match</span><span lang="de"><code>resolve-linux-vst check</code>: zeigt nach einem Resolve-Update, welche Einhängepunkte noch passen</span></li>
         </ul></div>
         <div class="release-group" data-kind="note"><h3><span lang="en">Note</span><span lang="de">Hinweis</span></h3><ul>
-          <li><span lang="en">Tested with Resolve Studio 21.1.1. Always start Resolve through <code>resolve-vst</code>; otherwise its scanner marks all plug-ins as failed (<code>resolve-vst rescan</code> fixes that).</span><span lang="de">Getestet mit Resolve Studio 21.1.1. Resolve immer über <code>resolve-vst</code> starten; sonst markiert sein Scanner alle Plugins als fehlerhaft (<code>resolve-vst rescan</code> behebt das).</span></li>
+          <li><span lang="en">Tested with Resolve Studio 21.1.1. Always start Resolve through <code>resolve-linux-vst</code>; otherwise its scanner marks all plug-ins as failed (<code>resolve-linux-vst rescan</code> fixes that).</span><span lang="de">Getestet mit Resolve Studio 21.1.1. Resolve immer über <code>resolve-linux-vst</code> starten; sonst markiert sein Scanner alle Plugins als fehlerhaft (<code>resolve-linux-vst rescan</code> behebt das).</span></li>
         </ul></div>
       </div>
     </li>
@@ -219,7 +219,7 @@
   <div class="foot-inner">
     <div class="foot-brand">
       <img src="icon.svg" alt="">
-      <div><span class="foot-name">resolve-vst</span>
+      <div><span class="foot-name">resolve-linux-vst</span>
         <span class="foot-tag"><span lang="en">VST plug-ins, AAC and N-RAW for DaVinci Resolve on Linux</span><span lang="de">VST-Plugins, AAC und N-RAW für DaVinci Resolve unter Linux</span></span></div>
     </div>
     <nav class="foot-cols" aria-label="Footer">

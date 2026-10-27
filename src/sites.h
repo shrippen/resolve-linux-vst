@@ -1,7 +1,7 @@
 // Stellen in Resolve, die der Lader im Speicher anpasst, gesucht über Byte-Muster statt über
 // feste Adressen: Nach einem Update von Resolve liegen sie woanders, der Code drumherum bleibt
 // meist gleich. Dieselbe Suche läuft beim Start in Resolve (aac.cpp) und offline im Werkzeug
-// resolve-check (tools/resolve-check.cpp, `resolve-vst check`), das ohne Resolve zu starten
+// resolve-check (tools/resolve-check.cpp, `resolve-linux-vst check`), das ohne Resolve zu starten
 // meldet, ob alle Stellen noch passen.
 #pragma once
 
