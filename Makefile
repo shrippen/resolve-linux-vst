@@ -75,20 +75,25 @@ $(BUILD)/editor-test: tools/editor-test.cpp src/vst2.h $(BUILD)/libresolve-linux
 .PHONY: editor-test
 
 # AAC-Decoder (src/aac.cpp): FFmpeg 6.0 wie in Resolve, nur libavcodec mit AAC. Lädt die
-# Quellen von ffmpeg.org. Der Patch ist Upstream-Commit effadce6 (neue binutils).
+# Quellen von ffmpeg.org, sonst vom BLFS-Spiegel (dieselbe Datei; ffmpeg.org ist von GitHub
+# Actions aus oft nicht erreichbar). Der Patch ist Upstream-Commit effadce6 (neue binutils).
 FFMPEG_VERSION := 6.0
 FFMPEG_SHA256  := 57be87c22d9b49c112b6d24bc67d42508660e6b718b3db89c44e47e289137082
 FFMPEG_TAR     := $(BUILD)/ffmpeg-$(FFMPEG_VERSION).tar.xz
 FFMPEG_SRC     := $(BUILD)/ffmpeg-$(FFMPEG_VERSION)
+FFMPEG_URLS    := https://ffmpeg.org/releases/ffmpeg-$(FFMPEG_VERSION).tar.xz \
+                  https://ftp.osuosl.org/pub/blfs/conglomeration/ffmpeg/ffmpeg-$(FFMPEG_VERSION).tar.xz
 AAC_LIB        := $(BUILD)/ffmpeg-aac/libavcodec.so.60
 
 aac: $(AAC_LIB)
 
 $(FFMPEG_TAR):
 	@mkdir -p $(BUILD)
-	curl -fL --proto =https -o $@.part https://ffmpeg.org/releases/ffmpeg-$(FFMPEG_VERSION).tar.xz
-	echo "$(FFMPEG_SHA256)  $@.part" | sha256sum -c --quiet
-	mv $@.part $@
+	for url in $(FFMPEG_URLS); do \
+		curl -fL --proto =https --connect-timeout 20 --retry 2 -o $@.part $$url \
+			&& echo "$(FFMPEG_SHA256)  $@.part" | sha256sum -c --quiet && mv $@.part $@ && exit 0; \
+		echo "$$url: failed, trying the next source" >&2; \
+	done; rm -f $@.part; exit 1
 
 $(AAC_LIB): $(FFMPEG_TAR) tools/ffmpeg-binutils.patch
 	rm -rf $(FFMPEG_SRC) $(BUILD)/ffmpeg-aac-build
