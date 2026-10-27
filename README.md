@@ -56,7 +56,7 @@ Requirements: Linux on x86_64, DaVinci Resolve in `/opt/resolve` (otherwise set 
 `nm` (binutils) and `awk`. Optional: [yabridge](https://github.com/robbert-vdh/yabridge) for
 Windows plug-ins, [Carla](https://kx.studio/Applications:Carla) for LV2 and CLAP.
 
-Options: `install.sh --version 0.1.0`, `--prefix DIR`, `--uninstall`.
+Options: `install.sh --version 1.0.0`, `--prefix DIR`, `--uninstall`.
 
 <details>
 <summary>Build from source</summary>
