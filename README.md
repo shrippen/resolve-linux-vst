@@ -57,7 +57,7 @@ Requirements: Linux on x86_64, DaVinci Resolve in `/opt/resolve` (otherwise set 
 Windows plug-ins, [Carla](https://kx.studio/Applications:Carla) for LV2 and CLAP,
 [FDK-AAC encoder plug-in](https://github.com/hexitnz/Resolve-Linux-Studio-AAC-FDK-Encoder-plugin) for AAC renders.
 
-Options: `install.sh --version 1.0.1`, `--prefix DIR`, `--uninstall`.
+Options: `install.sh --version 1.0.2`, `--prefix DIR`, `--uninstall`.
 
 <details>
 <summary>Build from source</summary>
