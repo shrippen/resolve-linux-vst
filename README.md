@@ -32,7 +32,7 @@ resolve-linux-vst fills those gaps at run time:
 | **Categories** | Plug-ins land in Resolve's categories (Dynamics, EQ, Reverb, …) instead of "Uncategorized". |
 | **HiDPI** | Plug-in editors get the right size and scale on scaled displays, including Wine plug-ins. |
 | **AAC import** | MP4, MOV and M4A clips with AAC audio play with sound. |
-| **AAC render** | MP4/MOV renders with an AAC encoder plug-in get a correct AAC-LC description, so browsers play them. |
+| **AAC render** | MP4/MOV renders with an AAC encoder plug-in such as [FDK-AAC](https://github.com/hexitnz/Resolve-Linux-Studio-AAC-FDK-Encoder-plugin) get a correct AAC-LC description, so browsers play them. |
 | **N-RAW** | Nikon `.nev` clips open through Resolve's own RED decoder. |
 
 Tested with DaVinci Resolve Studio 21.1.1 on Arch Linux.
@@ -54,7 +54,8 @@ installation with `resolve-linux-vst check`.
 
 Requirements: Linux on x86_64, DaVinci Resolve in `/opt/resolve` (otherwise set `RESOLVE_BIN`),
 `nm` (binutils) and `awk`. Optional: [yabridge](https://github.com/robbert-vdh/yabridge) for
-Windows plug-ins, [Carla](https://kx.studio/Applications:Carla) for LV2 and CLAP.
+Windows plug-ins, [Carla](https://kx.studio/Applications:Carla) for LV2 and CLAP,
+[FDK-AAC encoder plug-in](https://github.com/hexitnz/Resolve-Linux-Studio-AAC-FDK-Encoder-plugin) for AAC renders.
 
 Options: `install.sh --version 1.0.1`, `--prefix DIR`, `--uninstall`.
 
@@ -86,7 +87,9 @@ starts Resolve. Make targets: `all`, `aac` (downloads FFmpeg 6.0 and builds the 
 Always start Resolve through `resolve-linux-vst` (or the menu entry). Started without it, Resolve's
 scanner finds nothing and marks every plug-in as failed; run `resolve-linux-vst rescan` afterwards.
 
-AAC and N-RAW need no setup: import the clips as usual.
+AAC import and N-RAW need no setup: import the clips as usual. To render AAC, install the
+[FDK-AAC encoder plug-in](https://github.com/hexitnz/Resolve-Linux-Studio-AAC-FDK-Encoder-plugin)
+and pick AAC as audio codec in the Deliver page.
 
 ## Plug-ins
 
@@ -173,12 +176,13 @@ priming at the very start of some files (the first 1024 samples, 21 ms of near s
 
 ### AAC render
 
-Resolve cannot encode AAC on Linux; an encoder plug-in such as
-[FDK-AAC](https://github.com/hexitnz/Resolve-Linux-Studio-AAC-FDK-Encoder-plugin) adds it. Resolve
-then writes the AAC track without its AudioSpecificConfig: `ffprobe` shows `profile=-1`, VLC and
-mpv play the file, Firefox and other browsers play it silently. resolve-linux-vst adds the missing
-AAC-LC description before Resolve writes the file. Files rendered before cannot be repaired with
-`ffmpeg -c copy`; render them again.
+Resolve cannot encode AAC on Linux. The
+[FDK-AAC encoder plug-in](https://github.com/hexitnz/Resolve-Linux-Studio-AAC-FDK-Encoder-plugin)
+(Resolve Studio) adds it; install it separately, resolve-linux-vst does not bring an encoder.
+Resolve then writes the AAC track without its AudioSpecificConfig: `ffprobe` shows `profile=-1`,
+VLC and mpv play the file, Firefox and other browsers play it silently. resolve-linux-vst adds the
+missing AAC-LC description before Resolve writes the file. Files rendered before cannot be
+repaired with `ffmpeg -c copy`; render them again.
 
 ### Nikon N-RAW
 
