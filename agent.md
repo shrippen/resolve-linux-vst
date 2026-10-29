@@ -25,6 +25,11 @@ plug-ins, AAC import and render, and Nikon N-RAW to DaVinci Resolve Studio on Li
   into `details.changelog-more`. Bump the version in the footer.
 - The release job in `.github/workflows/ci.yml` takes the GitHub release notes from the tag's
   section in `CHANGELOG.md` and fails without one. A release is done when the landing page shows it.
+- The notes come from `scripts/release-notes.sh X.Y.Z` (Gitea too: `scripts/release-notes.sh X.Y.Z >
+  notes.md`, then `tea release create --tag vX.Y.Z --title … --note-file notes.md`); CI checks the
+  headings on every push (`scripts/release-notes.sh --check`). The script is a copy of Kante's
+  `tools/release-notes.sh`: change it only there, then sync with
+  `../Kante/tools/sync-release-notes.sh "$PWD"`.
 
 ## GUI rule
 
