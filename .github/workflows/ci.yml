@@ -48,6 +48,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           submodules: true
+      - run: scripts/release-notes.sh --check
       - run: make -j"$(nproc)" CXXFLAGS="-O2 -g -Wall -Wextra -Werror"
       - run: make test
       - run: bash -n resolve-linux-vst install.sh start.sh
@@ -90,22 +91,11 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           submodules: true
-      # The release notes are the tag's section in CHANGELOG.md (## [X.Y.Z], ## X.Y.Z or
-      # ## vX.Y.Z). No section, no release: the job fails instead of posting a placeholder.
+      # The release notes are the tag's section in CHANGELOG.md (## [X.Y.Z] — YYYY-MM-DD).
+      # No section, no release: the job fails instead of posting a placeholder.
+      # scripts/release-notes.sh is a copy of Kante's tools/release-notes.sh.
       - name: Release notes from CHANGELOG.md
-        run: |
-          v="${GITHUB_REF_NAME#v}"
-          awk -v v="$v" '
-            /^## / { if (found) exit
-                     t = $2
-                     if (t ~ /^\[.*\]$/) t = substr(t, 2, length(t) - 2)
-                     if (t ~ /^v/) t = substr(t, 2)
-                     if (t == v) { found = 1; next } }
-            found { print }' CHANGELOG.md > "$RUNNER_TEMP/notes.md"
-          if ! grep -q '[^[:space:]]' "$RUNNER_TEMP/notes.md"; then
-            echo "::error::CHANGELOG.md has no section for $v"
-            exit 1
-          fi
+        run: scripts/release-notes.sh "${GITHUB_REF_NAME#v}" > "$RUNNER_TEMP/notes.md"
       - run: sudo apt-get update -qq && sudo apt-get install -y -qq nasm
       - name: Build archive
         run: |
