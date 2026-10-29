@@ -13,6 +13,19 @@ plug-ins, AAC import and render, and Nikon N-RAW to DaVinci Resolve Studio on Li
   README, landing page) is English, the landing page also German.
 - Tested against Resolve Studio 21.1.1. After a Resolve update run `resolve-linux-vst check` first.
 
+## Release rule
+
+- Every release gets a release log, written before the tag, in `CHANGELOG.md` (the single source):
+  a section `## [X.Y.Z] — YYYY-MM-DD` at the top with `### English` and `### Deutsch`, each with a
+  lead (what the release is about), then the changes grouped as New, Improved, Fixed and Note
+  (breaking changes, steps the user must take) and the compare link to the previous tag. Each point
+  says what changed for the user and why, not which code moved.
+- The same text goes into the release notes on Gitea and as a new entry at the top of `#changes` on
+  the landing page (`docs/index.html`, Kante `.changelog`); from the fourth entry on, the oldest move
+  into `details.changelog-more`. Bump the version in the footer.
+- The release job in `.github/workflows/ci.yml` takes the GitHub release notes from the tag's
+  section in `CHANGELOG.md` and fails without one. A release is done when the landing page shows it.
+
 ## GUI rule
 
 - Every GUI of this project is generated from Kante, not inspired by it: landing pages,

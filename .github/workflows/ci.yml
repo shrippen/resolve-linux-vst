@@ -90,20 +90,38 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           submodules: true
+      # The release notes are the tag's section in CHANGELOG.md (## [X.Y.Z], ## X.Y.Z or
+      # ## vX.Y.Z). No section, no release: the job fails instead of posting a placeholder.
+      - name: Release notes from CHANGELOG.md
+        run: |
+          v="${GITHUB_REF_NAME#v}"
+          awk -v v="$v" '
+            /^## / { if (found) exit
+                     t = $2
+                     if (t ~ /^\[.*\]$/) t = substr(t, 2, length(t) - 2)
+                     if (t ~ /^v/) t = substr(t, 2)
+                     if (t == v) { found = 1; next } }
+            found { print }' CHANGELOG.md > "$RUNNER_TEMP/notes.md"
+          if ! grep -q '[^[:space:]]' "$RUNNER_TEMP/notes.md"; then
+            echo "::error::CHANGELOG.md has no section for $v"
+            exit 1
+          fi
       - run: sudo apt-get update -qq && sudo apt-get install -y -qq nasm
       - name: Build archive
         run: |
           make -j"$(nproc)" dist VERSION="${GITHUB_REF_NAME#v}" MAKEFLAGS=-j"$(nproc)"
           cp "build/dist/resolve-linux-vst-${GITHUB_REF_NAME#v}-x86_64.tar.gz" resolve-linux-vst-x86_64.tar.gz
           sha256sum resolve-linux-vst-x86_64.tar.gz > resolve-linux-vst-x86_64.tar.gz.sha256
-      # The release notes live on Gitea and on the landing page; GitHub gets
-      # a pointer, the archive and the FFmpeg sources of its AAC decoder
-      # (LGPL: source from the same place as the binary).
+      # GitHub gets the notes from CHANGELOG.md, the archive and the FFmpeg
+      # sources of its AAC decoder (LGPL: source from the same place as the binary).
       - name: Attach to the GitHub release
         run: |
-          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 \
-            || gh release create "$GITHUB_REF_NAME" --verify-tag --title "resolve-linux-vst ${GITHUB_REF_NAME#v}" \
-                 --notes "Release notes: https://shrippen.github.io/resolve-linux-vst/#changes"
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release edit "$GITHUB_REF_NAME" --notes-file "$RUNNER_TEMP/notes.md"
+          else
+            gh release create "$GITHUB_REF_NAME" --verify-tag --title "resolve-linux-vst ${GITHUB_REF_NAME#v}" \
+              --notes-file "$RUNNER_TEMP/notes.md"
+          fi
           gh release upload "$GITHUB_REF_NAME" --clobber \
             resolve-linux-vst-x86_64.tar.gz resolve-linux-vst-x86_64.tar.gz.sha256 \
             build/dist/ffmpeg-6.0.tar.xz tools/ffmpeg-binutils.patch
