@@ -11,7 +11,7 @@ publish_output_progress = false
 enable_claude_adaptive_thinking = true
 reasoning_effort = "high"
 # The repository rules go along as context.
-repo_context_files = ["agent.md"]
+repo_context_files = ["agent.md", "RULES.md"]
 
 [pr_reviewer]
 num_max_findings = 5
@@ -32,7 +32,7 @@ Report only findings that matter:
   (Resolve crashing or hanging is the worst case). Name file and line.
 - Code that runs in Resolve's audio thread and allocates, locks or logs.
 - Struct offsets or patterns that are not checked before use.
-- Breaches of the repository rules (agent.md).
+- Breaches of the repository rules (agent.md, RULES.md).
 
 Skip style, naming and formatting, praise, and guesses you cannot back
 with the diff. When you find nothing that matters, say so in one line.
