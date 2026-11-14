@@ -37,7 +37,7 @@ Nikon N-RAW clips. A launcher script starts Resolve with a library loaded into i
         ┌───────────────┬─────────────┬───────┴─────┬─────────────┐
         ▼               ▼             ▼             ▼             ▼
    VST2 loader ─► VST3 adapter       AAC          N-RAW          X11        features
-        │        (via vst2.h)         │                    (+ scanner changes)
+        │        (via vst2.h)         │
         ▼                             │
    plugins.conf, editor size,         │                          the loader's own parts
    Wine DPI                           │
@@ -45,6 +45,8 @@ Nikon N-RAW clips. A launcher script starts Resolve with a library loaded into i
                        ▼
        shared: sites (find places), writing into Resolve's code,
                log, "which program is this?"                              below all
+
+ a sixth feature beside these five: the changes to Resolve's scanner and number format
 
  tools/, tests/ ─► src/        (never the other way round)
  launcher ◄─► library: two agreed formats (VST3 entry folder, Wine DPI file)
