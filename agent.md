@@ -13,7 +13,9 @@ plug-ins, AAC import and render, and Nikon N-RAW to DaVinci Resolve Studio on Li
 - Build `make`, AAC decoder `make aac`, tests `make test`, hook check against the installed
   Resolve `build/resolve-check` (or `resolve-linux-vst check`). Release tarball `make dist`.
   CI also runs `tools/structure-check.py` (limits in `structure.baseline`) before the build.
-- The structure (building blocks, what may use what, where new things go): `ARCHITECTURE.md`.
+- Hooks without symbols are found by byte patterns (`src/sites.cpp`), never by fixed addresses.
+  A pattern that no longer matches must switch off only its own feature and log why.
+- Resolve's files are never changed on disk; everything happens in memory at run time.
 - Code comments and the library log are German; everything a user sees (CLI, installer,
   README, landing page) is English, the landing page also German.
 - Tested against Resolve Studio 21.1.1. After a Resolve update run `resolve-linux-vst check` first.

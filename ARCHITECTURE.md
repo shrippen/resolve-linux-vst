@@ -37,7 +37,10 @@ Nikon N-RAW clips. A launcher script starts Resolve with a library loaded into i
         ┌───────────────┬─────────────┬───────┴─────┬─────────────┐
         ▼               ▼             ▼             ▼             ▼
    VST2 loader ─► VST3 adapter       AAC          N-RAW          X11        features
-        │        (via vst2.h)         │
+        │        (via vst2.h)         │                    (+ scanner changes)
+        ▼                             │
+   plugins.conf, editor size,         │                          the loader's own parts
+   Wine DPI                           │
         └──────────────┬──────────────┘
                        ▼
        shared: sites (find places), writing into Resolve's code,
@@ -50,7 +53,8 @@ Nikon N-RAW clips. A launcher script starts Resolve with a library loaded into i
 - Each feature has its own file and knows no other feature. The one exception: the VST2
   loader hands a VST3 entry to the adapter, through the entry points in `vst2.h`.
 - Each feature starts itself, through the functions it replaces (`src/exports.map`) or
-  its own start-up hook. No feature starts another.
+  its own start-up hook. No feature starts another; the VST3 adapter, which the loader
+  calls, is the same exception.
 - The loader file only loads plug-ins. What it needs besides lives in files of their own
   below it: the settings per plug-in (`plugins.conf`), the editor size, the Wine DPI. The
   changes to Resolve's scanner (categories) and to its number format at start are a
