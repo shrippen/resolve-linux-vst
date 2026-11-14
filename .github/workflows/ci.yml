@@ -49,6 +49,8 @@ jobs:
         with:
           submodules: true
       - run: scripts/release-notes.sh --check
+      - name: Structure limits
+        run: pipx run tools/structure-check.py
       - run: make -j"$(nproc)" CXXFLAGS="-O2 -g -Wall -Wextra -Werror"
       - run: make test
       - run: bash -n resolve-linux-vst install.sh start.sh
