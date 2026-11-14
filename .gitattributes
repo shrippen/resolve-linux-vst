@@ -1,0 +1,6 @@
+# Rule files for agents stay out of source archives.
+/CLAUDE.md export-ignore
+/ARCHITECTURE.md export-ignore
+/AUDIT.md export-ignore
+/agent.md export-ignore
+/RULES.md export-ignore
