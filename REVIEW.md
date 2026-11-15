@@ -33,7 +33,8 @@ matters crashes or silences Resolve, or damages the user's files:
 - Code that runs in Resolve's audio thread (`process`, `processReplacing`): no allocation,
   lock or logging.
 - Every new byte pattern or offset: where it is checked, what happens when it fails, that
-  only `src/sites.cpp` holds it, and a new hook is in `src/exports.map`.
+  only `src/sites.cpp` holds it.
+- A new function that replaces a symbol by LD_PRELOAD is in `src/exports.map`.
 - Layers: as in `ARCHITECTURE.md`.
 - Bug fixes: a test in `tests/` that failed before the fix and runs in `make test`, and the
   cause removed, not one case hidden. What only Resolve can show (hooks, editors, AAC render)
@@ -55,10 +56,10 @@ matters crashes or silences Resolve, or damages the user's files:
 
 - Every finding names file and line and the concrete input or state that
   goes wrong. No guess without evidence; if unsure, say so.
-- Each finding gets one label: **Wichtig** (a bug from the list above,
-  must be fixed or answered before the merge), **Kleinigkeit** (optional,
-  at most five) or **Bestand** (the bug was there before this PR; not
-  blocking).
+- Each finding gets one label: **Wichtig** (a bug from the list above or a
+  finding `RULES.md` names as Wichtig; must be fixed or answered before the
+  merge), **Kleinigkeit** (optional, at most five) or **Bestand** (the bug
+  was there before this PR; not blocking).
 - The report starts with the count, e.g. "2 Wichtig, 1 Kleinigkeit" (the
   session puts the heading above it). The count of **Wichtig** holds every
   one still open, also from an earlier round, e.g. "1 Wichtig (offen aus
