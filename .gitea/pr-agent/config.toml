@@ -11,7 +11,7 @@ publish_output_progress = false
 enable_claude_adaptive_thinking = true
 reasoning_effort = "high"
 # The repository rules go along as context.
-repo_context_files = ["agent.md", "RULES.md"]
+repo_context_files = ["agent.md", "ARCHITECTURE.md", "RULES.md", "REVIEW.md"]
 
 [pr_reviewer]
 num_max_findings = 5
