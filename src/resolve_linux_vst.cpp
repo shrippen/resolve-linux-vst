@@ -213,16 +213,6 @@ namespace {
 // mit dem Skalierungsfaktor. Darum werden die Größen auf dem Weg durch diesen Faktor geteilt.
 // Dazu hängt sich der Lader zwischen Resolve und Plugin: eigener Dispatcher, eigener Callback.
 
-constexpr int effClose = 1;
-constexpr int effEditGetRect = 13;
-constexpr int effEditOpen = 14;
-constexpr int effEditClose = 15;
-constexpr int effEditIdle = 19;
-constexpr int effVendorSpecific = 50;
-constexpr int audioMasterSizeWindow = 15;
-constexpr int kPreS = 0x50726553; // 'PreS'
-constexpr long kAeCs = 0x41654373; // 'AeCs'
-
 struct Instance {
     std::atomic<AEffect *> effect{nullptr};
     Dispatcher dispatcher = nullptr;
