@@ -9,7 +9,7 @@
 // Inhaltsskalierung und Rahmen wie in Resolve). Größen sind wie bei Resolves Qt logische
 // Pixel und werden mit RESOLVE_LINUX_VST_EDITOR_SCALE multipliziert (ohne Qt gibt es sonst keinen
 // Faktor). Am Ende: Fensterbaum auf stdout, Aufnahme des Editorfensters per ffmpeg.
-// Die Wine-DPI stellt das Programm nicht ein (es heißt nicht resolve). EDITOR_TEST_OFFSCREEN=1 öffnet
+// Die Wine-DPI stellt die Bibliothek wie in Resolve ein. EDITOR_TEST_OFFSCREEN=1 öffnet
 // das Fenster außerhalb der Bildschirme. Wie in Resolve mit LD_PRELOAD=build/libresolve-linux-vst.so
 // starten, sonst gehen Aufrufe des Plugins an libX11 an der Bibliothek vorbei (x11.cpp).
 #include <X11/Xlib.h>

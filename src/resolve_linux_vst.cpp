@@ -168,9 +168,9 @@ struct Default {
     const char *pattern, *key, *value;
 };
 constexpr Default kDefaults[] = {
-    // Waves unter Wine zeichnet mit dem Faktor 240/DPI des Prefix, meldet aber die Größe ohne
-    // ihn; bei 240 stimmen beide, die Skalierung kommt dann vom Host (Inhaltsskalierung).
-    {"WaveShell*", "wine-dpi", "240"},
+    // Waves unter Wine 9.21 zeichnet mit dem Faktor 180/DPI, meldet die Größe aber ohne ihn;
+    // bei 180 stimmen beide (bei 240: 75 %, Klicks daneben). Unter Wine 11 egal.
+    {"WaveShell*", "wine-dpi", "180"},
     // iZotope unter Wine kennt keine Inhaltsskalierung und zeichnet in 1/2,5 der Größe; nur
     // Wine selbst kann es vergrößern (wine-zoom).
     {"iZotope/*", "wine-zoom", "auto"},
@@ -603,7 +603,7 @@ void wrap(AEffect *effect, const Names &names, double zoom)
 // resolve und im VstScanner: Plugin-Prozesse können ihn überleben (eine yabridge-Plugingruppe
 // wie die von Waves läuft weiter und wird später von Resolve benutzt). Den Vorwert merkt sich
 // stateDir()/wine-dpi-restore; resolve-linux-vst setzt ihn zurück, sobald Resolve beendet ist.
-
+// editor-test zählt mit: Es lädt wie Resolve, auch mit Wine-DPI (tests/waves-dpi.sh).
 bool isResolveProcess()
 {
     char exe[4096];
@@ -613,7 +613,7 @@ bool isResolveProcess()
     exe[n] = 0;
     const char *base = strrchr(exe, '/');
     base = base ? base + 1 : exe;
-    return strcmp(base, "resolve") == 0 || strcmp(base, "VstScanner") == 0;
+    return strcmp(base, "resolve") == 0 || strcmp(base, "VstScanner") == 0 || strcmp(base, "editor-test") == 0;
 }
 
 // Prefix, in dem eine Windows-Datei (meist ein Symlink von yabridge) liegt.
@@ -734,8 +734,8 @@ int parseWineDpi(const char *v)
 }
 
 // Wine-Vergrößerung: Plugins, die weder DPI noch Inhaltsskalierung kennen (iZotope), zeichnet
-// Wine mit dem Faktor kWineBaseDpi/DPI des Prefix (gemessen mit Wine 11; Waves verhält sich
-// genauso, siehe kDefaults). Das Plugin meldet seine Größe aber ohne diesen Faktor; den rechnet
+// Wine mit dem Faktor kWineBaseDpi/DPI des Prefix (gemessen mit Wine 11; Waves anders, siehe
+// kDefaults). Das Plugin meldet seine Größe aber ohne diesen Faktor; den rechnet
 // der Lader dazu (Instance::zoom). Etwas weicher als echte Skalierung, Wine rechnet das Bild hoch.
 constexpr int kWineBaseDpi = 240;
 

@@ -4,7 +4,8 @@
 #   resolve-linux-vst [Resolve arguments]   refresh the plug-in links, start Resolve
 #   resolve-linux-vst link                  only refresh the links
 #   resolve-linux-vst list                  list the plug-ins found (VST3 with their classes)
-#   resolve-linux-vst restore               reset a changed Wine DPI (otherwise automatic when
+#   resolve-linux-vst restore               reset a changed Wine DPI, stop processes left on
+#                                           yabridge group sockets (otherwise automatic when
 #                                           Resolve exits)
 #   resolve-linux-vst categories            write categories of new plug-ins into Resolve's list
 #                                           (otherwise done on every start)
@@ -269,6 +270,35 @@ restore_wine_dpi() {
     if [[ -n $keep ]]; then printf '%s' "$keep" >"$restore"; else rm -f "$restore"; fi
 }
 
+# Windows-Prozesse, die eine yabridge-Plugingruppe startet (WavesLocalServer.exe von Waves),
+# erben deren Socket und hören nach dem Ende der Gruppe weiter darauf. Die nächste Gruppe
+# findet ihn belegt und startet nicht ("Another process is already listening on this group's
+# socket"). Beendet alles, was auf einem Gruppen-Socket hört, auf dem kein Gruppenprozess
+# mehr hört; Gruppen anderer Hosts (z. B. Bitwig) bleiben.
+group_host='yabridge-host\.exe\.so group '
+
+stop_stale_groups() {
+    local sock pid cmdline listeners stale=()
+    while read -r sock; do
+        listeners=$(ss -xlpH "src = $sock" 2>/dev/null | grep -o 'pid=[0-9]*' | cut -d= -f2 | sort -u)
+        [[ -n $listeners ]] || continue
+        local hosted=""
+        for pid in $listeners; do
+            cmdline=$(tr '\0' ' ' <"/proc/$pid/cmdline" 2>/dev/null || true)
+            if [[ $cmdline =~ $group_host ]]; then
+                hosted=1
+            fi
+        done
+        if [[ -z $hosted ]]; then
+            stale+=($listeners)
+        fi
+    done < <(ss -xlH 2>/dev/null | grep -o "${XDG_RUNTIME_DIR:-/tmp}/yabridge-group-[^ ]*\.sock" | sort -u)
+
+    ((${#stale[@]})) || return 0
+    kill "${stale[@]}" 2>/dev/null || true
+    echo "resolve-linux-vst: stopped processes left on yabridge group sockets: ${stale[*]}" >&2
+}
+
 case ${1:-} in
 help | -h | --help)
     sed -n '2,/^$/p' "$0" | sed 's/^# \{0,1\}//'
@@ -287,6 +317,7 @@ list)
     fi
     ;;
 restore)
+    stop_stale_groups
     restore_wine_dpi
     ;;
 categories)
@@ -329,9 +360,10 @@ rescan)
     LD_PRELOAD="$lib${LD_PRELOAD:+:$LD_PRELOAD}" "$resolve" "$@" || status=$?
     # Nach einem Absturz hängen yabridge-Plugingruppen (z. B. Waves) beim nächsten Editor bis
     # zu zwei Minuten, weil sie den verschwundenen Host noch bedienen: beenden.
-    if ((status >= 128)) && pkill -f 'yabridge-host\.exe\.so group '; then
+    if ((status >= 128)) && pkill -f "$group_host"; then
         echo "resolve-linux-vst: Resolve crashed, yabridge plug-in groups stopped" >&2
     fi
+    stop_stale_groups
     restore_wine_dpi
     exit "$status"
     ;;
