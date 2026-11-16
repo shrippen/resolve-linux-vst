@@ -153,6 +153,7 @@ public:
     bool onMainThread() const { return pthread_equal(pthread_self(), mainThread); }
 
     bool init(IPluginFactory *factory, const TUID cid);
+    void findController(IPluginFactory *factory);
     void fillEffect(const TUID cid);
     void setupBuses();
     void setupBuffers();
