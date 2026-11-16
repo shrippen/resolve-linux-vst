@@ -42,6 +42,7 @@ $(BUILD)/wine-base-test: tests/wine-base-test.cpp src/wine_base.h
 
 # Ohne weggelassene Kopien, damit ein Zeiger in eine Kopie auffällt.
 $(BUILD)/process-test: tests/process-test.cpp src/process.cpp src/process.h
+	@mkdir -p $(BUILD)
 	$(CXX) $(filter-out -fPIC,$(CXXFLAGS)) -fno-elide-constructors -o $@ tests/process-test.cpp src/process.cpp
 
 test: $(BUILD)/process-test $(BUILD)/sites-test $(BUILD)/wine-base-test
