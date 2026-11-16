@@ -45,36 +45,7 @@
 
 #define EXPORT __attribute__((visibility("default"), used, noinline))
 
-// $XDG_STATE_HOME/resolve-linux-vst (Standard ~/.local/state/resolve-linux-vst), wird angelegt.
-// Dieselbe Regel steht in resolve-linux-vst.
-static std::string stateDir()
-{
-    std::string base;
-    if (const char *xdg = getenv("XDG_STATE_HOME"); xdg && *xdg)
-        base = xdg;
-    else if (const char *home = getenv("HOME"))
-        base = std::string(home) + "/.local/state";
-    else
-        return {};
-    mkdir(base.c_str(), 0755);
-    mkdir((base + "/resolve-linux-vst").c_str(), 0755);
-    return base + "/resolve-linux-vst";
-}
-
 namespace {
-
-void openLog()
-{
-    std::string path;
-    if (const char *env = getenv("RESOLVE_LINUX_VST_LOG"))
-        path = env;
-    else if (const std::string dir = stateDir(); !dir.empty())
-        path = dir + "/resolve-linux-vst.log";
-    if (!path.empty() && path != "-")
-        setLogFile(fopen(path.c_str(), "a"));
-    else if (path == "-")
-        setLogFile(stderr);
-}
 
 // Resolve übergibt Pfade als wchar_t (UTF-32). Nicht über wcstombs, das hängt am Locale.
 std::string toUtf8(const wchar_t *w)
