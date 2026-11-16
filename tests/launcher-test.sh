@@ -42,9 +42,23 @@ sleep 1
 shared=$(pgrep -P "${pids[-1]}" || true)
 pids+=($shared)
 
-HOME=$work/home XDG_RUNTIME_DIR=$run VST_PATH=$work/none VST3_PATH=$work/none RESOLVE_BIN=true \
-    "$root/resolve-linux-vst" >"$work/log" 2>&1 \
-    || { cat "$work/log" >&2; echo "launcher-test: Launcher fehlgeschlagen" >&2; exit 1; }
+launcher() {
+    HOME=$work/home XDG_RUNTIME_DIR=$run VST_PATH=$work/none VST3_PATH=$work/none \
+        "$root/resolve-linux-vst" >"$work/log" 2>&1
+}
+
+# Statt Resolve: scheitert, wenn der verwaiste Prozess noch lebt. Reste eines früheren Laufs
+# müssen schon vor dem Start weg sein (eine Gruppe kann Resolve kurz überleben).
+cat >"$work/resolve" <<EOF
+#!/bin/sh
+! kill -0 $stale 2>/dev/null
+EOF
+chmod +x "$work/resolve"
+if ! RESOLVE_BIN=$work/resolve launcher; then
+    cat "$work/log" >&2
+    echo "launcher-test: Launcher fehlgeschlagen (verwaister Prozess beim Start noch da?): FEHLER" >&2
+    exit 1
+fi
 sleep 1
 
 fail=0
@@ -67,4 +81,22 @@ fi
 expect "Prozess auf verwaistem Gruppen-Socket" "$stale" weg
 expect "Gruppenprozess" "$alive" lebt
 expect "Prozess, der den Socket mit einer laufenden Gruppe teilt" "$shared" lebt
+
+# Ein Socket in der Liste, zu dem ss keine PID (mehr) zeigt: Gruppe gerade beendet oder
+# Socket eines anderen Benutzers. Der Launcher läuft weiter (set -e).
+mkdir -p "$work/bin"
+cat >"$work/bin/ss" <<EOF
+#!/bin/sh
+case "\$*" in
+*-xlH*) echo "u_str LISTEN 0 1 $run/yabridge-group-gone-x64.sock 1 * 0" ;;
+esac
+EOF
+chmod +x "$work/bin/ss"
+if PATH=$work/bin:$PATH RESOLVE_BIN=true launcher; then
+    echo "launcher-test: Socket ohne PID: ok"
+else
+    cat "$work/log" >&2
+    echo "launcher-test: Socket ohne PID bricht den Launcher ab: FEHLER" >&2
+    fail=1
+fi
 exit "$fail"

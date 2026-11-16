@@ -280,7 +280,8 @@ group_host='yabridge-host\.exe\.so group '
 stop_stale_groups() {
     local sock pid cmdline listeners stale=()
     while read -r sock; do
-        listeners=$(ss -xlpH "src = $sock" 2>/dev/null | grep -o 'pid=[0-9]*' | cut -d= -f2 | sort -u)
+        # Ohne PID (Gruppe gerade beendet, Socket eines anderen Benutzers): nichts zu tun.
+        listeners=$(ss -xlpH "src = $sock" 2>/dev/null | grep -o 'pid=[0-9]*' | cut -d= -f2 | sort -u || true)
         [[ -n $listeners ]] || continue
         local hosted=""
         for pid in $listeners; do
@@ -352,7 +353,9 @@ rescan)
     export QT_AUTO_SCREEN_SCALE_FACTOR=${QT_AUTO_SCREEN_SCALE_FACTOR:-1}
     export QT_SCALE_FACTOR=${QT_SCALE_FACTOR:-1.0}
     # Reste eines abgebrochenen Laufs zuerst, sonst merkt sich der Lader den geänderten
-    # Wert als Vorwert.
+    # Wert als Vorwert. Gruppenreste ebenso: Eine Gruppe kann Resolve überleben, ihr Rest
+    # wird erst nach ihrem Ende verwaist.
+    stop_stale_groups
     restore_wine_dpi
     # Kein exec: Nach dem Ende von Resolve (auch nach einem Absturz) die Wine-DPI
     # zurücksetzen. LD_PRELOAD nur für Resolve, nicht für die Wine-Aufrufe hier.

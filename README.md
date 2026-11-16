@@ -72,7 +72,8 @@ cd resolve-linux-vst
 
 Or run it straight from the checkout without installing: `./start.sh` builds what is missing and
 starts Resolve. Make targets: `all`, `aac` (downloads FFmpeg 6.0 and builds the AAC decoder),
-`test`, `install`/`uninstall` (`PREFIX=…`), `dist`, `editor-test`.
+`test`, `install`/`uninstall` (`PREFIX=…`), `dist`, `editor-test`, `plugin-test` (Waves through
+yabridge, local only).
 
 </details>
 
@@ -242,7 +243,8 @@ are; [How it works](docs/HOW-IT-WORKS.md#finding-the-hooks-again) explains how t
   processes when Resolve exits; by hand: `resolve-linux-vst restore`.
 - **Test a plug-in without Resolve:** `make editor-test`, then
   `build/editor-test <plugin.so | link-folder entry> out.png` loads it like Resolve, runs audio,
-  parameters and state through it and screenshots the editor.
+  parameters and state through it and screenshots the editor. It sets the Wine DPI of yabridge
+  plug-ins like Resolve; `resolve-linux-vst restore` sets it back.
 
 ## Uninstall
 
