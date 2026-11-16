@@ -18,19 +18,39 @@ __attribute__((noinline)) void scribble()
 
 } // namespace
 
+// Erwartete Antworten je Programmname; make test startet dieselbe Datei unter jedem Namen.
+struct Expect {
+    const char *name;
+    bool resolveMain;
+    bool likeResolve;
+};
+constexpr Expect kExpect[] = {
+    {"process-test", false, false},
+    {kProgResolve, true, true},
+    {kProgScanner, false, true},
+    {kProgEditorTest, false, true},
+};
+
 int main()
 {
     exePath();
     scribble();
-    const bool ok = strcmp(programName(), "process-test") == 0 && strstr(exePath(), "/process-test") != nullptr;
-    printf("%s  Programmname: \"%s\"\n", ok ? "ok   " : "FEHLER", programName());
+    const char *name = programName();
+    const char *slash = strrchr(exePath(), '/');
+    const Expect *want = nullptr;
+    for (const Expect &e : kExpect) {
+        if (strcmp(name, e.name) == 0) {
+            want = &e;
+        }
+    }
+    const bool ok = want && slash && strcmp(slash + 1, name) == 0;
+    printf("%s  Programmname: \"%s\"\n", ok ? "ok   " : "FEHLER", name);
+    if (!ok) {
+        return 1;
+    }
 
-    // Programmname ist „process-test“: weder Resolve noch ein Programm, das wie Resolve lädt.
-    const bool askOk = !isResolveMain() && !loadsLikeResolve();
-    printf("%s  isResolveMain, loadsLikeResolve: beide falsch\n", askOk ? "ok   " : "FEHLER");
-
-    const bool namesOk = strcmp(kProgResolve, "resolve") == 0 && strcmp(kProgScanner, "VstScanner") == 0 &&
-                         strcmp(kProgEditorTest, "editor-test") == 0;
-    printf("%s  Programmnamen-Konstanten\n", namesOk ? "ok   " : "FEHLER");
-    return ok && askOk && namesOk ? 0 : 1;
+    const bool askOk = isResolveMain() == want->resolveMain && loadsLikeResolve() == want->likeResolve;
+    printf("%s  %s: isResolveMain %d, loadsLikeResolve %d\n", askOk ? "ok   " : "FEHLER", name, isResolveMain(),
+           loadsLikeResolve());
+    return askOk ? 0 : 1;
 }
