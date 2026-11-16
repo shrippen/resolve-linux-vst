@@ -9,7 +9,7 @@ LDLIBS   += -ldl
 
 BUILD ?= build
 
-SOURCES := src/resolve_linux_vst.cpp src/log.cpp src/wine_dpi.cpp src/process.cpp src/vst3.cpp src/aac.cpp src/nev.cpp src/x11.cpp src/sites.cpp $(VST3)/base/funknown.cpp
+SOURCES := src/resolve_linux_vst.cpp src/log.cpp src/wine_dpi.cpp src/process.cpp src/vst3.cpp src/aac.cpp src/nev.cpp src/x11.cpp src/sites.cpp src/patch.cpp $(VST3)/base/funknown.cpp
 
 all: $(BUILD)/libresolve-linux-vst.so $(BUILD)/vst3-classes $(BUILD)/resolve-check
 
@@ -19,7 +19,7 @@ $(BUILD)/include/pluginterfaces:
 	@mkdir -p $(BUILD)/include
 	ln -sfn $(abspath $(VST3)) $@
 
-$(BUILD)/libresolve-linux-vst.so: $(SOURCES) src/vst2.h src/log.h src/sites.h src/loader.h src/process.h src/wine_dpi.h src/wine_base.h src/exports.map | $(BUILD)/include/pluginterfaces
+$(BUILD)/libresolve-linux-vst.so: $(SOURCES) src/vst2.h src/log.h src/sites.h src/patch.h src/loader.h src/process.h src/wine_dpi.h src/wine_base.h src/exports.map | $(BUILD)/include/pluginterfaces
 	$(CXX) $(CXXFLAGS) $(VST3INC) $(LDFLAGS) -o $@ $(SOURCES) $(LDLIBS)
 
 $(BUILD)/vst3-classes: tools/vst3-classes.cpp src/vst3.cpp src/log.cpp src/vst2.h src/log.h | $(BUILD)/include/pluginterfaces
@@ -35,6 +35,11 @@ $(BUILD)/sites-test: tests/sites-test.cpp src/sites.cpp src/sites.h
 	@mkdir -p $(BUILD)
 	$(CXX) $(filter-out -fPIC,$(CXXFLAGS)) -o $@ tests/sites-test.cpp src/sites.cpp
 
+# Test des Sprungs in Resolves Code (src/patch.cpp), an eigenem Speicher.
+$(BUILD)/patch-test: tests/patch-test.cpp src/patch.cpp src/patch.h
+	@mkdir -p $(BUILD)
+	$(CXX) $(filter-out -fPIC,$(CXXFLAGS)) -o $@ tests/patch-test.cpp src/patch.cpp
+
 # Test der Basis-DPI-Entscheidung (rein gerechnet, ohne Wine).
 $(BUILD)/wine-base-test: tests/wine-base-test.cpp src/wine_base.h
 	@mkdir -p $(BUILD)
@@ -45,9 +50,10 @@ $(BUILD)/process-test: tests/process-test.cpp src/process.cpp src/process.h
 	@mkdir -p $(BUILD)
 	$(CXX) $(filter-out -fPIC,$(CXXFLAGS)) -fno-elide-constructors -o $@ tests/process-test.cpp src/process.cpp
 
-test: $(BUILD)/process-test $(BUILD)/sites-test $(BUILD)/wine-base-test
+test: $(BUILD)/process-test $(BUILD)/sites-test $(BUILD)/patch-test $(BUILD)/wine-base-test
 	$(BUILD)/process-test
 	$(BUILD)/sites-test
+	$(BUILD)/patch-test
 	$(BUILD)/wine-base-test
 	tests/launcher-test.sh
 
@@ -57,7 +63,7 @@ plugin-test: all editor-test
 
 # clean lässt den AAC-Decoder (FFmpeg-Build dauert) stehen, distclean nimmt alles.
 clean:
-	rm -f $(BUILD)/process-test $(BUILD)/libresolve-linux-vst.so $(BUILD)/vst3-classes $(BUILD)/resolve-check $(BUILD)/sites-test $(BUILD)/wine-base-test $(BUILD)/editor-test
+	rm -f $(BUILD)/process-test $(BUILD)/libresolve-linux-vst.so $(BUILD)/vst3-classes $(BUILD)/resolve-check $(BUILD)/sites-test $(BUILD)/patch-test $(BUILD)/wine-base-test $(BUILD)/editor-test
 	rm -rf $(BUILD)/dist
 
 distclean:

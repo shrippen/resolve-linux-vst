@@ -24,6 +24,7 @@ Nikon N-RAW clips. A launcher script starts Resolve with a library loaded into i
 | `src/nev.cpp` | N-RAW: shows Resolve every `.NEV` file as `.R3D`. |
 | `src/x11.cpp` | Drops window sizes of 0 that would make a plug-in abort Resolve. |
 | `src/log.cpp`, `src/log.h` | The log: one function that writes a line with time and process; the caller sets the file. |
+| `src/patch.cpp`, `src/patch.h` | Writes a jump into Resolve's code and knows the layout of the C++ tables loader and AAC read; no feature. |
 | `src/sites.cpp`, `src/sites.h` | Finds the places in Resolve's code by byte patterns. Knows Resolve's binary, no feature. |
 | `src/exports.map` | The list of functions the library replaces in Resolve. What is not listed here has no effect. |
 | `src/vst2.h` | The VST2 interface, shared by loader and adapter: structures, command numbers, the adapter's entry points. |
@@ -96,13 +97,11 @@ Nikon N-RAW clips. A launcher script starts Resolve with a library loaded into i
 
 ## Known deviations
 
-- Writing a jump into Resolve's code is built twice, in loader and AAC
-  (`AUDIT.md`, finding 7).
 - The loader file has five tasks: besides loading also opening the log file, `plugins.conf`,
   the editor size and the changes to the scanner (`AUDIT.md`, finding 9). The Wine DPI has its own file
   but reaches back into the loader file for `plugins.conf` and scale factor
   (`src/loader.h`).
 - `src/vst3.cpp` holds host objects, event loop, module loading and adapter in one file of
   1750 lines (`AUDIT.md`, finding 10).
-- Only the pattern search, the launcher's cleanup, the Wine DPI base decision and the program
-  name have tests (`AUDIT.md`, finding 8).
+- Only the pattern search, the launcher's cleanup, the Wine DPI base decision, the program
+  name and writing a jump have tests (`AUDIT.md`, finding 8).
