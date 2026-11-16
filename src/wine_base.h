@@ -22,16 +22,6 @@ struct WineBase {
     WineReset reset; // DPI vor der nächsten Sitzung auf die Basis zurücksetzen
 };
 
-// Basis einer Sitzung, die dieser Prozess kennt und die noch läuft: bleibt. Sonst nullopt, die
-// Basis ist neu zu bestimmen (wineBaseFor), dafür braucht es die Registry.
-inline std::optional<int> keptWineBase(WineSession session, std::optional<int> knownBase)
-{
-    if (session == WineSession::Running) {
-        return knownBase;
-    }
-    return std::nullopt;
-}
-
 // Basis ist der Wert vor Resolve (gemerkter Vorwert, sonst der aktuelle Registry-Wert).
 // Zurückgesetzt wird nur ohne laufende Sitzung und wenn der aktuelle Wert von der Basis
 // abweicht, sonst startete die nächste Sitzung mit dem zuletzt gesetzten Wert.

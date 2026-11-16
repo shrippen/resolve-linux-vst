@@ -290,7 +290,7 @@ WinePrefixState *prefixState(std::vector<WinePrefixState> &known, const std::str
             k = &entry;
         }
     }
-    if (k && keptWineBase(session, k->base)) {
+    if (k && session == WineSession::Running) {
         return k;
     }
 
