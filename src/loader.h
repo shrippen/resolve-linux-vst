@@ -1,4 +1,4 @@
-// Was der Lader (resolve_linux_vst.cpp) seinen Teilen bietet: Einstellungen je Plugin, Zustandsordner,
+// Was der Lader (resolve_linux_vst.cpp) seinen Teilen bietet: Einstellungen je Plugin,
 // Skalierungsfaktor. Der Log steht in log.h, das laufende Programm in process.h.
 #pragma once
 
@@ -12,9 +12,6 @@ using Names = std::vector<std::string>;
 
 // Einstellung des Plugins aus plugins.conf, leer wenn nicht gesetzt.
 std::string pluginSetting(const Names &plugin, const char *key);
-
-// $XDG_STATE_HOME/resolve-linux-vst, wird angelegt.
-std::string stateDir();
 
 // Skalierungsfaktor des Fensters, in das das Plugin zeichnet; ohne Fenster der des Hauptbildschirms.
 double editorScale(unsigned long long windowId = 0);

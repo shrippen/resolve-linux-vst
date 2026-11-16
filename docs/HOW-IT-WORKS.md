@@ -40,7 +40,7 @@ and `dlopen` counts references anyway).
 
 ## VST3 adapter
 
-Resolve has no VST3 support on Linux at all (`VST3Host` consists of empty bodies). `src/vst3.cpp`
+Resolve has no VST3 support on Linux at all (`VST3Host` consists of empty bodies). `src/vst3*.cpp`
 loads a VST3 plug-in and presents it as a VST2 plug-in to Resolve's host:
 
 - **Entries:** a bundle can contain several plug-ins (classes). The launcher lists them with
@@ -116,7 +116,8 @@ How large the plug-in draws is up to the plug-in:
 **Wine DPI.** Before loading a yabridge plug-in the library sets the prefix's DPI (through
 `$WINELOADER` like yabridge, only if it differs). Wine has no per-process DPI, so the previous
 value is remembered in `~/.local/state/resolve-linux-vst/wine-dpi-restore` and the launcher restores it
-when Resolve exits, also after a crash.
+when Resolve exits, also after a crash. The launcher hands that path to the library in
+`RESOLVE_LINUX_VST_WINE_RESTORE`; without it (Resolve started without the launcher) the DPI stays.
 
 **Base DPI.** Wine scales every window by base DPI / the DPI the plug-in process started with.
 The base is the DPI when the prefix's Wine session started (wineserver, `explorer.exe`); later
@@ -258,7 +259,8 @@ build/editor-test ~/.local/share/resolve-linux-vst/vst/VST3/TB/TB_Compressor_v4.
 
 Start it with `LD_PRELOAD=build/libresolve-linux-vst.so` to get the library first in the symbol
 order as in Resolve; otherwise the plug-in's calls into libX11 bypass it (size 0, above). The
-library sets the Wine DPI as in Resolve; `resolve-linux-vst restore` sets it back.
+library sets the Wine DPI as in Resolve only with `RESOLVE_LINUX_VST_WINE_RESTORE` set (the launcher's
+default is `~/.local/state/resolve-linux-vst/wine-dpi-restore`); `resolve-linux-vst restore` sets it back.
 
 `make plugin-test` runs `tests/wine-dpi.sh`: it opens iZotope Neoverb, then Waves Butch Vig, in its
 own X server with the built-in settings and checks that each fills its editor window (local

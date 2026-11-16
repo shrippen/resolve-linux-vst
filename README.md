@@ -203,6 +203,7 @@ resolve-linux-vst, they are offline.
 | `RESOLVE_LINUX_VST_LOG` | Log file (default `~/.local/state/resolve-linux-vst/resolve-linux-vst.log`, `-` = stderr) |
 | `RESOLVE_LINUX_VST_EDITOR_SCALE` | Fixed editor scale (default: Resolve's window factor, `1` = off) |
 | `RESOLVE_LINUX_VST_CONTENT_SCALE` | Scale sent to plug-ins: `auto`, a number, `0` = do not send |
+| `RESOLVE_LINUX_VST_WINE_RESTORE` | File with the Wine DPI to restore (default `~/.local/state/resolve-linux-vst/wine-dpi-restore`); the launcher passes it to Resolve, without it the library leaves the Wine DPI alone |
 | `RESOLVE_LINUX_VST_WINE_DPI` | Wine DPI for yabridge prefixes: `auto` (96 × factor), a number, `prefix` (its own DPI), `0` = leave alone |
 | `RESOLVE_LINUX_VST_FIX_FRAME=0` | Do not resize yabridge's embedding window |
 | `RESOLVE_LINUX_VST_AAC` | `0` = no AAC decoder, or the path of another `libavcodec.so.60` (FFmpeg 6.x) |
@@ -243,8 +244,9 @@ are; [How it works](docs/HOW-IT-WORKS.md#finding-the-hooks-again) explains how t
   processes before Resolve starts and when it exits; by hand: `resolve-linux-vst restore`.
 - **Test a plug-in without Resolve:** `make editor-test`, then
   `build/editor-test <plugin.so | link-folder entry> out.png` loads it like Resolve, runs audio,
-  parameters and state through it and screenshots the editor. It sets the Wine DPI of yabridge
-  plug-ins like Resolve; `resolve-linux-vst restore` sets it back.
+  parameters and state through it and screenshots the editor. With
+  `RESOLVE_LINUX_VST_WINE_RESTORE=~/.local/state/resolve-linux-vst/wine-dpi-restore` it sets the Wine
+  DPI of yabridge plug-ins like Resolve, and `resolve-linux-vst restore` sets it back.
 
 ## Uninstall
 

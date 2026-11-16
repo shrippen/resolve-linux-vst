@@ -38,6 +38,7 @@
 #include "loader.h"
 #include "process.h"
 #include "log.h"
+#include "patch.h"
 #include "sites.h"
 #include "vst2.h"
 #include "wine_dpi.h"
@@ -46,7 +47,7 @@
 
 // $XDG_STATE_HOME/resolve-linux-vst (Standard ~/.local/state/resolve-linux-vst), wird angelegt.
 // Dieselbe Regel steht in resolve-linux-vst.
-std::string stateDir()
+static std::string stateDir()
 {
     std::string base;
     if (const char *xdg = getenv("XDG_STATE_HOME"); xdg && *xdg)
@@ -662,24 +663,14 @@ void VSTPluginLoader::Close()
 
 namespace {
 
-// Überschreibt den Anfang von `target` mit `movabs rax, dest; jmp rax` (12 Byte).
+// Sprung nach `dest` (patch.cpp); der Grund eines Fehlschlags kommt ins Protokoll.
 bool patchJump(uintptr_t target, void *dest)
 {
-    unsigned char code[12] = {0x48, 0xB8, 0, 0, 0, 0, 0, 0, 0, 0, 0xFF, 0xE0};
-    uintptr_t d = reinterpret_cast<uintptr_t>(dest);
-    memcpy(code + 2, &d, sizeof d);
-
-    long pageSize = sysconf(_SC_PAGESIZE);
-    uintptr_t page = target & ~uintptr_t(pageSize - 1);
-    size_t len = (target + sizeof code) - page;
-    if (mprotect(reinterpret_cast<void *>(page), len, PROT_READ | PROT_WRITE | PROT_EXEC) != 0) {
-        logMessage("mprotect: %s", strerror(errno));
-        return false;
+    if (patchJumpRax(target, dest)) {
+        return true;
     }
-    memcpy(reinterpret_cast<void *>(target), code, sizeof code);
-    mprotect(reinterpret_cast<void *>(page), len, PROT_READ | PROT_EXEC);
-    __builtin___clear_cache(reinterpret_cast<char *>(target), reinterpret_cast<char *>(target + sizeof code));
-    return true;
+    logMessage("mprotect: %s", strerror(errno));
+    return false;
 }
 
 template<typename F>
@@ -698,29 +689,18 @@ void *memberAddress(F f)
 // bleiben leer, und bei jedem Start von Resolve schreibt der Scanner alle Masken als 0 zurück
 // (auch die von resolve-linux-vst categories). Ersatz: wie das Original, bei leerer Tabelle aber
 // die Maske unverändert.
-struct MaskNode {
-    MaskNode *left, *right, *parent;
-    bool black;
-    int key, value; // libc++ __tree_node<pair<const int, int>>: ab 0x1c
-};
-struct MaskMap {
-    MaskNode *begin;
-    MaskNode endNode; // nur left (Wurzel) gültig
-};
-static_assert(offsetof(MaskNode, key) == 0x1c && offsetof(MaskNode, value) == 0x20);
+const MapHeader *gMaskIn = nullptr, *gMaskOut = nullptr;
 
-const MaskMap *gMaskIn = nullptr, *gMaskOut = nullptr;
-
-int translateMask(const MaskNode *node, int mask)
+int translateMask(const MapNode *node, int mask)
 {
     if (!node)
         return 0;
     return ((node->key & mask) ? node->value : 0) | translateMask(node->left, mask) | translateMask(node->right, mask);
 }
 
-int translateMask(const MaskMap *map, int mask)
+int translateMask(const MapHeader *map, int mask)
 {
-    const MaskNode *root = map ? map->endNode.left : nullptr;
+    const MapNode *root = map ? map->root : nullptr;
     return root ? translateMask(root, mask) : mask;
 }
 
@@ -755,8 +735,8 @@ void patchExecutable()
     if (!elf.isExecutable())
         return;
     // Vor dem Umleiten: Tabellen der Kategorie-Masken (nur im VstScanner im Executable).
-    gMaskIn = reinterpret_cast<const MaskMap *>(elf.symbol("_ZN15AudioPluginHost19_pluginCategoryMaskE"));
-    gMaskOut = reinterpret_cast<const MaskMap *>(elf.symbol("_ZN15AudioPluginHost18_pluginCategoryMapE"));
+    gMaskIn = reinterpret_cast<const MapHeader *>(elf.symbol("_ZN15AudioPluginHost19_pluginCategoryMaskE"));
+    gMaskOut = reinterpret_cast<const MapHeader *>(elf.symbol("_ZN15AudioPluginHost18_pluginCategoryMapE"));
     for (const auto &p : patches) {
         uintptr_t addr = elf.symbol(p.name);
         if (!addr)

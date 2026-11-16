@@ -34,6 +34,8 @@ python3 -I -c 'import PIL' 2>/dev/null || skip "kein python3-PIL"
 pgrep -f 'yabridge-host\.exe\.so group ' >/dev/null && skip "eine yabridge-Plugingruppe läuft"
 
 work=$(mktemp -d -p "${TMPDIR:-$HOME/.cache}")
+# Vorwerte wie beim Starter, aber im eigenen Ordner (für editor-test und restore).
+export RESOLVE_LINUX_VST_WINE_RESTORE=$work/wine-dpi-restore
 # Aufräumen wie nach Resolve: Gruppe auslaufen lassen, dann Wine-DPI und Gruppenreste
 # (WavesLocalServer.exe) zurücksetzen.
 cleanup() {
