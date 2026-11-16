@@ -10,7 +10,7 @@ resolve-linux-vst (bash) ── links plug-ins, writes categories, sets Wine DPI
       ▼
 resolve / VstScanner ──► libresolve-linux-vst.so
                            ├─ VSTPluginLoader::Load/Close    VST2 loader (resolve_linux_vst.cpp)
-                           ├─ VST3 adapter                    VST3 as VST2 (vst3.cpp)
+                           ├─ VST3 adapter                    VST3 as VST2 (vst3*.cpp)
                            ├─ dispatcher / host callback      HiDPI, Wine DPI, frame fix
                            ├─ avcodec_find_decoder, …         AAC decoder (aac.cpp)
                            ├─ avformat_write_header           AAC render fix (aac.cpp)
