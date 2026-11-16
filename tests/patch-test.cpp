@@ -192,8 +192,6 @@ void collectVisit(uint32_t key, int value, void *ctx)
     v->values.push_back(value);
 }
 
-// Fügt `keys` in dieser Reihenfolge ein und prüft danach alles, was libc++ von der Tabelle
-// erwartet; `what` nennt die Reihenfolge.
 // Sucht einen Schlüssel im Baum (nur der Test braucht das).
 const MapNode *findNode(const MapHeader *map, uint32_t key)
 {
@@ -204,6 +202,8 @@ const MapNode *findNode(const MapHeader *map, uint32_t key)
     return node;
 }
 
+// Fügt `keys` in dieser Reihenfolge ein und prüft danach alles, was libc++ von der Tabelle
+// erwartet; `what` nennt die Reihenfolge.
 void checkInsert(const std::vector<uint32_t> &keys, const char *what)
 {
     Table t;
