@@ -168,9 +168,9 @@ struct Default {
     const char *pattern, *key, *value;
 };
 constexpr Default kDefaults[] = {
-    // Waves unter Wine 9.21 zeichnet mit dem Faktor 180/DPI, meldet die Größe aber ohne ihn;
-    // bei 180 stimmen beide (bei 240: 75 %, Klicks daneben). Unter Wine 11 egal.
-    {"WaveShell*", "wine-dpi", "180"},
+    // Waves zeichnet mit dem Faktor des Hosts (Inhaltsskalierung); Wine darf nicht zusätzlich
+    // vergrößern, also DPI = Basis (siehe WinePrefixState). Mit fest 240 bei Ruhewert 180: 75 %.
+    {"WaveShell*", "wine-dpi", "prefix"},
     // iZotope unter Wine kennt keine Inhaltsskalierung und zeichnet in 1/2,5 der Größe; nur
     // Wine selbst kann es vergrößern (wine-zoom).
     {"iZotope/*", "wine-zoom", "auto"},
@@ -603,7 +603,7 @@ void wrap(AEffect *effect, const Names &names, double zoom)
 // resolve und im VstScanner: Plugin-Prozesse können ihn überleben (eine yabridge-Plugingruppe
 // wie die von Waves läuft weiter und wird später von Resolve benutzt). Den Vorwert merkt sich
 // stateDir()/wine-dpi-restore; resolve-linux-vst setzt ihn zurück, sobald Resolve beendet ist.
-// editor-test zählt mit: Es lädt wie Resolve, auch mit Wine-DPI (tests/waves-dpi.sh).
+// editor-test zählt mit: Es lädt wie Resolve, auch mit Wine-DPI (tests/wine-dpi.sh).
 bool isResolveProcess()
 {
     char exe[4096];
@@ -720,24 +720,21 @@ int queryWineDpi(const std::string &prefix)
     return -1;
 }
 
-// Wert aus der Konfiguration: "auto" = 96 × Resolves Faktor, "0" = nicht anfassen, sonst
-// die Zahl; leer oder unbekannt = -1.
-int parseWineDpi(const char *v)
+// Wert aus der Konfiguration: "auto" = 96 × Resolves Faktor, "prefix" = Basis-DPI des Prefix
+// (siehe WinePrefixState), "0" = nicht anfassen, sonst die Zahl; leer oder unbekannt = -1.
+int parseWineDpi(const char *v, int base)
 {
     while (*v == ' ' || *v == '\t')
         ++v;
     if (strncmp(v, "auto", 4) == 0)
         return int(lround(96 * editorScale()));
+    if (strncmp(v, "prefix", 6) == 0) {
+        return base;
+    }
     char *end;
     long n = strtol(v, &end, 10);
     return end != v && n >= 0 ? int(n) : -1;
 }
-
-// Wine-Vergrößerung: Plugins, die weder DPI noch Inhaltsskalierung kennen (iZotope), zeichnet
-// Wine mit dem Faktor kWineBaseDpi/DPI des Prefix (gemessen mit Wine 11; Waves anders, siehe
-// kDefaults). Das Plugin meldet seine Größe aber ohne diesen Faktor; den rechnet
-// der Lader dazu (Instance::zoom). Etwas weicher als echte Skalierung, Wine rechnet das Bild hoch.
-constexpr int kWineBaseDpi = 240;
 
 // wine-zoom in plugins.conf: auto = Resolves Faktor, Zahl = fest, 0 oder leer = aus.
 double wineZoomSetting(const Names &names)
@@ -749,102 +746,156 @@ double wineZoomSetting(const Names &names)
     return zoom > 0 ? zoom : 0;
 }
 
-// DPI für ein Plugin: aus wine-zoom, sonst wine-dpi in plugins.conf, sonst
+// DPI für ein Plugin: aus wine-zoom (Basis / Faktor), sonst wine-dpi in plugins.conf, sonst
 // RESOLVE_LINUX_VST_WINE_DPI, sonst auto. Jedes yabridge-Plugin läuft in einem eigenen
 // Wine-Prozess und liest die DPI bei dessen Start, darum kann sie je Plugin verschieden sein
 // (nicht bei yabridge-Plugingruppen).
-int wantedWineDpi(const Names &names)
+int wantedWineDpi(const Names &names, int base)
 {
     if (const double zoom = wineZoomSetting(names); zoom > 0)
-        return std::max(1, int(lround(kWineBaseDpi / zoom)));
+        return std::max(1, int(lround(base / zoom)));
     std::string setting = pluginSetting(names, "wine-dpi");
     if (setting.empty())
         if (const char *env = getenv("RESOLVE_LINUX_VST_WINE_DPI"))
             setting = env;
-    int dpi = setting.empty() ? -1 : parseWineDpi(setting.c_str());
-    return dpi >= 0 ? dpi : parseWineDpi("auto");
+    int dpi = setting.empty() ? -1 : parseWineDpi(setting.c_str(), base);
+    return dpi >= 0 ? dpi : parseWineDpi("auto", base);
+}
+
+constexpr int kNoRestoreEntry = -2;
+
+// Gemerkter Vorwert eines Prefix (Wert vor Resolve, -1 = war nicht gesetzt), sonst
+// kNoRestoreEntry.
+int rememberedWineDpi(const std::string &prefix)
+{
+    FILE *f = fopen((stateDir() + "/wine-dpi-restore").c_str(), "r");
+    if (!f) {
+        return kNoRestoreEntry;
+    }
+    int value = kNoRestoreEntry;
+    char line[4096];
+    while (value == kNoRestoreEntry && fgets(line, sizeof line, f)) {
+        if (strncmp(line, prefix.c_str(), prefix.size()) == 0 && line[prefix.size()] == '\t') {
+            value = atoi(line + prefix.size() + 1);
+        }
+    }
+    fclose(f);
+    return value;
 }
 
 // Merkt sich den Vorwert (Zeile "Prefix<Tab>DPI", -1 = war nicht gesetzt). Steht der Prefix
 // schon drin, bleibt der ältere Eintrag: Er ist der Wert vor Resolve.
 bool rememberWineDpi(const std::string &prefix, int previous)
 {
-    const std::string file = stateDir() + "/wine-dpi-restore";
-    if (FILE *f = fopen(file.c_str(), "r")) {
-        char line[4096];
-        bool known = false;
-        while (!known && fgets(line, sizeof line, f))
-            known = strncmp(line, prefix.c_str(), prefix.size()) == 0 && line[prefix.size()] == '\t';
-        fclose(f);
-        if (known)
-            return true;
+    if (rememberedWineDpi(prefix) != kNoRestoreEntry) {
+        return true;
     }
-    FILE *f = fopen(file.c_str(), "a");
+    FILE *f = fopen((stateDir() + "/wine-dpi-restore").c_str(), "a");
     if (!f)
         return false;
     bool ok = fprintf(f, "%s\t%d\n", prefix.c_str(), previous) > 0;
     return fclose(f) == 0 && ok;
 }
 
-// Faktor für Instance::zoom: kWineBaseDpi / tatsächlich gesetzte DPI (gerundet), 1 ohne
-// wine-zoom oder ohne Wine. `prefix` wie bei syncWineDpi.
-double wineZoom(const Names &names, const std::string &prefix)
+// Läuft eine Wine-Sitzung des Prefix? wineserver legt dann
+// /tmp/.wine-<uid>/server-<dev>-<inode des Prefix>/socket an (wie Wine, hexadezimal).
+bool wineSessionRunning(const std::string &prefix)
 {
-    if (prefix.empty() || wineZoomSetting(names) <= 0)
-        return 1.0;
-    return double(kWineBaseDpi) / wantedWineDpi(names);
+    struct stat st;
+    if (stat(prefix.c_str(), &st) != 0) {
+        return false;
+    }
+    char socket[256];
+    snprintf(socket, sizeof socket, "/tmp/.wine-%u/server-%llx-%llx/socket", unsigned(getuid()),
+             (unsigned long long)st.st_dev, (unsigned long long)st.st_ino);
+    return access(socket, F_OK) == 0;
 }
 
-// `prefix` aus winePrefixFor bzw. winePrefixForBundle.
-void syncWineDpi(const Names &names, const std::string &prefix)
+constexpr int kWineDefaultDpi = 96; // LogPixels nicht gesetzt
+
+// Wine-Vergrößerung: Wine vergrößert jedes Fenster mit Basis-DPI / DPI des Plugin-Prozesses.
+// Die Basis ist die DPI beim Start der Wine-Sitzung des Prefix (wineserver, explorer.exe);
+// spätere Änderungen sehen nur neue Prozesse. Gemessen mit Wine 9.21 an Neoverb (Faktor 3.75,
+// DPI 64): Ruhewert 180 → 180/64 (75 % des Fensters), Ruhewert 240 → 240/64 (voll).
+// Plugins ohne DPI und Inhaltsskalierung (iZotope) bekommen DPI = Basis / Faktor (wine-zoom),
+// ihre gemeldete Größe rechnet der Lader hoch (Instance::zoom); etwas weicher als echte
+// Skalierung. Waves zeichnet selbst mit dem Faktor des Hosts und braucht DPI = Basis.
+struct WinePrefixState {
+    std::string prefix;
+    int dpi;  // zuletzt gesetzter bzw. abgefragter Wert
+    int base; // DPI beim Start der laufenden Wine-Sitzung
+};
+
+// Zustand eines Prefix vor dem Laden. Läuft keine Sitzung, startet die nächste mit dem
+// aktuellen Wert. Läuft eine, die dieser Prozess nicht kennt (VstScanner, Waves-Gruppe), gilt
+// der Wert vor Resolve. nullptr, wenn Wine nicht abfragbar ist.
+WinePrefixState *prefixState(std::vector<WinePrefixState> &known, const std::string &prefix)
 {
-    struct Known {
-        std::string prefix;
-        int dpi;
-    };
+    const bool running = wineSessionRunning(prefix);
+    for (auto &k : known) {
+        if (k.prefix != prefix) {
+            continue;
+        }
+        if (!running) {
+            k.base = k.dpi < 0 ? kWineDefaultDpi : k.dpi;
+        }
+        return &k;
+    }
+
+    const int current = queryWineDpi(prefix);
+    if (current == -2) {
+        return nullptr;
+    }
+    int base = current;
+    if (const int before = rememberedWineDpi(prefix); running && before != kNoRestoreEntry) {
+        base = before;
+    }
+    known.push_back({prefix, current, base < 0 ? kWineDefaultDpi : base});
+    return &known.back();
+}
+
+// Stellt die Wine-DPI für ein Plugin ein, liefert den Faktor für Instance::zoom (Basis / DPI
+// bei wine-zoom, sonst 1). `prefix` aus winePrefixFor bzw. winePrefixForBundle.
+double syncWineDpi(const Names &names, const std::string &prefix)
+{
     static const bool inResolve = isResolveProcess();
     static std::mutex mutex;
-    static std::vector<Known> known; // zuletzt gesetzter bzw. abgefragter Wert je Prefix
-    if (!inResolve || prefix.empty())
-        return;
-    const int wanted = wantedWineDpi(names);
-    if (wanted <= 0)
-        return;
+    static std::vector<WinePrefixState> known;
+    // "0" = nicht anfassen hängt nicht von der Basis ab: dann keine Wine-Aufrufe.
+    if (!inResolve || prefix.empty() || wantedWineDpi(names, kWineDefaultDpi) <= 0) {
+        return 1.0;
+    }
     std::lock_guard lock(mutex);
 
     timespec t0, t1;
     clock_gettime(CLOCK_MONOTONIC, &t0);
-    Known *k = nullptr;
-    for (auto &entry : known)
-        if (entry.prefix == prefix)
-            k = &entry;
+    WinePrefixState *k = prefixState(known, prefix);
     if (!k) {
-        const int current = queryWineDpi(prefix);
-        if (current == -2) {
-            logf("  Wine-DPI %s: Abfrage nicht möglich, bleibt", prefix.c_str());
-            return;
-        }
-        known.push_back({prefix, current});
-        k = &known.back();
+        logf("  Wine-DPI %s: Abfrage nicht möglich, bleibt", prefix.c_str());
+        return 1.0;
     }
+    const int wanted = wantedWineDpi(names, k->base);
+    const double zoom = wineZoomSetting(names) > 0 ? double(k->base) / wanted : 1.0;
     const int current = k->dpi;
     if (current == wanted) {
-        logf("  Wine-DPI %s: %d, passt", prefix.c_str(), current);
-        return;
+        logf("  Wine-DPI %s: %d, passt (Basis %d)", prefix.c_str(), current, k->base);
+        return zoom;
     }
     // Ohne gemerkten Vorwert kein Ändern, sonst ließe er sich nicht zurücksetzen. Nur der
     // erste Eintrag je Prefix zählt (Wert vor Resolve).
     if (!rememberWineDpi(prefix, current)) {
         logf("  Wine-DPI %s: Vorwert nicht speicherbar, bleibt %d", prefix.c_str(), current);
-        return;
+        return 1.0;
     }
     bool ok = runWine(prefix, {"reg", "add", "HKCU\\Control Panel\\Desktop", "/v", "LogPixels", "/t", "REG_DWORD",
                                "/d", std::to_string(wanted), "/f"}) == 0;
     if (ok)
         k->dpi = wanted;
     clock_gettime(CLOCK_MONOTONIC, &t1);
-    logf("  Wine-DPI %s: %d → %d %s (%.1f s); zurück nach Beenden von Resolve", prefix.c_str(), current, wanted,
-         ok ? "gesetzt" : "NICHT gesetzt", double(t1.tv_sec - t0.tv_sec) + (t1.tv_nsec - t0.tv_nsec) / 1e9);
+    logf("  Wine-DPI %s: %d → %d %s (Basis %d, %.1f s); zurück nach Beenden von Resolve", prefix.c_str(), current,
+         wanted, ok ? "gesetzt" : "NICHT gesetzt", k->base,
+         double(t1.tv_sec - t0.tv_sec) + (t1.tv_nsec - t0.tv_nsec) / 1e9);
+    return ok ? zoom : 1.0;
 }
 
 } // namespace
@@ -879,14 +930,14 @@ AEffect *VSTPluginLoader::Load(const wchar_t *wpath, audioMasterCallback callbac
         const std::string bundleName = bundle.substr(0, bundle.size() - 5); // ohne .vst3
         const Names names{pluginName(path), pluginName(bundleName), pluginNameWithFolder(bundleName)};
         const std::string prefix = winePrefixForBundle(bundle);
-        syncWineDpi(names, prefix);
+        const double zoom = syncWineDpi(names, prefix);
         gHostCallback.store(callback, std::memory_order_relaxed);
         AEffect *effect = vst3Load(path, hostCallback);
         if (!effect) {
             failed = true;
             return nullptr;
         }
-        wrap(effect, names, wineZoom(names, prefix));
+        wrap(effect, names, zoom);
         loaded_ = 1;
         logf("  ok, VST3 als AEffect %p", static_cast<void *>(effect));
         return effect;
@@ -904,7 +955,7 @@ AEffect *VSTPluginLoader::Load(const wchar_t *wpath, audioMasterCallback callbac
     }
     const Names names{pluginName(file), pluginNameWithFolder(file)};
     const std::string prefix = winePrefixFor(file);
-    syncWineDpi(names, prefix);
+    const double zoom = syncWineDpi(names, prefix);
 
     int flags = RTLD_NOW | RTLD_LOCAL;
     if (const char *deep = getenv("RESOLVE_LINUX_VST_DEEPBIND"); deep && *deep == '1')
@@ -937,7 +988,7 @@ AEffect *VSTPluginLoader::Load(const wchar_t *wpath, audioMasterCallback callbac
         return nullptr;
     }
 
-    wrap(effect, names, wineZoom(names, prefix));
+    wrap(effect, names, zoom);
     loaded_ = 1;
     logf("  ok, AEffect %p", static_cast<void *>(effect));
     return effect;

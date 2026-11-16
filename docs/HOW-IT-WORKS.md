@@ -118,6 +118,14 @@ How large the plug-in draws is up to the plug-in:
 value is remembered in `~/.local/state/resolve-linux-vst/wine-dpi-restore` and the launcher restores it
 when Resolve exits, also after a crash.
 
+**Base DPI.** Wine scales every window by base DPI / the DPI the plug-in process started with.
+The base is the DPI when the prefix's Wine session started (wineserver, `explorer.exe`); later
+changes reach only new processes. Measured with Wine 9.21 on Neoverb (factor 3.75, DPI 64): with
+180 at session start it filled 75 % of its window, with 240 all of it. The library keeps the base
+per prefix: when no session runs (`/tmp/.wine-<uid>/server-<dev>-<inode>/socket` missing), the
+next one starts with the current value; a session this process did not start (scanner, a
+plug-in group) is taken to have started with the value before Resolve.
+
 **Stale group sockets.** Windows processes started inside a yabridge plug-in group inherit the
 group's socket. Waves starts `WavesLocalServer.exe`, which outlives the group and keeps listening;
 the next group finds the socket taken and does not start ("Another process is already listening
@@ -141,14 +149,13 @@ height 0; the window keeps its size (`src/x11.cpp`). Resolve's Qt uses xcb and i
 
 - **MPC Beats** (JUCE under Wine 9.21 and 11.11) draws with the screen factor (`Xft.dpi`), not the
   host's. A higher Wine DPI makes it smaller or blank; the host factor only grows the window.
-- **Waves** (WaveShell, VST3 through yabridge) under Wine 9.21 draws with factor 180 / Wine DPI
-  but reports its size without it (at 240 it filled 75 % of the window, offset to the top left,
-  and clicks missed); under Wine 11.22 its drawing does not depend on the DPI. At 180 DPI drawing
-  and size match and Waves scales sharply with the host's
-  content scale. Built in for `WaveShell*`.
-- **iZotope** (Neoverb, Ozone, Neutron, Nectar, RX) also draws with 240 / Wine DPI but has no
-  content scaling and only gets more area when the window grows. `wine-zoom` sets the DPI to
-  240 / factor, scales the reported size by 240 / DPI and sends no content scale: Wine scales the
+- **Waves** (WaveShell, VST3 through yabridge) scales sharply with the host's content scale and
+  reports its size accordingly, so Wine must not scale it: `wine-dpi = prefix` keeps the base
+  DPI. A fixed 240 with base 180 drew 75 % of the window, offset to the top left, and clicks
+  missed. Built in for `WaveShell*`.
+- **iZotope** (Neoverb, Ozone, Neutron, Nectar, RX) has no content scaling and only gets more area
+  when the window grows. `wine-zoom` sets the DPI to base / factor, scales the reported size by
+  base / DPI and sends no content scale: Wine scales the
   picture up (slightly softer than native scaling). Built in for `iZotope/*`.
 
 ## AAC import
@@ -251,9 +258,9 @@ Start it with `LD_PRELOAD=build/libresolve-linux-vst.so` to get the library firs
 order as in Resolve; otherwise the plug-in's calls into libX11 bypass it (size 0, above). The
 library sets the Wine DPI as in Resolve; `resolve-linux-vst restore` sets it back.
 
-`make plugin-test` runs `tests/waves-dpi.sh`: it opens a Waves plug-in in its own X server with the
-built-in DPI and checks that Waves fills the editor window (local only, needs Waves through
-yabridge, Xvfb and python3-PIL; skipped otherwise).
+`make plugin-test` runs `tests/wine-dpi.sh`: it opens iZotope Neoverb, then Waves Butch Vig, in its
+own X server with the built-in settings and checks that each fills its editor window (local
+only, needs them through yabridge, Xvfb and python3-PIL; skipped otherwise).
 
 `EDITOR_TEST_OFFSCREEN=1` opens the test window outside all screens (override-redirect, no window
 manager involved) and takes the screenshot from the window with `XGetImage`. Plug-ins drawing

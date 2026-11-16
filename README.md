@@ -72,8 +72,8 @@ cd resolve-linux-vst
 
 Or run it straight from the checkout without installing: `./start.sh` builds what is missing and
 starts Resolve. Make targets: `all`, `aac` (downloads FFmpeg 6.0 and builds the AAC decoder),
-`test`, `install`/`uninstall` (`PREFIX=…`), `dist`, `editor-test`, `plugin-test` (Waves through
-yabridge, local only).
+`test`, `install`/`uninstall` (`PREFIX=…`), `dist`, `editor-test`, `plugin-test` (iZotope and
+Waves through yabridge, local only).
 
 </details>
 
@@ -147,18 +147,18 @@ plug-ins that support it (JUCE, VST3 content scaling) to draw at that scale. Win
 under Wine draw with the DPI of their Wine prefix, which resolve-linux-vst sets per plug-in before
 loading it and restores when Resolve exits.
 
-Built-in defaults cover Waves (Wine DPI 180) and iZotope (`wine-zoom`, Wine scales the editor
+Built-in defaults cover Waves (`wine-dpi = prefix`) and iZotope (`wine-zoom`, Wine scales the editor
 up). Everything else can be set per plug-in in `~/.config/resolve-linux-vst/plugins.conf`. A section is
 the plug-in's file name without extension, the VST3 plug-in or bundle name, or `Vendor/Name`;
 shell patterns work, the first match wins:
 
 ```ini
 [MPC Beats64]
-wine-dpi = 96          # number, auto (96 × Resolve's factor), 0 = leave alone
+wine-dpi = 96          # number, auto (96 × Resolve's factor), prefix (its own DPI), 0 = leave alone
 content-scale = 0      # number, auto (Resolve's factor), 0 = do not send
 
 [WaveShell*]           # all Waves plug-ins
-wine-dpi = 180
+wine-dpi = prefix
 
 [iZotope/*]            # all iZotope plug-ins
 wine-zoom = auto       # number, auto (Resolve's factor), 0 = off
@@ -203,7 +203,7 @@ resolve-linux-vst, they are offline.
 | `RESOLVE_LINUX_VST_LOG` | Log file (default `~/.local/state/resolve-linux-vst/resolve-linux-vst.log`, `-` = stderr) |
 | `RESOLVE_LINUX_VST_EDITOR_SCALE` | Fixed editor scale (default: Resolve's window factor, `1` = off) |
 | `RESOLVE_LINUX_VST_CONTENT_SCALE` | Scale sent to plug-ins: `auto`, a number, `0` = do not send |
-| `RESOLVE_LINUX_VST_WINE_DPI` | Wine DPI for yabridge prefixes: `auto` (96 × factor), a number, `0` = leave alone |
+| `RESOLVE_LINUX_VST_WINE_DPI` | Wine DPI for yabridge prefixes: `auto` (96 × factor), a number, `prefix` (its own DPI), `0` = leave alone |
 | `RESOLVE_LINUX_VST_FIX_FRAME=0` | Do not resize yabridge's embedding window |
 | `RESOLVE_LINUX_VST_AAC` | `0` = no AAC decoder, or the path of another `libavcodec.so.60` (FFmpeg 6.x) |
 | `RESOLVE_LINUX_VST_NEV=0` | Do not show `.nev` as `.R3D` |
