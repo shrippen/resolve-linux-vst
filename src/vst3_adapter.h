@@ -171,6 +171,9 @@ public:
     long getChunk(void **out);
     long setChunk(const char *data, long size);
     void destroy();
+
+private:
+    void findController(IPluginFactory *factory);
 };
 
 } // namespace vst3
