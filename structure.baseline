@@ -1,14 +1,14 @@
 # What is over a structure limit today (tools/structure-check.py). An entry may shrink,
 # never grow; a raised or new entry needs its reason in the PR. Rewrite with --update.
 # Lines: exclude<TAB>glob | path<TAB>function or - for the file<TAB>metric=value ...
-src/resolve_linux_vst.cpp	-	lines=1182
+src/resolve_linux_vst.cpp	-	lines=854
 src/resolve_linux_vst.cpp	dispatch	ccn=20
 src/resolve_linux_vst.cpp	pluginSetting	ccn=17
-src/resolve_linux_vst.cpp	runWine	ccn=17
 src/resolve_linux_vst.cpp	xcb	ccn=17
 src/sites.cpp	ElfFile::imports	ccn=17
 src/vst3.cpp	-	lines=1750
 src/vst3.cpp	Adapter::dispatch	ccn=101 length=208
 src/vst3.cpp	Adapter::init	ccn=22 length=91
 src/vst3.cpp	Adapter::process	ccn=26 length=89
+src/wine_dpi.cpp	runWine	ccn=17
 tools/editor-test.cpp	main	ccn=33 length=149
