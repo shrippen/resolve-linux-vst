@@ -81,6 +81,11 @@ await_session_end() {
         pgrep -x wineserver >/dev/null || return 0
         sleep 1
     done
+    # Ein schon gemessener Fehler geht vor.
+    if ((fail)); then
+        echo "wine-dpi: eine Wine-Sitzung endet nicht, Abbruch nach Fehler" >&2
+        exit 1
+    fi
     skip "eine Wine-Sitzung endet nicht ($(pgrep -a -x wineserver | head -1))"
 }
 
