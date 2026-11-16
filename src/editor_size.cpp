@@ -251,6 +251,41 @@ short scaled(short v, double s)
     return static_cast<short>(lround(v / s));
 }
 
+// Editorgröße abfragen: Größe des Plugins in Bildschirmpixeln, durch den Skalierungsfaktor
+// geteilt an Resolve.
+long editGetRect(Instance *in, AEffect *effect, int opcode, int index, long value, void *ptr, float opt)
+{
+    long result = in->dispatcher(effect, opcode, index, value, ptr, opt);
+    auto **rect = static_cast<ERect **>(ptr);
+    if (rect && *rect) {
+        const ERect reported = **rect;
+        // In Bildschirmpixeln (bei wine-zoom größer als gemeldet).
+        ERect r = {0, 0, short(lround((reported.bottom - reported.top) * in->zoom)),
+                   short(lround((reported.right - reported.left) * in->zoom))};
+        const int w = r.right, h = r.bottom;
+        bool replaced = false;
+        if (!in->window.load()) {
+            in->targetW.store(w);
+            in->targetH.store(h);
+        } else if (frameFixEnabled() && in->targetW.load() > w && in->targetH.load() > h) {
+            // Nach dem Öffnen kleiner als vorher, ohne audioMasterSizeWindow: JUCE unter Wine
+            // meldet dann seine Grundgröße, gezeichnet wird aber in der Zielgröße.
+            r = {0, 0, short(in->targetH.load()), short(in->targetW.load())};
+            replaced = true;
+        }
+        if (in->scale != 1.0 || in->zoom != 1.0 || replaced) {
+            // Eigene Kopie: Das ERect gehört dem Plugin.
+            in->rect = {scaled(r.top, in->scale), scaled(r.left, in->scale),
+                        scaled(r.bottom, in->scale), scaled(r.right, in->scale)};
+            *rect = &in->rect;
+        }
+        logMessage("Editorgröße: Plugin %p meldet %dx%d%s, an Resolve %dx%d", static_cast<void *>(effect),
+             reported.right - reported.left, reported.bottom - reported.top, replaced ? " (ersetzt)" : "",
+             (*rect)->right - (*rect)->left, (*rect)->bottom - (*rect)->top);
+    }
+    return result;
+}
+
 long dispatch(AEffect *effect, int opcode, int index, long value, void *ptr, float opt)
 {
     Instance *in = findInstance(effect);
@@ -277,37 +312,8 @@ long dispatch(AEffect *effect, int opcode, int index, long value, void *ptr, flo
         if (in->window.load() && nowMs() < in->fixUntilMs.load() && ++in->idleCount % 5 == 0)
             fixFrame(in);
         return in->dispatcher(effect, opcode, index, value, ptr, opt);
-    case effEditGetRect: {
-        long result = in->dispatcher(effect, opcode, index, value, ptr, opt);
-        auto **rect = static_cast<ERect **>(ptr);
-        if (rect && *rect) {
-            const ERect reported = **rect;
-            // In Bildschirmpixeln (bei wine-zoom größer als gemeldet).
-            ERect r = {0, 0, short(lround((reported.bottom - reported.top) * in->zoom)),
-                       short(lround((reported.right - reported.left) * in->zoom))};
-            const int w = r.right, h = r.bottom;
-            bool replaced = false;
-            if (!in->window.load()) {
-                in->targetW.store(w);
-                in->targetH.store(h);
-            } else if (frameFixEnabled() && in->targetW.load() > w && in->targetH.load() > h) {
-                // Nach dem Öffnen kleiner als vorher, ohne audioMasterSizeWindow: JUCE unter Wine
-                // meldet dann seine Grundgröße, gezeichnet wird aber in der Zielgröße.
-                r = {0, 0, short(in->targetH.load()), short(in->targetW.load())};
-                replaced = true;
-            }
-            if (in->scale != 1.0 || in->zoom != 1.0 || replaced) {
-                // Eigene Kopie: Das ERect gehört dem Plugin.
-                in->rect = {scaled(r.top, in->scale), scaled(r.left, in->scale),
-                            scaled(r.bottom, in->scale), scaled(r.right, in->scale)};
-                *rect = &in->rect;
-            }
-            logMessage("Editorgröße: Plugin %p meldet %dx%d%s, an Resolve %dx%d", static_cast<void *>(effect),
-                 reported.right - reported.left, reported.bottom - reported.top, replaced ? " (ersetzt)" : "",
-                 (*rect)->right - (*rect)->left, (*rect)->bottom - (*rect)->top);
-        }
-        return result;
-    }
+    case effEditGetRect:
+        return editGetRect(in, effect, opcode, index, value, ptr, opt);
     case effClose: {
         long result = in->dispatcher(effect, opcode, index, value, ptr, opt);
         in->effect.store(nullptr, std::memory_order_release);
