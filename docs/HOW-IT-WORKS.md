@@ -122,8 +122,8 @@ when Resolve exits, also after a crash.
 group's socket. Waves starts `WavesLocalServer.exe`, which outlives the group and keeps listening;
 the next group finds the socket taken and does not start ("Another process is already listening
 on this group's socket"). Before Resolve starts and when it exits, the launcher stops every
-process listening on a group socket that no group process (`yabridge-host.exe.so group`) listens on any more. Groups
-still serving another host stay (`tests/launcher-test.sh`).
+process listening on a group socket that no group process (`yabridge-host.exe.so group`) listens
+on any more. Groups still serving another host stay (`tests/launcher-test.sh`).
 
 **Frame fix.** yabridge embeds the Wine window in an intermediate window that gets its size from
 `effEditGetRect` at open time and does not grow afterwards. JUCE plug-ins under Wine also report
