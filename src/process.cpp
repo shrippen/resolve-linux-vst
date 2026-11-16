@@ -11,7 +11,6 @@ namespace {
 
 struct Exe {
     char path[PATH_MAX];
-    const char *name;
 };
 
 const Exe &exe()
@@ -19,14 +18,7 @@ const Exe &exe()
     static const Exe e = [] {
         Exe r = {};
         ssize_t n = readlink("/proc/self/exe", r.path, sizeof r.path - 1);
-        if (n <= 0) {
-            r.path[0] = 0;
-            r.name = r.path;
-            return r;
-        }
-        r.path[n] = 0;
-        const char *slash = strrchr(r.path, '/');
-        r.name = slash ? slash + 1 : r.path;
+        r.path[n > 0 ? n : 0] = 0;
         return r;
     }();
     return e;
@@ -39,9 +31,12 @@ const char *exePath()
     return exe().path;
 }
 
+// Aus dem gemerkten Pfad, nicht beim Lesen: ein Zeiger in die Kopie wäre nur mit NRVO gültig.
 const char *programName()
 {
-    return exe().name;
+    const char *path = exe().path;
+    const char *slash = strrchr(path, '/');
+    return slash ? slash + 1 : path;
 }
 
 bool isResolveProcess()
