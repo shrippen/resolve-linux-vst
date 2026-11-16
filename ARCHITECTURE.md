@@ -96,7 +96,6 @@ Nikon N-RAW clips. A launcher script starts Resolve with a library loaded into i
 
 ## Known deviations
 
-- Loader and adapter each keep their own list of the VST2 numbers (`AUDIT.md`, finding 2).
 - Writing a jump into Resolve's code is built twice, in loader and AAC
   (`AUDIT.md`, finding 7).
 - Launcher and library keep place and format of the Wine DPI file equal by hand
