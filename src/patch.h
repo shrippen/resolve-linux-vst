@@ -45,8 +45,9 @@ struct Redirect {
 bool redirectWanted(uintptr_t addr, const void *replacement);
 
 // Leitet jede Funktion von `list` im geöffneten Executable `elf` (Pfad `exe` fürs Log) auf
-// ihren Ersatz um (Sprung an den Anfang) und protokolliert je Umleitung "<exe>: <Name> bei <Adresse> umgeleitet" bzw.
-// "NICHT umgeleitet". Ist das Executable ein PIE oder fehlt ein Symbol, geschieht dafür nichts.
+// ihren Ersatz um (Sprung an den Anfang) und protokolliert je Umleitung
+// "<exe>: <Name> bei <Adresse> umgeleitet" bzw. "NICHT umgeleitet". Ist das Executable ein PIE
+// oder fehlt ein Symbol, geschieht dafür nichts.
 void redirectFunctions(const ElfFile &elf, const char *exe, const Redirect *list, size_t count);
 
 // libc++ __tree_node<pair<const K, int>> und std::map: begin, end_node (nur left = Wurzel),
