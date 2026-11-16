@@ -59,3 +59,15 @@ bool findAacSites(const CodeImage &code, AacSites *sites, std::string *error);
 // Fundstellen einer Konstante (4 Byte, Little Endian) im Code, als Hilfe zum Wiederfinden von
 // Hand (objdump -d --start-address=…). Höchstens `max` Adressen, Rückgabe die Anzahl.
 size_t findConstant(const CodeImage &code, uint32_t value, uintptr_t *out, size_t max);
+
+// Symbole im VstScanner (.symtab des Executables), die die Bibliothek umleitet oder braucht.
+// Eine Liste für Lader, Scanner-Teil und resolve-check: Benennt Blackmagic eine um, ändert
+// sich nur diese Stelle.
+constexpr const char *kSymLoad = "_ZN15VSTPluginLoader4LoadEPKwPFlP7AEffectiilPvfERb";
+constexpr const char *kSymClose = "_ZN15VSTPluginLoader5CloseEv";
+constexpr const char *kSymMaskIn = "_ZNK15AudioPluginHost23GetPluginCategoryMaskInEi";
+constexpr const char *kSymMaskOut = "_ZNK15AudioPluginHost24GetPluginCategoryMaskOutEi";
+constexpr const char *kSymMaskTable = "_ZN15AudioPluginHost19_pluginCategoryMaskE"; // Tabelle zu MaskIn
+constexpr const char *kSymMapTable = "_ZN15AudioPluginHost18_pluginCategoryMapE";   // Tabelle zu MaskOut
+
+constexpr const char *kScannerSymbols[] = {kSymLoad, kSymClose, kSymMaskIn, kSymMaskOut, kSymMaskTable, kSymMapTable};

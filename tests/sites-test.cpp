@@ -72,8 +72,39 @@ Code buildCode()
 
 } // namespace
 
+// Die Symbolliste des VstScanners: eine Liste für Lader, Scanner-Teil und resolve-check.
+void testScannerSymbols()
+{
+    constexpr size_t kCount = sizeof kScannerSymbols / sizeof *kScannerSymbols;
+    expect(kCount == 6, "sechs Symbole im VstScanner");
+
+    bool unique = true;
+    bool mangled = true;
+    for (size_t i = 0; i < kCount; ++i) {
+        mangled = mangled && strncmp(kScannerSymbols[i], "_ZN", 3) == 0;
+        for (size_t j = i + 1; j < kCount; ++j) {
+            unique = unique && strcmp(kScannerSymbols[i], kScannerSymbols[j]) != 0;
+        }
+    }
+    expect(unique, "Symbole ohne Doppelte");
+    expect(mangled, "alle Symbole sind C++-Namen (_ZN...)");
+
+    auto listed = [&](const char *name) {
+        for (const char *s : kScannerSymbols) {
+            if (strcmp(s, name) == 0) {
+                return true;
+            }
+        }
+        return false;
+    };
+    expect(listed(kSymLoad) && listed(kSymClose), "Load und Close in der Liste");
+    expect(listed(kSymMaskIn) && listed(kSymMaskOut), "Kategorie-Funktionen in der Liste");
+    expect(listed(kSymMaskTable) && listed(kSymMapTable), "Kategorie-Tabellen in der Liste");
+}
+
 int main()
 {
+    testScannerSymbols();
     const Code code = buildCode();
     AacSites s;
     std::string error;

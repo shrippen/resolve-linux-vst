@@ -209,26 +209,11 @@ void patchExecutable()
         return;
     }
 
-    struct {
-        const char *name;
-        void *replacement;
-    } const patches[] = {
-        {"_ZN15VSTPluginLoader4LoadEPKwPFlP7AEffectiilPvfERb", memberAddress(&VSTPluginLoader::Load)},
-        {"_ZN15VSTPluginLoader5CloseEv", memberAddress(&VSTPluginLoader::Close)},
+    const Redirect patches[] = {
+        {kSymLoad, memberAddress(&VSTPluginLoader::Load)},
+        {kSymClose, memberAddress(&VSTPluginLoader::Close)},
     };
-    // Symboltabelle (.symtab) des Executables; nur ohne PIE ist st_value die Laufzeitadresse.
-    const ElfFile elf(exe);
-    if (!elf.isExecutable())
-        return;
-    for (const auto &p : patches) {
-        uintptr_t addr = elf.symbol(p.name);
-        if (!addr)
-            continue;
-        if (reinterpret_cast<void *>(addr) == p.replacement)
-            continue;
-        bool ok = patchJump(addr, p.replacement);
-        logMessage("%s: %s bei %#lx %s", exe, p.name, static_cast<unsigned long>(addr), ok ? "umgeleitet" : "NICHT umgeleitet");
-    }
+    redirectFunctions(ElfFile(exe), exe, patches, sizeof patches / sizeof *patches);
 }
 
 // Vor den anderen Teilen (scanner.cpp, nev.cpp), die das Protokoll schon brauchen.

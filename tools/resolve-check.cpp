@@ -102,20 +102,12 @@ int main(int argc, char **argv)
     const std::string dir = argc == 2 ? argv[1] : "/opt/resolve";
 
     // resolve ruft Load/Close über die PLT von libFairlightPage.so (Preload gewinnt).
-    const char *loader[] = {"_ZN15VSTPluginLoader4LoadEPKwPFlP7AEffectiilPvfERb", "_ZN15VSTPluginLoader5CloseEv"};
+    const char *loader[] = {kSymLoad, kSymClose};
     checkSymbols(dir + "/libs/libFairlightPage.so", true, loader, 2);
 
     // VstScanner: direkte Aufrufe, umgeleitet über die Symboltabelle (Load/Close in
     // resolve_linux_vst.cpp, Kategorien in scanner.cpp).
-    const char *scanner[] = {
-        "_ZN15VSTPluginLoader4LoadEPKwPFlP7AEffectiilPvfERb",
-        "_ZN15VSTPluginLoader5CloseEv",
-        "_ZNK15AudioPluginHost23GetPluginCategoryMaskInEi",
-        "_ZNK15AudioPluginHost24GetPluginCategoryMaskOutEi",
-        "_ZN15AudioPluginHost19_pluginCategoryMaskE",
-        "_ZN15AudioPluginHost18_pluginCategoryMapE",
-    };
-    checkSymbols(dir + "/bin/VstScanner", false, scanner, sizeof scanner / sizeof *scanner);
+    checkSymbols(dir + "/bin/VstScanner", false, kScannerSymbols, sizeof kScannerSymbols / sizeof *kScannerSymbols);
 
     // Der AAC-Decoder (make aac) ist FFmpeg 6.0 und muss zu Resolves libavcodec passen.
     printf("%s/libs\n", dir.c_str());

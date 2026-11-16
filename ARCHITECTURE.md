@@ -26,8 +26,8 @@ Nikon N-RAW clips. A launcher script starts Resolve with a library loaded into i
 | `src/nev.cpp` | N-RAW: shows Resolve every `.NEV` file as `.R3D`. |
 | `src/x11.cpp` | Drops window sizes of 0 that would make a plug-in abort Resolve. |
 | `src/log.cpp`, `src/log.h` | The log: one function that writes a line with time and process; opens the log file when the loader asks, otherwise the caller sets the file. |
-| `src/patch.cpp`, `src/patch.h` | Writes a jump into Resolve's code and knows the layout of the C++ tables loader and AAC read; no feature. |
-| `src/sites.cpp`, `src/sites.h` | Finds the places in Resolve's code by byte patterns. Knows Resolve's binary, no feature. |
+| `src/patch.cpp`, `src/patch.h` | Writes a jump into Resolve's code, redirects the scanner's functions by name (found through `sites`), and knows the layout of the C++ tables loader and AAC read; no feature. |
+| `src/sites.cpp`, `src/sites.h` | Finds the places in Resolve's code by byte patterns and holds the names of the functions the library redirects in VstScanner. Knows Resolve's binary, no feature. |
 | `src/exports.map` | The list of functions the library replaces in Resolve. What is not listed here has no effect. |
 | `src/vst2.h` | The VST2 interface, shared by loader and adapter: structures, command numbers, the adapter's entry points. |
 | `tools/*.cpp` | Programs built from `src/`: `resolve-check` (do the patterns still match?), `vst3-classes` (list the plug-ins of a bundle), `editor-test` (open a plug-in window without Resolve). Also the patch the AAC decoder's FFmpeg is built with. |
@@ -89,7 +89,7 @@ Nikon N-RAW clips. A launcher script starts Resolve with a library loaded into i
 | Change | Touch |
 |---|---|
 | A new feature inside Resolve (another codec, another fix) | A new `src/<feature>.cpp`, the functions it replaces in `src/exports.map`, `SOURCES` in the `Makefile`, `docs/HOW-IT-WORKS.md`, its switch in the README |
-| A new place to find in Resolve, or a pattern after a Resolve update | `src/sites.cpp`, `src/sites.h`, `tests/sites-test.cpp`, `tools/resolve-check.cpp` |
+| A new place to find in Resolve, a pattern or a function name after a Resolve update | `src/sites.cpp`, `src/sites.h`, `tests/sites-test.cpp`, `tools/resolve-check.cpp` (it reads the function names from `sites.h`) |
 | A new VST2 command Resolve sends | `src/vst2.h` (the number), then loader or adapter |
 | Something only VST3 plug-ins need | `src/vst3*.cpp` only |
 | A new launcher command | `resolve-linux-vst`, README |

@@ -38,9 +38,9 @@ $(BUILD)/sites-test: tests/sites-test.cpp src/sites.cpp src/sites.h
 	$(CXX) $(filter-out -fPIC,$(CXXFLAGS)) -o $@ tests/sites-test.cpp src/sites.cpp
 
 # Test des Sprungs in Resolves Code (src/patch.cpp), an eigenem Speicher.
-$(BUILD)/patch-test: tests/patch-test.cpp src/patch.cpp src/patch.h src/log.cpp src/log.h
+$(BUILD)/patch-test: tests/patch-test.cpp src/patch.cpp src/patch.h src/log.cpp src/log.h src/sites.cpp src/sites.h
 	@mkdir -p $(BUILD)
-	$(CXX) $(filter-out -fPIC,$(CXXFLAGS)) -o $@ tests/patch-test.cpp src/patch.cpp src/log.cpp
+	$(CXX) $(filter-out -fPIC,$(CXXFLAGS)) -o $@ tests/patch-test.cpp src/patch.cpp src/log.cpp src/sites.cpp
 
 # Test der Basis-DPI-Entscheidung (rein gerechnet, ohne Wine).
 $(BUILD)/wine-base-test: tests/wine-base-test.cpp src/wine_base.h
