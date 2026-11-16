@@ -15,6 +15,7 @@ Nikon N-RAW clips. A launcher script starts Resolve with a library loaded into i
 |---|---|
 | `resolve-linux-vst` | The launcher: links the plug-ins into the folder Resolve scans (a VST3 plug-in as a folder with `bundle` and `class`), writes their categories, starts Resolve with the library, resets the Wine DPI afterwards. Calls the built tools `vst3-classes` and `resolve-check`. |
 | `src/resolve_linux_vst.cpp` | The VST2 loader: loads a plug-in for Resolve. |
+| `src/wine_base.h` | Wine DPI: the decision which base DPI a Wine session has and whether to reset first, pure, so `tests/` can run it. |
 | `src/wine_dpi.cpp`, `src/wine_dpi.h` | Wine DPI: sets the DPI of a Windows plug-in's Wine prefix before it loads and tells the loader how far Wine scales it. |
 | `src/loader.h` | What the loader file offers its parts: settings per plug-in (`plugins.conf`), state folder, scale factor, which program this is. |
 | `src/vst3.cpp` | The VST3 adapter: shows a VST3 plug-in to Resolve as a VST2 plug-in. |
@@ -106,4 +107,5 @@ Nikon N-RAW clips. A launcher script starts Resolve with a library loaded into i
   "is this Resolve?" (`src/loader.h`).
 - `src/vst3.cpp` holds host objects, event loop, module loading and adapter in one file of
   1750 lines (`AUDIT.md`, finding 10).
-- Only the pattern search has tests (`AUDIT.md`, finding 8).
+- Only the pattern search, the launcher's cleanup and the Wine DPI base decision have tests
+  (`AUDIT.md`, finding 8).
