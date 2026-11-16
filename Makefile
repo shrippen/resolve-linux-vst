@@ -52,11 +52,17 @@ $(BUILD)/process-test: tests/process-test.cpp src/process.cpp src/process.h
 	@mkdir -p $(BUILD)
 	$(CXX) $(filter-out -fPIC,$(CXXFLAGS)) -fno-elide-constructors -o $@ tests/process-test.cpp src/process.cpp
 
-test: $(BUILD)/process-test $(BUILD)/sites-test $(BUILD)/patch-test $(BUILD)/wine-base-test
+# Test von plugins.conf und den eingebauten Vorgaben (eigene Datei in einem Temp-Ordner).
+$(BUILD)/plugin-conf-test: tests/plugin-conf-test.cpp src/plugin_conf.cpp src/plugin_conf.h
+	@mkdir -p $(BUILD)
+	$(CXX) $(filter-out -fPIC,$(CXXFLAGS)) -o $@ tests/plugin-conf-test.cpp src/plugin_conf.cpp
+
+test: $(BUILD)/process-test $(BUILD)/sites-test $(BUILD)/patch-test $(BUILD)/wine-base-test $(BUILD)/plugin-conf-test
 	$(BUILD)/process-test
 	$(BUILD)/sites-test
 	$(BUILD)/patch-test
 	$(BUILD)/wine-base-test
+	$(BUILD)/plugin-conf-test
 	tests/launcher-test.sh
 
 # Plugin-Test mit Waves über yabridge (nur lokal, sonst übersprungen).
@@ -65,7 +71,7 @@ plugin-test: all editor-test
 
 # clean lässt den AAC-Decoder (FFmpeg-Build dauert) stehen, distclean nimmt alles.
 clean:
-	rm -f $(BUILD)/process-test $(BUILD)/libresolve-linux-vst.so $(BUILD)/vst3-classes $(BUILD)/resolve-check $(BUILD)/sites-test $(BUILD)/patch-test $(BUILD)/wine-base-test $(BUILD)/editor-test
+	rm -f $(BUILD)/process-test $(BUILD)/libresolve-linux-vst.so $(BUILD)/vst3-classes $(BUILD)/resolve-check $(BUILD)/sites-test $(BUILD)/patch-test $(BUILD)/wine-base-test $(BUILD)/plugin-conf-test $(BUILD)/editor-test
 	rm -rf $(BUILD)/dist
 
 distclean:
