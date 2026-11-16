@@ -729,29 +729,6 @@ bool classInfo(IPluginFactory *factory, const TUID cid, ClassInfo &out)
 
 // --- Adapter --------------------------------------------------------------------------
 
-// VST2-Konstanten (Opcodes, Flags), wie in aeffectx.h.
-enum {
-    effOpen = 0, effClose = 1, effSetProgram = 2, effGetProgram = 3, effGetProgramName = 5,
-    effGetParamLabel = 6, effGetParamDisplay = 7, effGetParamName = 8, effSetSampleRate = 10,
-    effSetBlockSize = 11, effMainsChanged = 12, effEditGetRect = 13, effEditOpen = 14,
-    effEditClose = 15, effEditIdle = 19, effGetChunk = 23, effSetChunk = 24, effCanBeAutomated = 26,
-    effString2Parameter = 27, effGetProgramNameIndexed = 29, effGetInputProperties = 33,
-    effGetOutputProperties = 34, effGetPlugCategory = 35, effSetSpeakerArrangement = 42,
-    effSetBypass = 44, effGetEffectName = 45, effGetVendorString = 47, effGetProductString = 48,
-    effGetVendorVersion = 49, effVendorSpecific = 50, effCanDo = 51, effGetTailSize = 52,
-    effGetParameterProperties = 56, effGetVstVersion = 58, effSetProcessPrecision = 77,
-};
-enum {
-    audioMasterAutomate = 0, audioMasterGetTime = 7, audioMasterIOChanged = 13,
-    audioMasterSizeWindow = 15, audioMasterUpdateDisplay = 42, audioMasterBeginEdit = 43,
-    audioMasterEndEdit = 44,
-};
-enum {
-    effFlagsHasEditor = 1, effFlagsCanReplacing = 1 << 4, effFlagsProgramChunks = 1 << 5,
-    effFlagsIsSynth = 1 << 8,
-};
-constexpr int kPreS = 0x50726553; // 'PreS'
-constexpr long kAeCs = 0x41654373; // 'AeCs'
 constexpr int32_t kChunkMagic = 0x52335653; // 'R3VS'
 
 struct VstTimeInfo {

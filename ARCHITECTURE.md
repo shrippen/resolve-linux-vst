@@ -95,7 +95,6 @@ Nikon N-RAW clips. A launcher script starts Resolve with a library loaded into i
 
 ## Known deviations
 
-- Loader and adapter each keep their own list of the VST2 numbers (`AUDIT.md`, finding 2).
 - "Is this Resolve?" is built three times (`AUDIT.md`, finding 3).
 - Writing a jump into Resolve's code is built twice, in loader and AAC
   (`AUDIT.md`, finding 7).
