@@ -25,7 +25,6 @@
 #include <cerrno>
 #include <cstddef>
 #include <cmath>
-#include <cstdarg>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
