@@ -75,9 +75,6 @@ void mapEach(const MapHeader *map, MapVisit visit, void *ctx);
 // als `max` Einträgen -1 (dann sind keys/values bis max gefüllt).
 int mapCollect(const MapHeader *map, uint32_t *keys, int *values, int max);
 
-// Der Knoten zu `key`, nullptr wenn er fehlt.
-const MapNode *mapFind(const MapHeader *map, uint32_t key);
-
 // Trägt key → value ein (Knoten mit malloc; libc++ gibt ihn mit operator delete = free frei),
 // pflegt begin und size und gleicht den Baum aus. Ein vorhandener Schlüssel wird nicht geprüft.
 void mapInsert(MapHeader *map, uint32_t key, int value);

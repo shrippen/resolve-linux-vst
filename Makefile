@@ -9,9 +9,9 @@ LDLIBS   += -ldl
 
 BUILD ?= build
 
-VST3SRC  := src/vst3.cpp src/vst3_dispatch.cpp src/vst3_host.cpp src/vst3_iids.cpp src/vst3_module.cpp
-VST3HDR  := src/vst3_adapter.h src/vst3_host.h src/vst3_module.h
-SOURCES := src/resolve_linux_vst.cpp src/log.cpp src/plugin_conf.cpp src/editor_size.cpp src/scanner.cpp src/wine_dpi.cpp src/process.cpp $(VST3SRC) src/aac.cpp src/nev.cpp src/x11.cpp src/sites.cpp src/patch.cpp $(VST3)/base/funknown.cpp
+VST3SRC  := src/vst3.cpp src/vst3_dispatch.cpp src/vst3_host.cpp src/vst3_iids.cpp src/vst3_module.cpp src/vst3_params.cpp
+VST3HDR  := src/vst3_adapter.h src/vst3_host.h src/vst3_module.h src/vst3_params.h
+SOURCES := src/resolve_linux_vst.cpp src/log.cpp src/plugin_conf.cpp src/scale.cpp src/editor_size.cpp src/scanner.cpp src/wine_dpi.cpp src/process.cpp $(VST3SRC) src/aac.cpp src/nev.cpp src/x11.cpp src/sites.cpp src/patch.cpp $(VST3)/base/funknown.cpp
 
 all: $(BUILD)/libresolve-linux-vst.so $(BUILD)/vst3-classes $(BUILD)/resolve-check
 
@@ -21,7 +21,7 @@ $(BUILD)/include/pluginterfaces:
 	@mkdir -p $(BUILD)/include
 	ln -sfn $(abspath $(VST3)) $@
 
-$(BUILD)/libresolve-linux-vst.so: $(SOURCES) src/vst2.h src/log.h src/sites.h src/patch.h src/editor_size.h src/plugin_conf.h src/process.h src/wine_dpi.h src/wine_base.h $(VST3HDR) src/exports.map | $(BUILD)/include/pluginterfaces
+$(BUILD)/libresolve-linux-vst.so: $(SOURCES) src/vst2.h src/log.h src/sites.h src/patch.h src/editor_size.h src/scale.h src/plugin_conf.h src/process.h src/wine_dpi.h src/wine_base.h $(VST3HDR) src/exports.map | $(BUILD)/include/pluginterfaces
 	$(CXX) $(CXXFLAGS) $(VST3INC) $(LDFLAGS) -o $@ $(SOURCES) $(LDLIBS)
 
 $(BUILD)/vst3-classes: tools/vst3-classes.cpp $(VST3SRC) src/log.cpp src/vst2.h src/log.h $(VST3HDR) | $(BUILD)/include/pluginterfaces
@@ -57,12 +57,18 @@ $(BUILD)/plugin-conf-test: tests/plugin-conf-test.cpp src/plugin_conf.cpp src/pl
 	@mkdir -p $(BUILD)
 	$(CXX) $(filter-out -fPIC,$(CXXFLAGS)) -o $@ tests/plugin-conf-test.cpp src/plugin_conf.cpp
 
-test: $(BUILD)/process-test $(BUILD)/sites-test $(BUILD)/patch-test $(BUILD)/wine-base-test $(BUILD)/plugin-conf-test
+# Test der Abbildung VST3-Parameter -> VST2-Eigenschaften (baut die VST3-Quellen wie vst3-classes).
+$(BUILD)/vst3-params-test: tests/vst3-params-test.cpp $(VST3SRC) src/log.cpp src/vst2.h src/log.h $(VST3HDR) | $(BUILD)/include/pluginterfaces
+	@mkdir -p $(BUILD)
+	$(CXX) $(filter-out -fPIC,$(CXXFLAGS)) $(VST3INC) -o $@ tests/vst3-params-test.cpp $(VST3SRC) src/log.cpp $(VST3)/base/funknown.cpp $(LDLIBS)
+
+test: $(BUILD)/process-test $(BUILD)/sites-test $(BUILD)/patch-test $(BUILD)/wine-base-test $(BUILD)/plugin-conf-test $(BUILD)/vst3-params-test
 	$(BUILD)/process-test
 	$(BUILD)/sites-test
 	$(BUILD)/patch-test
 	$(BUILD)/wine-base-test
 	$(BUILD)/plugin-conf-test
+	$(BUILD)/vst3-params-test
 	tests/launcher-test.sh
 	tests/scripts-test.sh
 
@@ -72,7 +78,7 @@ plugin-test: all editor-test
 
 # clean lässt den AAC-Decoder (FFmpeg-Build dauert) stehen, distclean nimmt alles.
 clean:
-	rm -f $(BUILD)/process-test $(BUILD)/libresolve-linux-vst.so $(BUILD)/vst3-classes $(BUILD)/resolve-check $(BUILD)/sites-test $(BUILD)/patch-test $(BUILD)/wine-base-test $(BUILD)/plugin-conf-test $(BUILD)/editor-test
+	rm -f $(BUILD)/process-test $(BUILD)/libresolve-linux-vst.so $(BUILD)/vst3-classes $(BUILD)/resolve-check $(BUILD)/sites-test $(BUILD)/patch-test $(BUILD)/wine-base-test $(BUILD)/plugin-conf-test $(BUILD)/vst3-params-test $(BUILD)/editor-test
 	rm -rf $(BUILD)/dist
 
 distclean:

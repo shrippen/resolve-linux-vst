@@ -25,10 +25,10 @@
 #include <string>
 #include <vector>
 
-#include "editor_size.h"
 #include "plugin_conf.h"
 #include "log.h"
 #include "process.h"
+#include "scale.h"
 #include "wine_base.h"
 #include "wine_dpi.h"
 

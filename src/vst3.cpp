@@ -94,6 +94,30 @@ tresult Frame::resizeView(IPlugView *view, ViewRect *size)
     return kResultTrue;
 }
 
+// Controller suchen: im Component selbst oder als eigene Klasse der Factory.
+void Adapter::findController(IPluginFactory *factory)
+{
+    if (component->queryInterface(IEditController::iid, reinterpret_cast<void **>(&controller)) != kResultOk
+        || !controller) {
+        controller = nullptr;
+        TUID ccid;
+        if (component->getControllerClassId(ccid) == kResultOk
+            && factory->createInstance(reinterpret_cast<FIDString>(ccid), IEditController::iid,
+                                       reinterpret_cast<void **>(&controller)) == kResultOk
+            && controller) {
+            if (controller->initialize(hostApp()) != kResultOk) {
+                logMessage("  VST3: IEditController::initialize schlug fehl");
+                controller->release();
+                controller = nullptr;
+            } else {
+                separateController = true;
+            }
+        } else {
+            controller = nullptr;
+        }
+    }
+}
+
 bool Adapter::init(IPluginFactory *factory, const TUID cid)
 {
     if (factory->createInstance(reinterpret_cast<FIDString>(cid), IComponent::iid,
@@ -115,25 +139,7 @@ bool Adapter::init(IPluginFactory *factory, const TUID cid)
         processor = nullptr;
         return false;
     }
-    if (component->queryInterface(IEditController::iid, reinterpret_cast<void **>(&controller)) != kResultOk
-        || !controller) {
-        controller = nullptr;
-        TUID ccid;
-        if (component->getControllerClassId(ccid) == kResultOk
-            && factory->createInstance(reinterpret_cast<FIDString>(ccid), IEditController::iid,
-                                       reinterpret_cast<void **>(&controller)) == kResultOk
-            && controller) {
-            if (controller->initialize(hostApp()) != kResultOk) {
-                logMessage("  VST3: IEditController::initialize schlug fehl");
-                controller->release();
-                controller = nullptr;
-            } else {
-                separateController = true;
-            }
-        } else {
-            controller = nullptr;
-        }
-    }
+    findController(factory);
     if (separateController) {
         component->queryInterface(IConnectionPoint::iid, reinterpret_cast<void **>(&componentPoint));
         controller->queryInterface(IConnectionPoint::iid, reinterpret_cast<void **>(&controllerPoint));

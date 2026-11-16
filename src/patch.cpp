@@ -228,15 +228,6 @@ int mapCollect(const MapHeader *map, uint32_t *keys, int *values, int max)
     return c.n > max ? -1 : c.n;
 }
 
-const MapNode *mapFind(const MapHeader *map, uint32_t key)
-{
-    const MapNode *node = map->root;
-    while (node && node->key != key) {
-        node = key < node->key ? node->left : node->right;
-    }
-    return node;
-}
-
 void mapInsert(MapHeader *map, uint32_t key, int value)
 {
     auto *node = static_cast<MapNode *>(malloc(sizeof(MapNode)));
