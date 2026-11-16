@@ -21,7 +21,7 @@ Nikon N-RAW clips. A launcher script starts Resolve with a library loaded into i
 | `src/wine_base.h` | Wine DPI: the decision which base DPI a Wine session has and whether to reset first, pure, so `tests/` can run it. |
 | `src/wine_dpi.cpp`, `src/wine_dpi.h` | Wine DPI: sets the DPI of a Windows plug-in's Wine prefix before it loads and tells the loader how far Wine scales it. |
 | `src/process.cpp`, `src/process.h` | Which program the library runs in (read once); the program names; two questions: is it `resolve` (AAC, N-RAW), and does it load plug-ins like Resolve (`resolve`, `VstScanner`, `editor-test`: Wine DPI, number format). |
-| `src/vst3*.cpp`, `src/vst3*.h` | The VST3 adapter: shows a VST3 plug-in to Resolve as a VST2 plug-in. `vst3.cpp` builds it and runs audio, `vst3_dispatch.cpp` answers Resolve's commands (editor, state, speakers), `vst3_host.cpp` the host objects and event loop a plug-in asks for, `vst3_module.cpp` opens a bundle and lists its classes, `vst3_iids.cpp` defines the interface IDs once. |
+| `src/vst3*.cpp`, `src/vst3*.h` | The VST3 adapter: shows a VST3 plug-in to Resolve as a VST2 plug-in. `vst3.cpp` builds it and runs audio, `vst3_dispatch.cpp` answers Resolve's commands (editor, state, speakers), `vst3_host.cpp` the host objects and event loop a plug-in asks for, `vst3_module.cpp` opens a bundle and lists its classes, `vst3_params.cpp` maps a VST3 parameter to VST2 properties, `vst3_iids.cpp` defines the interface IDs once. |
 | `src/aac.cpp` | AAC: gives Resolve an AAC decoder from a second, small FFmpeg library. |
 | `src/nev.cpp` | N-RAW: shows Resolve every `.NEV` file as `.R3D`. |
 | `src/x11.cpp` | Drops window sizes of 0 that would make a plug-in abort Resolve. |
@@ -31,7 +31,7 @@ Nikon N-RAW clips. A launcher script starts Resolve with a library loaded into i
 | `src/exports.map` | The list of functions the library replaces in Resolve. What is not listed here has no effect. |
 | `src/vst2.h` | The VST2 interface, shared by loader and adapter: structures, command numbers, the adapter's entry points. |
 | `tools/*.cpp` | Programs built from `src/`: `resolve-check` (do the patterns still match?), `vst3-classes` (list the plug-ins of a bundle), `editor-test` (open a plug-in window without Resolve). Also the patch the AAC decoder's FFmpeg is built with. |
-| `tests/` | Tests that run without Resolve (`make test`: pattern search, program name, writing a jump, Wine DPI decisions, `plugins.conf`, launcher cleanup, executable scripts) and the local plug-in test `wine-dpi.sh` (`make plugin-test`). |
+| `tests/` | Tests that run without Resolve (`make test`: pattern search, program name, writing a jump, Wine DPI decisions, `plugins.conf`, VST3 parameter properties, launcher cleanup, executable scripts) and the local plug-in test `wine-dpi.sh` (`make plugin-test`). |
 | `install.sh`, `start.sh`, `Makefile` | Install, start from the source folder, build, release tarball (`make dist`). |
 | `third_party/vst3_pluginterfaces` | The VST3 interface headers (submodule), unchanged. |
 | `docs/`, `scripts/`, `tools/structure-check.py` | Landing page and internals; release notes; the structure check (synced copy). |
