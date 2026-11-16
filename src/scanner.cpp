@@ -65,7 +65,7 @@ void patchCategories()
         {kSymMaskIn, gMaskIn ? reinterpret_cast<void *>(&categoryMaskIn) : nullptr},
         {kSymMaskOut, gMaskOut ? reinterpret_cast<void *>(&categoryMaskOut) : nullptr},
     };
-    redirectFunctions(exe, patches, sizeof patches / sizeof *patches);
+    redirectFunctions(elf, exe, patches, sizeof patches / sizeof *patches);
 }
 
 // Zahlenformat: Resolve und VstScanner lesen die Version von FXConfiguration.xml ("1.4") mit

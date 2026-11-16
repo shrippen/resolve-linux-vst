@@ -81,10 +81,9 @@ bool redirectWanted(uintptr_t addr, const void *replacement)
     return reinterpret_cast<const void *>(addr) != replacement;
 }
 
-void redirectFunctions(const char *exe, const Redirect *list, size_t count)
+void redirectFunctions(const ElfFile &elf, const char *exe, const Redirect *list, size_t count)
 {
     // Symboltabelle (.symtab) des Executables; nur ohne PIE ist st_value die Laufzeitadresse.
-    const ElfFile elf(exe);
     if (!elf.isExecutable()) {
         return;
     }

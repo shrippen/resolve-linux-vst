@@ -213,7 +213,7 @@ void patchExecutable()
         {kSymLoad, memberAddress(&VSTPluginLoader::Load)},
         {kSymClose, memberAddress(&VSTPluginLoader::Close)},
     };
-    redirectFunctions(exe, patches, sizeof patches / sizeof *patches);
+    redirectFunctions(ElfFile(exe), exe, patches, sizeof patches / sizeof *patches);
 }
 
 // Vor den anderen Teilen (scanner.cpp, nev.cpp), die das Protokoll schon brauchen.

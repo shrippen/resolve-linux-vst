@@ -8,6 +8,8 @@
 #include <cstddef>
 #include <cstdint>
 
+#include "sites.h"
+
 constexpr size_t kJumpRaxLen = 12;      // movabs rax, dest; jmp rax
 constexpr size_t kJumpIndirectLen = 14; // jmp [rip+0]; dq dest
 
@@ -42,10 +44,10 @@ struct Redirect {
 // schon der Ersatz an der Stelle liegt.
 bool redirectWanted(uintptr_t addr, const void *replacement);
 
-// Leitet jede Funktion von `list` im Executable `exe` auf ihren Ersatz um (Sprung an den
-// Anfang) und protokolliert je Umleitung "<exe>: <Name> bei <Adresse> umgeleitet" bzw.
+// Leitet jede Funktion von `list` im geöffneten Executable `elf` (Pfad `exe` fürs Log) auf
+// ihren Ersatz um (Sprung an den Anfang) und protokolliert je Umleitung "<exe>: <Name> bei <Adresse> umgeleitet" bzw.
 // "NICHT umgeleitet". Ist das Executable ein PIE oder fehlt ein Symbol, geschieht dafür nichts.
-void redirectFunctions(const char *exe, const Redirect *list, size_t count);
+void redirectFunctions(const ElfFile &elf, const char *exe, const Redirect *list, size_t count);
 
 // libc++ __tree_node<pair<const K, int>> und std::map: begin, end_node (nur left = Wurzel),
 // size. K ist uint32_t (AAC) oder int (Kategorien des Laders); beide 4 Byte, gleiche Bits. Der Schlüssel liegt ab 0x1c, der Wert ab 0x20; stimmt das nicht mehr,
