@@ -1,12 +1,9 @@
 // Editorgröße: hängt sich zwischen Resolve und ein geladenes Plugin und rechnet die Fenstergrößen
-// um (Erklärung in editor_size.cpp). Vom Lader und von der Wine-DPI genutzt.
+// um (Erklärung in editor_size.cpp). Vom Lader genutzt.
 #pragma once
 
 #include "plugin_conf.h"
 #include "vst2.h"
-
-// Skalierungsfaktor des Fensters, in das das Plugin zeichnet; ohne Fenster der des Hauptbildschirms.
-double editorScale(unsigned long long windowId = 0);
 
 // Der Callback, den Resolve dem Lader beim Laden gibt; editorCallback leitet an ihn weiter.
 void setEditorHost(audioMasterCallback callback);
