@@ -25,7 +25,7 @@
 #include <string>
 #include <vector>
 
-#include "loader.h"
+#include "editor_size.h"
 #include "plugin_conf.h"
 #include "log.h"
 #include "process.h"
