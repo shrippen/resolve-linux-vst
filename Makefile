@@ -41,7 +41,7 @@ test: $(BUILD)/sites-test
 
 # Plugin-Test mit Waves über yabridge (nur lokal, sonst übersprungen).
 plugin-test: all editor-test
-	tests/waves-dpi.sh
+	tests/wine-dpi.sh
 
 # clean lässt den AAC-Decoder (FFmpeg-Build dauert) stehen, distclean nimmt alles.
 clean:
