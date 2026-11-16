@@ -148,7 +148,8 @@ under Wine draw with the DPI of their Wine prefix, which resolve-linux-vst sets 
 loading it and restores when Resolve exits.
 
 Built-in defaults cover Waves (`wine-dpi = prefix`) and iZotope (`wine-zoom`, Wine scales the editor
-up). Everything else can be set per plug-in in `~/.config/resolve-linux-vst/plugins.conf`. A section is
+up). Everything else can be set per plug-in in `~/.config/resolve-linux-vst/plugins.conf`
+(`$XDG_CONFIG_HOME/resolve-linux-vst/plugins.conf` when that is set). A section is
 the plug-in's file name without extension, the VST3 plug-in or bundle name, or `Vendor/Name`;
 shell patterns work, the first match wins:
 
