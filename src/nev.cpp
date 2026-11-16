@@ -151,15 +151,10 @@ int openWith(OpenFunction f, const char *path, int flags, mode_t mode)
     return f(mapped, flags, mode);
 }
 
-bool isResolve()
-{
-    return strcmp(programName(), kProgResolve) == 0;
-}
-
 __attribute__((constructor)) void init()
 {
     const char *env = getenv("RESOLVE_LINUX_VST_NEV");
-    gActive = isResolve() && !(env && strcmp(env, "0") == 0);
+    gActive = isResolveMain() && !(env && strcmp(env, "0") == 0);
 }
 
 } // namespace

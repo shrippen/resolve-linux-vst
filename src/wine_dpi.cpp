@@ -318,7 +318,7 @@ WinePrefixState *prefixState(std::vector<WinePrefixState> &known, const std::str
 // bei wine-zoom, sonst 1). `prefix` aus winePrefixFor bzw. winePrefixForBundle.
 double syncWineDpi(const Names &names, const std::string &prefix)
 {
-    static const bool inResolve = isResolveProcess();
+    static const bool inResolve = loadsLikeResolve();
     static std::mutex mutex;
     static std::vector<WinePrefixState> known;
     if (!inResolve || prefix.empty()) {

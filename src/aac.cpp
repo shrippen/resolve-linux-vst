@@ -61,13 +61,13 @@ bool isAacName(const char *name)
 // Resolves Funktion. Nur Version 60: Andere Programme, die LD_PRELOAD erben und ein anderes
 // FFmpeg benutzen, bekommen ihre eigene Funktion und keinen AAC-Decoder von hier.
 template <typename F>
-F realFunction(const char *name, bool *isResolve)
+F realFunction(const char *name, bool *isFfmpeg60)
 {
     if (void *f = dlvsym(RTLD_NEXT, name, "LIBAVCODEC_60")) {
-        *isResolve = true;
+        *isFfmpeg60 = true;
         return reinterpret_cast<F>(f);
     }
-    *isResolve = false;
+    *isFfmpeg60 = false;
     return reinterpret_cast<F>(dlsym(RTLD_NEXT, name));
 }
 
@@ -118,10 +118,10 @@ F aacFunction(const char *name)
 EXPORT const void *avcodec_find_decoder(int id)
 {
     using F = const void *(*)(int);
-    static bool resolve = false;
-    static F real = realFunction<F>("avcodec_find_decoder", &resolve);
+    static bool isFfmpeg60 = false;
+    static F real = realFunction<F>("avcodec_find_decoder", &isFfmpeg60);
     const void *codec = real ? real(id) : nullptr;
-    if (!codec && resolve && isAac(id))
+    if (!codec && isFfmpeg60 && isAac(id))
         if (static F own = aacFunction<F>("avcodec_find_decoder"); own)
             codec = own(id);
     return codec;
@@ -130,10 +130,10 @@ EXPORT const void *avcodec_find_decoder(int id)
 EXPORT const void *avcodec_find_decoder_by_name(const char *name)
 {
     using F = const void *(*)(const char *);
-    static bool resolve = false;
-    static F real = realFunction<F>("avcodec_find_decoder_by_name", &resolve);
+    static bool isFfmpeg60 = false;
+    static F real = realFunction<F>("avcodec_find_decoder_by_name", &isFfmpeg60);
     const void *codec = real ? real(name) : nullptr;
-    if (!codec && resolve && isAacName(name))
+    if (!codec && isFfmpeg60 && isAacName(name))
         if (static F own = aacFunction<F>("avcodec_find_decoder_by_name"); own)
             codec = own(name);
     return codec;
@@ -145,10 +145,10 @@ EXPORT const void *avcodec_find_decoder_by_name(const char *name)
 EXPORT void *av_parser_init(int id)
 {
     using F = void *(*)(int);
-    static bool resolve = false;
-    static F real = realFunction<F>("av_parser_init", &resolve);
+    static bool isFfmpeg60 = false;
+    static F real = realFunction<F>("av_parser_init", &isFfmpeg60);
     void *parser = real ? real(id) : nullptr;
-    if (!parser && resolve && isAac(id))
+    if (!parser && isFfmpeg60 && isAac(id))
         if (static F own = aacFunction<F>("av_parser_init"); own)
             parser = own(id);
     return parser;
@@ -177,8 +177,6 @@ constexpr size_t kParChLayoutChannels = 0x94;
 constexpr int kMediaAudio = 1;
 constexpr int kProfileUnknown = -99;
 constexpr int kProfileAacLow = 1;
-
-bool isResolveExecutable();
 
 template <typename T>
 T &field(void *base, size_t offset)
@@ -245,7 +243,7 @@ EXPORT int avformat_write_header(void *format, void **options)
     static auto real = reinterpret_cast<F>(dlvsym(RTLD_NEXT, "avformat_write_header", "LIBAVFORMAT_60"));
     if (!real) { // anderes FFmpeg: Aufbau unbekannt, nichts anfassen
         static std::once_flag logged;
-        if (isResolveExecutable())
+        if (isResolveMain())
             std::call_once(logged, [] {
                 logMessage("AAC: libavformat ist nicht Version 60, AudioSpecificConfig beim Rendern nicht ergänzt; resolve-linux-vst check");
             });
@@ -533,11 +531,6 @@ void insert(MapHeader *map, uint32_t key, int value)
     ++map->size;
 }
 
-bool isResolveExecutable()
-{
-    return strcmp(programName(), kProgResolve) == 0;
-}
-
 void patchResolve()
 {
     CodeImage code;
@@ -640,7 +633,7 @@ EXPORT int __libc_start_main(MainFunction main, int argc, char **argv, void (*in
     auto real = reinterpret_cast<F>(dlvsym(RTLD_NEXT, "__libc_start_main", "GLIBC_2.2.5"));
     if (!real)
         real = reinterpret_cast<F>(dlsym(RTLD_NEXT, "__libc_start_main"));
-    if (isResolveExecutable() && aacLibrary()) {
+    if (isResolveMain() && aacLibrary()) {
         gMain = main;
         main = wrappedMain;
     }

@@ -75,7 +75,7 @@ void patchCategories()
 // erbt es). LC_ALL ginge vor, sein Wert wandert darum nach LANG.
 void fixNumericLocale()
 {
-    if (!isResolveProcess())
+    if (!loadsLikeResolve())
         return;
     if (const char *all = getenv("LC_ALL"); all && *all) {
         setenv("LANG", all, 1);
