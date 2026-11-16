@@ -17,7 +17,8 @@ Nikon N-RAW clips. A launcher script starts Resolve with a library loaded into i
 | `src/resolve_linux_vst.cpp` | The VST2 loader: loads a plug-in for Resolve. |
 | `src/wine_base.h` | Wine DPI: the decision which base DPI a Wine session has and whether to reset first, pure, so `tests/` can run it. |
 | `src/wine_dpi.cpp`, `src/wine_dpi.h` | Wine DPI: sets the DPI of a Windows plug-in's Wine prefix before it loads and tells the loader how far Wine scales it. |
-| `src/loader.h` | What the loader file offers its parts: settings per plug-in (`plugins.conf`), state folder, scale factor, which program this is. |
+| `src/loader.h` | What the loader file offers its parts: settings per plug-in (`plugins.conf`), state folder, scale factor. |
+| `src/process.cpp`, `src/process.h` | Which program the library runs in (read once); the program names, and `editor-test` as the one exception that counts as Resolve for the Wine DPI. |
 | `src/vst3.cpp` | The VST3 adapter: shows a VST3 plug-in to Resolve as a VST2 plug-in. |
 | `src/aac.cpp` | AAC: gives Resolve an AAC decoder from a second, small FFmpeg library. |
 | `src/nev.cpp` | N-RAW: shows Resolve every `.NEV` file as `.R3D`. |
@@ -96,15 +97,14 @@ Nikon N-RAW clips. A launcher script starts Resolve with a library loaded into i
 ## Known deviations
 
 - Loader and adapter each keep their own list of the VST2 numbers (`AUDIT.md`, finding 2).
-- "Is this Resolve?" is built three times (`AUDIT.md`, finding 3).
 - Writing a jump into Resolve's code is built twice, in loader and AAC
   (`AUDIT.md`, finding 7).
 - Launcher and library keep place and format of the Wine DPI file equal by hand
   (`AUDIT.md`, finding 4).
 - The loader file has five tasks: besides loading also opening the log file, `plugins.conf`,
   the editor size and the changes to the scanner (`AUDIT.md`, finding 9). The Wine DPI has its own file
-  but reaches back into the loader file for `plugins.conf`, state folder, scale factor and
-  "is this Resolve?" (`src/loader.h`).
+  but reaches back into the loader file for `plugins.conf`, state folder and scale factor
+  (`src/loader.h`).
 - `src/vst3.cpp` holds host objects, event loop, module loading and adapter in one file of
   1750 lines (`AUDIT.md`, finding 10).
 - Only the pattern search, the launcher's cleanup and the Wine DPI base decision have tests
