@@ -118,7 +118,7 @@ How large the plug-in draws is up to the plug-in:
 **Wine DPI.** Before loading a yabridge plug-in the library sets the prefix's DPI (through
 `$WINELOADER` like yabridge, only if it differs). Wine has no per-process DPI, so the previous
 value is remembered in `~/.local/state/resolve-linux-vst/wine-dpi-restore` and the launcher restores it
-when Resolve exits, also after a crash. The launcher hands that path to the library in
+(through the tool `wine-dpi-restore`, which runs Wine like the library) when Resolve exits, also after a crash. The launcher hands that path to the library in
 `RESOLVE_LINUX_VST_WINE_RESTORE`; without it (Resolve started without the launcher) the DPI stays.
 
 **Base DPI.** Wine scales every window by base DPI / the DPI the plug-in process started with.
