@@ -5,7 +5,7 @@
 constexpr const char *kProgResolve = "resolve";
 constexpr const char *kProgScanner = "VstScanner";
 // Ausnahme: Das Testwerkzeug lädt wie Resolve, auch mit Wine-DPI (tests/wine-dpi.sh).
-// Es zählt nur in isResolveProcess, nicht bei AAC und NEV.
+// Es zählt nur in loadsLikeResolve, nicht bei AAC und NEV.
 constexpr const char *kProgEditorTest = "editor-test";
 
 // Pfad des laufenden Programms, leer wenn nicht lesbar.
@@ -14,5 +14,8 @@ const char *exePath();
 // Basename des laufenden Programms, leer wenn nicht lesbar.
 const char *programName();
 
-// Resolve, VstScanner oder editor-test.
-bool isResolveProcess();
+// Das Hauptprogramm ist genau resolve (AAC, N-RAW).
+bool isResolveMain();
+
+// Lädt Plugins wie Resolve: resolve, VstScanner oder editor-test (Wine-DPI, Zahlenformat).
+bool loadsLikeResolve();
