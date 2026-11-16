@@ -11,7 +11,7 @@ BUILD ?= build
 
 VST3SRC  := src/vst3.cpp src/vst3_dispatch.cpp src/vst3_host.cpp src/vst3_iids.cpp src/vst3_module.cpp
 VST3HDR  := src/vst3_adapter.h src/vst3_host.h src/vst3_module.h
-SOURCES := src/resolve_linux_vst.cpp src/log.cpp src/wine_dpi.cpp src/process.cpp $(VST3SRC) src/aac.cpp src/nev.cpp src/x11.cpp src/sites.cpp src/patch.cpp $(VST3)/base/funknown.cpp
+SOURCES := src/resolve_linux_vst.cpp src/log.cpp src/plugin_conf.cpp src/editor_size.cpp src/scanner.cpp src/wine_dpi.cpp src/process.cpp $(VST3SRC) src/aac.cpp src/nev.cpp src/x11.cpp src/sites.cpp src/patch.cpp $(VST3)/base/funknown.cpp
 
 all: $(BUILD)/libresolve-linux-vst.so $(BUILD)/vst3-classes $(BUILD)/resolve-check
 
@@ -21,7 +21,7 @@ $(BUILD)/include/pluginterfaces:
 	@mkdir -p $(BUILD)/include
 	ln -sfn $(abspath $(VST3)) $@
 
-$(BUILD)/libresolve-linux-vst.so: $(SOURCES) src/vst2.h src/log.h src/sites.h src/patch.h src/loader.h src/process.h src/wine_dpi.h src/wine_base.h $(VST3HDR) src/exports.map | $(BUILD)/include/pluginterfaces
+$(BUILD)/libresolve-linux-vst.so: $(SOURCES) src/vst2.h src/log.h src/sites.h src/patch.h src/editor_size.h src/plugin_conf.h src/process.h src/wine_dpi.h src/wine_base.h $(VST3HDR) src/exports.map | $(BUILD)/include/pluginterfaces
 	$(CXX) $(CXXFLAGS) $(VST3INC) $(LDFLAGS) -o $@ $(SOURCES) $(LDLIBS)
 
 $(BUILD)/vst3-classes: tools/vst3-classes.cpp $(VST3SRC) src/log.cpp src/vst2.h src/log.h $(VST3HDR) | $(BUILD)/include/pluginterfaces
@@ -38,9 +38,9 @@ $(BUILD)/sites-test: tests/sites-test.cpp src/sites.cpp src/sites.h
 	$(CXX) $(filter-out -fPIC,$(CXXFLAGS)) -o $@ tests/sites-test.cpp src/sites.cpp
 
 # Test des Sprungs in Resolves Code (src/patch.cpp), an eigenem Speicher.
-$(BUILD)/patch-test: tests/patch-test.cpp src/patch.cpp src/patch.h
+$(BUILD)/patch-test: tests/patch-test.cpp src/patch.cpp src/patch.h src/log.cpp src/log.h
 	@mkdir -p $(BUILD)
-	$(CXX) $(filter-out -fPIC,$(CXXFLAGS)) -o $@ tests/patch-test.cpp src/patch.cpp
+	$(CXX) $(filter-out -fPIC,$(CXXFLAGS)) -o $@ tests/patch-test.cpp src/patch.cpp src/log.cpp
 
 # Test der Basis-DPI-Entscheidung (rein gerechnet, ohne Wine).
 $(BUILD)/wine-base-test: tests/wine-base-test.cpp src/wine_base.h

@@ -3,7 +3,10 @@
 #include <sys/mman.h>
 #include <unistd.h>
 
+#include <cerrno>
 #include <cstring>
+
+#include "log.h"
 
 namespace {
 
@@ -58,4 +61,13 @@ bool patchJumpIndirect(uintptr_t addr, size_t len, void *dest)
     }
     buildJumpIndirect(dest, code, len);
     return writeCode(addr, code, len);
+}
+
+bool patchJump(uintptr_t target, void *dest)
+{
+    if (patchJumpRax(target, dest)) {
+        return true;
+    }
+    logMessage("mprotect: %s", strerror(errno));
+    return false;
 }
