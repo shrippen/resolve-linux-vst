@@ -100,7 +100,17 @@ Nikon N-RAW clips. A launcher script starts Resolve with a library loaded into i
 ## Known deviations
 
 - The Wine DPI asks the editor size for the scale factor (`src/editor_size.h`), so two of the
-  loader's parts know each other.
+  loader's parts know each other (`AUDIT.md`, finding 7).
+- AAC inserts into Resolve's codec table with its own copy of the C++ map logic, and the
+  scanner reads the same kind of table with its own code; `patch.h` holds only the layout
+  (`AUDIT.md`, finding 4).
+- The launcher resets the Wine DPI with its own Wine command and registry key, the same rules
+  as `src/wine_dpi.cpp` in shell (`AUDIT.md`, finding 9).
+- "Is this Resolve?" has three meanings (`isResolveProcess`, a check for `resolve` in AAC and
+  N-RAW, a flag in AAC for Resolve's FFmpeg); `editor-test` counts as Resolve also for the
+  number format, not only for the Wine DPI (`AUDIT.md`, finding 3).
+- Writing a jump reports a failure in two ways: with its reason for loader and scanner, without
+  it for AAC (`AUDIT.md`, finding 6).
 - No automatic tests for loading plug-ins, the editor size, the VST3
   adapter and its saved state, AAC, N-RAW and the launcher's categories; only the plug-in test
   checks the Wine DPI with real plug-ins (`AUDIT.md`, finding 8).

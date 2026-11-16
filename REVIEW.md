@@ -39,8 +39,9 @@ matters crashes or silences Resolve, or damages the user's files:
 - Bug fixes: a test in `tests/` that failed before the fix and runs in `make test`, and the
   cause removed, not one case hidden. What only Resolve can show (hooks, editors, AAC render)
   is named in the PR as checked by hand, with the Resolve version.
-- Repeated code (`AUDIT.md`: log, "is this Resolve?", jump writing, VST2 numbers): a change
-  that fixed one copy and left the other.
+- Repeated knowledge (`ARCHITECTURE.md`, "Known deviations"): the C++ table layout in
+  `patch.h`, `aac.cpp` and `scanner.cpp`; the Wine DPI command in launcher and library; the
+  three meanings of "is this Resolve?". A change that fixed one place and left the other.
 
 ## What the owner confirms here
 
