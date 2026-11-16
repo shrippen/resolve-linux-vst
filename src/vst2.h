@@ -2,6 +2,7 @@
 // eigene Deklarationen). Gemeinsam für resolve_linux_vst.cpp und den VST3-Adapter (vst3*.cpp).
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <string>
 
@@ -48,7 +49,7 @@ enum {
     effGetParameterProperties = 56, effGetVstVersion = 58, effSetProcessPrecision = 77,
 };
 enum {
-    audioMasterAutomate = 0, audioMasterGetTime = 7, audioMasterIOChanged = 13,
+    audioMasterAutomate = 0, audioMasterVersion = 1, audioMasterGetTime = 7, audioMasterIOChanged = 13,
     audioMasterSizeWindow = 15, audioMasterUpdateDisplay = 42, audioMasterBeginEdit = 43,
     audioMasterEndEdit = 44,
 };
@@ -56,6 +57,60 @@ enum {
     effFlagsHasEditor = 1, effFlagsCanReplacing = 1 << 4, effFlagsProgramChunks = 1 << 5,
     effFlagsIsSynth = 1 << 8,
 };
+// VST-Version, die Host (audioMasterVersion) und Plugin (effGetVstVersion) melden: 2.4.
+constexpr int kVstVersion = 2400;
+
+// Zeitangaben des Hosts (audioMasterGetTime): Tempo, Takt, Position.
+struct VstTimeInfo {
+    double samplePos, sampleRate, nanoSeconds, ppqPos, tempo, barStartPos, cycleStartPos, cycleEndPos;
+    int32_t timeSigNumerator, timeSigDenominator, smpteOffset, smpteFrameRate, samplesToNextClock, flags;
+};
+enum {
+    kVstTransportPlaying = 1 << 1, kVstTransportCycleActive = 1 << 2, kVstTransportRecording = 1 << 3,
+    kVstNanosValid = 1 << 8, kVstPpqPosValid = 1 << 9, kVstTempoValid = 1 << 10, kVstBarsValid = 1 << 11,
+    kVstCyclePosValid = 1 << 12, kVstTimeSigValid = 1 << 13,
+};
+static_assert(sizeof(VstTimeInfo) == 88, "VstTimeInfo");
+static_assert(offsetof(VstTimeInfo, timeSigNumerator) == 64, "VstTimeInfo");
+static_assert(offsetof(VstTimeInfo, flags) == 84, "VstTimeInfo");
+
+// Ein- und Ausgänge (effGetInputProperties, effGetOutputProperties).
+struct VstPinProperties {
+    char label[64];
+    int32_t flags, arrangementType;
+    char shortLabel[8];
+    char future[48];
+};
+enum { kVstPinIsActive = 1 << 0, kVstPinIsStereo = 1 << 1 };
+enum { kSpeakerArrUserDefined = -2, kSpeakerArrEmpty = -1, kSpeakerArrMono = 0, kSpeakerArrStereo = 1 };
+static_assert(sizeof(VstPinProperties) == 128, "VstPinProperties");
+static_assert(offsetof(VstPinProperties, arrangementType) == 68, "VstPinProperties");
+
+// Angaben zu einem Parameter (effGetParameterProperties).
+struct VstParameterProperties {
+    float stepFloat, smallStepFloat, largeStepFloat;
+    char label[64];
+    int32_t flags, minInteger, maxInteger, stepInteger, largeStepInteger;
+    char shortLabel[8];
+    int16_t displayIndex, category, numParametersInCategory, reserved;
+    char categoryLabel[24];
+    char future[16];
+};
+enum {
+    kVstParameterIsSwitch = 1 << 0, kVstParameterUsesIntegerMinMax = 1 << 1,
+    kVstParameterUsesFloatStep = 1 << 2, kVstParameterUsesIntStep = 1 << 3,
+    kVstParameterSupportsDisplayIndex = 1 << 4,
+};
+static_assert(sizeof(VstParameterProperties) == 152, "VstParameterProperties");
+static_assert(offsetof(VstParameterProperties, flags) == 76, "VstParameterProperties");
+static_assert(offsetof(VstParameterProperties, displayIndex) == 104, "VstParameterProperties");
+
+// Kategorien eines Plugins (effGetPlugCategory).
+enum {
+    kPlugCategEffect = 1, kPlugCategSynth = 2, kPlugCategAnalysis = 3, kPlugCategMastering = 4,
+    kPlugCategSpacializer = 5, kPlugCategRoomFx = 6, kPlugCategRestoration = 8, kPlugCategGenerator = 11,
+};
+
 constexpr int kPreS = 0x50726553; // 'PreS'
 constexpr long kAeCs = 0x41654373; // 'AeCs'
 

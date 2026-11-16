@@ -23,16 +23,6 @@ namespace vst3 {
 
 namespace {
 
-struct VstTimeInfo {
-    double samplePos, sampleRate, nanoSeconds, ppqPos, tempo, barStartPos, cycleStartPos, cycleEndPos;
-    int32_t timeSigNumerator, timeSigDenominator, smpteOffset, smpteFrameRate, samplesToNextClock, flags;
-};
-enum {
-    kVstTransportPlaying = 1 << 1, kVstTransportCycleActive = 1 << 2, kVstTransportRecording = 1 << 3,
-    kVstNanosValid = 1 << 8, kVstPpqPosValid = 1 << 9, kVstTempoValid = 1 << 10, kVstBarsValid = 1 << 11,
-    kVstCyclePosValid = 1 << 12, kVstTimeSigValid = 1 << 13,
-};
-
 Adapter *adapterOf(AEffect *e)
 {
     return static_cast<Adapter *>(e->object);
