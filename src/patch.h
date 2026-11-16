@@ -25,6 +25,9 @@ bool writeCode(uintptr_t addr, const uint8_t *code, size_t len);
 // Überschreibt den Anfang von `target` mit buildJumpRax.
 bool patchJumpRax(uintptr_t target, void *dest);
 
+// Wie patchJumpRax; der Grund eines Fehlschlags kommt ins Protokoll (log.h).
+bool patchJump(uintptr_t target, void *dest);
+
 // Überschreibt `len` Bytes (14 bis 32) ab `addr` mit buildJumpIndirect.
 bool patchJumpIndirect(uintptr_t addr, size_t len, void *dest);
 
