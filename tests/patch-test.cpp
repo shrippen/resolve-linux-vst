@@ -194,6 +194,16 @@ void collectVisit(uint32_t key, int value, void *ctx)
 
 // Fügt `keys` in dieser Reihenfolge ein und prüft danach alles, was libc++ von der Tabelle
 // erwartet; `what` nennt die Reihenfolge.
+// Sucht einen Schlüssel im Baum (nur der Test braucht das).
+const MapNode *findNode(const MapHeader *map, uint32_t key)
+{
+    const MapNode *node = map->root;
+    while (node && node->key != key) {
+        node = key < node->key ? node->left : node->right;
+    }
+    return node;
+}
+
 void checkInsert(const std::vector<uint32_t> &keys, const char *what)
 {
     Table t;
@@ -212,7 +222,7 @@ void checkInsert(const std::vector<uint32_t> &keys, const char *what)
     }
     expect(v.keys == sorted && values, (name + ": Inorder sortiert, Werte stimmen").c_str());
     expect(t.map.size == keys.size(), (name + ": size").c_str());
-    expect(t.map.begin == (sorted.empty() ? t.map.endNode() : mapFind(&t.map, sorted.front())),
+    expect(t.map.begin == (sorted.empty() ? t.map.endNode() : findNode(&t.map, sorted.front())),
            (name + ": begin ist der kleinste Knoten").c_str());
     expect(!t.map.root || (t.map.root->black && t.map.root->parent == t.map.endNode()),
            (name + ": Wurzel schwarz, parent ist end_node").c_str());
@@ -221,11 +231,11 @@ void checkInsert(const std::vector<uint32_t> &keys, const char *what)
 
     bool found = true;
     for (uint32_t k : keys) {
-        const MapNode *n = mapFind(&t.map, k);
+        const MapNode *n = findNode(&t.map, k);
         found = found && n && n->key == k && n->value == valueOf(k);
     }
     expect(found, (name + ": Suchen findet jeden Schlüssel").c_str());
-    expect(!mapFind(&t.map, sorted.empty() ? 0 : sorted.back() + 1), (name + ": Suchen findet fehlenden nicht").c_str());
+    expect(!findNode(&t.map, sorted.empty() ? 0 : sorted.back() + 1), (name + ": Suchen findet fehlenden nicht").c_str());
 }
 
 void testMapInsert()
@@ -269,7 +279,12 @@ void testMapCollect()
                && values[3] == valueOf(40),
            "mapCollect: Schlüssel und Werte in Reihenfolge");
     expect(mapCollect(&t.map, keys, values, 4) == 4, "mapCollect: genau max Einträge passen");
+    // Wächter hinter max: mapCollect darf nicht über max hinaus schreiben (AAC: keys[8]).
+    constexpr uint32_t kGuard = 0xdeadbeef;
+    keys[3] = kGuard;
+    values[3] = int(kGuard);
     expect(mapCollect(&t.map, keys, values, 3) < 0, "mapCollect: mehr als max liefert -1");
+    expect(keys[3] == kGuard && values[3] == int(kGuard), "mapCollect: schreibt nicht über max hinaus");
 
     Table empty;
     expect(mapCollect(&empty.map, keys, values, 8) == 0, "mapCollect: leere Tabelle");
