@@ -15,22 +15,6 @@ namespace {
 
 constexpr int32_t kChunkMagic = 0x52335653; // 'R3VS'
 
-struct VstPinProperties {
-    char label[64];
-    int32_t flags, arrangementType;
-    char shortLabel[8];
-    char future[48];
-};
-struct VstParameterProperties {
-    float stepFloat, smallStepFloat, largeStepFloat;
-    char label[64];
-    int32_t flags, minInteger, maxInteger, stepInteger, largeStepInteger;
-    char shortLabel[8];
-    int16_t displayIndex, category, numParametersInCategory, reserved;
-    char categoryLabel[24];
-    char future[16];
-};
-
 // effGetParameterProperties: Name, Kurzname und Stufen eines Parameters im VST2-Format.
 long paramProperties(const ParameterInfo &p, void *ptr)
 {
@@ -39,9 +23,10 @@ long paramProperties(const ParameterInfo &p, void *ptr)
     copyString(props->label, utf8(p.title, 63), 64);
     copyString(props->shortLabel, utf8(p.shortTitle, 7), 8);
     if (p.stepCount == 1) {
-        props->flags = 1; // kVstParameterIsSwitch
+        props->flags = kVstParameterIsSwitch;
     } else if (p.stepCount > 1) {
-        props->flags = 4 | 16; // kVstParameterUsesIntegerMinMax | kVstParameterUsesIntStep
+        // Bit 2 und 4 wie bisher; die Namen nach vst2.h, gemeint war wohl IntegerMinMax | IntStep.
+        props->flags = kVstParameterUsesFloatStep | kVstParameterSupportsDisplayIndex;
         props->maxInteger = p.stepCount;
         props->stepInteger = props->largeStepInteger = 1;
     }
@@ -53,20 +38,20 @@ long plugCategory(const std::string &s)
 {
     auto has = [&s](const char *what) { return s.find(what) != std::string::npos; };
     if (has("Instrument"))
-        return 2; // kPlugCategSynth
+        return kPlugCategSynth;
     if (has("Analyzer"))
-        return 3;
+        return kPlugCategAnalysis;
     if (has("Mastering"))
-        return 4;
+        return kPlugCategMastering;
     if (has("Spatial"))
-        return 5;
+        return kPlugCategSpacializer;
     if (has("Reverb"))
-        return 6;
+        return kPlugCategRoomFx;
     if (has("Restoration"))
-        return 8;
+        return kPlugCategRestoration;
     if (has("Generator"))
-        return 11;
-    return 1; // kPlugCategEffect
+        return kPlugCategGenerator;
+    return kPlugCategEffect;
 }
 
 } // namespace
@@ -313,8 +298,8 @@ long Adapter::dispatch(int opcode, int index, long value, void *ptr, float opt)
         auto *pin = static_cast<VstPinProperties *>(ptr);
         memset(pin, 0, sizeof *pin);
         snprintf(pin->label, sizeof pin->label, "%s %d", opcode == effGetInputProperties ? "In" : "Out", index + 1);
-        pin->flags = 1 | (channels == 2 ? 2 : 0); // kVstPinIsActive | kVstPinIsStereo
-        pin->arrangementType = channels == 1 ? 0 : channels == 2 ? 1 : -2; // Mono, Stereo, unbekannt
+        pin->flags = kVstPinIsActive | (channels == 2 ? kVstPinIsStereo : 0);
+        pin->arrangementType = channels == 1 ? kSpeakerArrMono : channels == 2 ? kSpeakerArrStereo : kSpeakerArrUserDefined;
         return 1;
     }
     case effGetPlugCategory:
@@ -360,7 +345,7 @@ long Adapter::dispatch(int opcode, int index, long value, void *ptr, float opt)
         return tail == kNoTail ? 1 : long(tail);
     }
     case effGetVstVersion:
-        return 2400;
+        return kVstVersion;
     case effSetProcessPrecision:
         return value == 0 ? 1 : 0; // nur 32 Bit
     default:

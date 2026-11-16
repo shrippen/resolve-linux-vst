@@ -48,8 +48,9 @@ void resize(int w, int h)
 
 long host(AEffect *e, int opcode, int index, long value, void *, float)
 {
-    if (opcode == 1) // audioMasterVersion
-        return 2400;
+    if (opcode == audioMasterVersion) {
+        return kVstVersion;
+    }
     if (opcode == audioMasterIOChanged && e) {
         // Wie ein Host, der darauf das Plugin neu startet (Latenz übernehmen): Das darf nicht
         // hängen, auch nicht mitten in effMainsChanged.
