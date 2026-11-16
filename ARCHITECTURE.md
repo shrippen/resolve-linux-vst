@@ -27,12 +27,12 @@ Nikon N-RAW clips. A launcher script starts Resolve with a library loaded into i
 | `src/nev.cpp` | N-RAW: shows Resolve every `.NEV` file as `.R3D`. |
 | `src/x11.cpp` | Drops window sizes of 0 that would make a plug-in abort Resolve. |
 | `src/log.cpp`, `src/log.h` | The log: one function that writes a line with time and process; opens the log file when the loader asks, otherwise the caller sets the file. |
-| `src/patch.cpp`, `src/patch.h` | Writes a jump into Resolve's code, redirects the scanner's functions by name (found through `sites`), and knows the layout of the C++ tables loader and AAC read; no feature. |
+| `src/patch.cpp`, `src/patch.h` | Writes a jump into Resolve's code, redirects the scanner's functions by name (found through `sites`), and reads and inserts into the C++ tables (`std::map`) the scanner and AAC use; no feature. |
 | `src/sites.cpp`, `src/sites.h` | Finds the places in Resolve's code by byte patterns and holds the names of the functions the library redirects in VstScanner. Knows Resolve's binary, no feature. |
 | `src/exports.map` | The list of functions the library replaces in Resolve. What is not listed here has no effect. |
 | `src/vst2.h` | The VST2 interface, shared by loader and adapter: structures, command numbers, the adapter's entry points. |
 | `tools/*.cpp` | Programs built from `src/`: `resolve-check` (do the patterns still match?), `vst3-classes` (list the plug-ins of a bundle), `editor-test` (open a plug-in window without Resolve). Also the patch the AAC decoder's FFmpeg is built with. |
-| `tests/` | Tests that run without Resolve (`make test`: pattern search, program name, writing a jump, Wine DPI decisions, `plugins.conf`, VST3 parameter properties, launcher cleanup, executable scripts) and the local plug-in test `wine-dpi.sh` (`make plugin-test`). |
+| `tests/` | Tests that run without Resolve (`make test`: pattern search, program name, writing a jump, the C++ map, Wine DPI decisions, `plugins.conf`, VST3 parameter properties, launcher cleanup, executable scripts) and the local plug-in test `wine-dpi.sh` (`make plugin-test`). |
 | `install.sh`, `start.sh`, `Makefile` | Install, start from the source folder, build, release tarball (`make dist`). |
 | `third_party/vst3_pluginterfaces` | The VST3 interface headers (submodule), unchanged. |
 | `docs/`, `scripts/`, `tools/structure-check.py` | Landing page and internals; release notes; the structure check (synced copy). |
@@ -100,9 +100,6 @@ Nikon N-RAW clips. A launcher script starts Resolve with a library loaded into i
 
 ## Known deviations
 
-- AAC inserts into Resolve's codec table with its own copy of the C++ map logic, and the
-  scanner reads the same kind of table with its own code; `patch.h` holds only the layout
-  (`AUDIT.md`, finding 4).
 - The launcher resets the Wine DPI with its own Wine command and registry key, the same rules
   as `src/wine_dpi.cpp` in shell (`AUDIT.md`, finding 9).
 - "Is this Resolve?" has three meanings (`isResolveProcess`, a check for `resolve` in AAC and

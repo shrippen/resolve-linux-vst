@@ -1,5 +1,6 @@
-// Test von src/patch.cpp ohne Resolve: die Bytes der beiden Sprünge für erfundene Ziele und
-// das Schreiben in eine eigene, erst danach schreibgeschützte Seite. Läuft mit make test.
+// Test von src/patch.cpp ohne Resolve: die Bytes der beiden Sprünge für erfundene Ziele, das
+// Schreiben in eine eigene, erst danach schreibgeschützte Seite und Auslesen, Suchen und
+// Einfügen in eine selbst gebaute std::map-Tabelle. Läuft mit make test.
 #include "../src/patch.h"
 
 #include <sys/mman.h>
@@ -7,8 +8,11 @@
 
 #include <cerrno>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
+#include <algorithm>
 #include <string>
+#include <vector>
 
 namespace {
 
@@ -129,6 +133,163 @@ void testWriteFails()
     expect(!writeCode(0x10, code, sizeof code) && errno != 0, "writeCode: ungültige Adresse liefert false mit errno");
 }
 
+// Eine Tabelle wie in libc++: begin, Wurzel in end_node.left, size. Die Knoten legt mapInsert an.
+struct Table {
+    MapHeader map;
+    Table() { map = MapHeader{nullptr, nullptr, 0}; map.begin = map.endNode(); }
+    ~Table() { freeNodes(map.root); }
+    Table(const Table &) = delete;
+    Table &operator=(const Table &) = delete;
+
+    static void freeNodes(MapNode *node)
+    {
+        if (!node) {
+            return;
+        }
+        freeNodes(node->left);
+        freeNodes(node->right);
+        free(node);
+    }
+};
+
+constexpr int kValueFactor = 3;
+
+int valueOf(uint32_t key)
+{
+    return int(key) * kValueFactor + 1;
+}
+
+// Schwarzhöhe des Teilbaums, -1 bei einer verletzten Eigenschaft (zwei Rote in Folge,
+// ungleiche Höhe, falscher parent, falsche Ordnung).
+int blackHeight(const MapNode *node, const MapNode *parent, bool parentRed)
+{
+    if (!node) {
+        return 1;
+    }
+    if (node->parent != parent || (parentRed && !node->black)) {
+        return -1;
+    }
+    if ((node->left && node->left->key >= node->key) || (node->right && node->right->key < node->key)) {
+        return -1;
+    }
+    int l = blackHeight(node->left, node, !node->black);
+    int r = blackHeight(node->right, node, !node->black);
+    if (l < 0 || r < 0 || l != r) {
+        return -1;
+    }
+    return l + (node->black ? 1 : 0);
+}
+
+struct Visit {
+    std::vector<uint32_t> keys;
+    std::vector<int> values;
+};
+
+void collectVisit(uint32_t key, int value, void *ctx)
+{
+    auto *v = static_cast<Visit *>(ctx);
+    v->keys.push_back(key);
+    v->values.push_back(value);
+}
+
+// Sucht einen Schlüssel im Baum (nur der Test braucht das).
+const MapNode *findNode(const MapHeader *map, uint32_t key)
+{
+    const MapNode *node = map->root;
+    while (node && node->key != key) {
+        node = key < node->key ? node->left : node->right;
+    }
+    return node;
+}
+
+// Fügt `keys` in dieser Reihenfolge ein und prüft danach alles, was libc++ von der Tabelle
+// erwartet; `what` nennt die Reihenfolge.
+void checkInsert(const std::vector<uint32_t> &keys, const char *what)
+{
+    Table t;
+    for (uint32_t k : keys) {
+        mapInsert(&t.map, k, valueOf(k));
+    }
+    std::string name(what);
+    std::vector<uint32_t> sorted = keys;
+    std::sort(sorted.begin(), sorted.end());
+
+    Visit v;
+    mapEach(&t.map, collectVisit, &v);
+    bool values = true;
+    for (size_t i = 0; i < v.keys.size(); ++i) {
+        values = values && v.values[i] == valueOf(v.keys[i]);
+    }
+    expect(v.keys == sorted && values, (name + ": Inorder sortiert, Werte stimmen").c_str());
+    expect(t.map.size == keys.size(), (name + ": size").c_str());
+    expect(t.map.begin == (sorted.empty() ? t.map.endNode() : findNode(&t.map, sorted.front())),
+           (name + ": begin ist der kleinste Knoten").c_str());
+    expect(!t.map.root || (t.map.root->black && t.map.root->parent == t.map.endNode()),
+           (name + ": Wurzel schwarz, parent ist end_node").c_str());
+    expect(blackHeight(t.map.root, t.map.endNode(), false) >= 0,
+           (name + ": keine zwei Rote in Folge, gleiche Schwarzhöhe, parent und Ordnung").c_str());
+
+    bool found = true;
+    for (uint32_t k : keys) {
+        const MapNode *n = findNode(&t.map, k);
+        found = found && n && n->key == k && n->value == valueOf(k);
+    }
+    expect(found, (name + ": Suchen findet jeden Schlüssel").c_str());
+    expect(!findNode(&t.map, sorted.empty() ? 0 : sorted.back() + 1), (name + ": Suchen findet fehlenden nicht").c_str());
+}
+
+void testMapInsert()
+{
+    constexpr uint32_t kCount = 200;
+    std::vector<uint32_t> asc, desc, zigzag, mixed;
+    for (uint32_t i = 0; i < kCount; ++i) {
+        asc.push_back(i * 2);
+        desc.push_back((kCount - i) * 2);
+        zigzag.push_back(i % 2 ? kCount - i / 2 : i / 2);
+    }
+    // Feste Mischung: i * 37 mod 211 durchläuft für Primzahl 211 alle Reste ohne Wiederholung.
+    for (uint32_t i = 0; i < kCount; ++i) {
+        mixed.push_back(i * 37 % 211);
+    }
+
+    checkInsert({}, "leer");
+    checkInsert({5}, "ein Eintrag");
+    checkInsert({10, 20, 30}, "drei aufsteigend");
+    checkInsert({30, 20, 10}, "drei absteigend");
+    checkInsert({10, 30, 20}, "drei: Zickzack rechts-links");
+    checkInsert({30, 10, 20}, "drei: Zickzack links-rechts");
+    checkInsert({0x2e6d7033, 0x61632d33, 0x616c6163, 0x666c6163, 0x61616320, 0x6d703461},
+                "sechs Codec-Schlüssel wie in Resolve");
+    checkInsert(asc, "200 aufsteigend");
+    checkInsert(desc, "200 absteigend");
+    checkInsert(zigzag, "200 Zickzack");
+    checkInsert(mixed, "200 gemischt");
+}
+
+void testMapCollect()
+{
+    Table t;
+    for (uint32_t k : {40u, 10u, 30u, 20u}) {
+        mapInsert(&t.map, k, valueOf(k));
+    }
+    uint32_t keys[8];
+    int values[8];
+    expect(mapCollect(&t.map, keys, values, 8) == 4, "mapCollect: Anzahl");
+    expect(keys[0] == 10 && keys[1] == 20 && keys[2] == 30 && keys[3] == 40 && values[0] == valueOf(10)
+               && values[3] == valueOf(40),
+           "mapCollect: Schlüssel und Werte in Reihenfolge");
+    expect(mapCollect(&t.map, keys, values, 4) == 4, "mapCollect: genau max Einträge passen");
+    // Wächter hinter max: mapCollect darf nicht über max hinaus schreiben (AAC: keys[8]).
+    constexpr uint32_t kGuard = 0xdeadbeef;
+    keys[3] = kGuard;
+    values[3] = int(kGuard);
+    expect(mapCollect(&t.map, keys, values, 3) < 0, "mapCollect: mehr als max liefert -1");
+    expect(keys[3] == kGuard && values[3] == int(kGuard), "mapCollect: schreibt nicht über max hinaus");
+
+    Table empty;
+    expect(mapCollect(&empty.map, keys, values, 8) == 0, "mapCollect: leere Tabelle");
+}
+
 } // namespace
 
 // Wann leitet redirectFunctions eine Funktion um? Nur mit gefundenem Symbol, einem Ersatz,
@@ -151,6 +312,8 @@ int main()
     testWrite();
     testWriteAcrossPages();
     testWriteFails();
+    testMapInsert();
+    testMapCollect();
     printf("%s\n", failures ? "FEHLGESCHLAGEN" : "alle Tests bestanden");
     return failures ? 1 : 0;
 }
