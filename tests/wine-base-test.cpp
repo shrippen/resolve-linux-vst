@@ -95,6 +95,7 @@ int main()
     expect(dpiIs(setting("", "120"), 180, 120) && wineZoomFor(setting("", "120"), 180, 120) == 1.0,
            "wine-dpi 120: fest, Zoom 1");
     expect(setting("", "0").mode == WineMode::Leave, "wine-dpi 0: nicht anfassen");
+    expect(dpiIs(setting("", "2147483648"), 180, 192), "wine-dpi über int hinaus: auto wie vorher");
     expect(setting("", "0", "144").mode == WineMode::Leave, "wine-dpi 0 geht der Umgebungsvariable vor");
     expect(dpiIs(setting("", "", "144"), 180, 144), "Umgebungsvariable nur ohne wine-dpi");
     expect(dpiIs(setting("", "120", "144"), 180, 120), "wine-dpi geht der Umgebungsvariable vor");
