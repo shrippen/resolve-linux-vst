@@ -1,0 +1,28 @@
+// VST3-Adapter: VST3-Parameter als VST2-Parameter-Eigenschaften.
+
+#include "vst3_params.h"
+
+#include "vst2.h"
+
+namespace vst3 {
+
+// effGetParameterProperties: Name, Kurzname und Stufen eines Parameters im VST2-Format.
+long paramProperties(const ParameterInfo &p, void *ptr)
+{
+    auto *props = static_cast<VstParameterProperties *>(ptr);
+    memset(props, 0, sizeof *props);
+    copyString(props->label, utf8(p.title, 63), 64);
+    copyString(props->shortLabel, utf8(p.shortTitle, 7), 8);
+    if (p.stepCount == 1) {
+        props->flags = kVstParameterIsSwitch;
+    } else if (p.stepCount > 1) {
+        // Fehler (eigener Bugfix): sollte kVstParameterUsesIntegerMinMax | kVstParameterUsesIntStep
+        // sein; die Ganzzahl-Felder unten liest so kein Host.
+        props->flags = kVstParameterUsesFloatStep | kVstParameterSupportsDisplayIndex;
+        props->maxInteger = p.stepCount;
+        props->stepInteger = props->largeStepInteger = 1;
+    }
+    return 1;
+}
+
+} // namespace vst3
