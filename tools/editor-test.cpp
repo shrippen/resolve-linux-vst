@@ -144,11 +144,14 @@ void checkState(AEffect *e)
     }
 }
 
+// Wo das Testfenster liegt: außerhalb aller Bildschirme (Aufnahme mit XGetImage) oder sichtbar.
+enum class Placement { OnScreen, Offscreen };
+
 // Fenster aufnehmen; Rückgabe 0 bei Erfolg.
-int capture(bool offscreen, const char *outPath)
+int capture(Placement where, const char *outPath)
 {
     int status = 0;
-    if (offscreen) {
+    if (where == Placement::Offscreen) {
         XWindowAttributes a;
         XGetWindowAttributes(dpy, win, &a);
         XImage *img = XGetImage(dpy, win, 0, 0, unsigned(a.width), unsigned(a.height), AllPlanes, ZPixmap);
@@ -254,7 +257,7 @@ int main(int argc, char **argv)
     XWindowAttributes before;
     XGetWindowAttributes(dpy, win, &before);
     printf("Fenster %s\n", before.map_state == IsViewable ? "sichtbar" : "nicht sichtbar, wird gezeigt");
-    const int status = capture(offscreen, argv[2]);
+    const int status = capture(offscreen ? Placement::Offscreen : Placement::OnScreen, argv[2]);
     // Sauber schließen wie Resolve (eine yabridge-Plugingruppe hängt sonst beim nächsten
     // Editor). Manche Plugins (MPC Beats) hängen beim Schließen ohne Ereignisschleife des
     // Hosts: nach 10 s ohne Aufräumen beenden.
