@@ -1,5 +1,4 @@
-// Was der Lader (resolve_linux_vst.cpp) seinen Teilen bietet: Einstellungen je Plugin,
-// Skalierungsfaktor. Der Log steht in log.h, das laufende Programm in process.h.
+// Einstellungen je Plugin aus plugins.conf. Vom Lader, der Editorgröße und der Wine-DPI gelesen.
 #pragma once
 
 #include <string>
@@ -12,6 +11,3 @@ using Names = std::vector<std::string>;
 
 // Einstellung des Plugins aus plugins.conf, leer wenn nicht gesetzt.
 std::string pluginSetting(const Names &plugin, const char *key);
-
-// Skalierungsfaktor des Fensters, in das das Plugin zeichnet; ohne Fenster der des Hauptbildschirms.
-double editorScale(unsigned long long windowId = 0);

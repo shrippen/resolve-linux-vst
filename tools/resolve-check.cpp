@@ -105,7 +105,8 @@ int main(int argc, char **argv)
     const char *loader[] = {"_ZN15VSTPluginLoader4LoadEPKwPFlP7AEffectiilPvfERb", "_ZN15VSTPluginLoader5CloseEv"};
     checkSymbols(dir + "/libs/libFairlightPage.so", true, loader, 2);
 
-    // VstScanner: direkte Aufrufe, umgeleitet über die Symboltabelle (resolve_linux_vst.cpp).
+    // VstScanner: direkte Aufrufe, umgeleitet über die Symboltabelle (Load/Close in
+    // resolve_linux_vst.cpp, Kategorien in scanner.cpp).
     const char *scanner[] = {
         "_ZN15VSTPluginLoader4LoadEPKwPFlP7AEffectiilPvfERb",
         "_ZN15VSTPluginLoader5CloseEv",

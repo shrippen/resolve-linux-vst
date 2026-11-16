@@ -15,15 +15,17 @@ Nikon N-RAW clips. A launcher script starts Resolve with a library loaded into i
 |---|---|
 | `resolve-linux-vst` | The launcher: links the plug-ins into the folder Resolve scans (a VST3 plug-in as a folder with `bundle` and `class`), writes their categories, starts Resolve with the library and hands it the Wine DPI file, resets the Wine DPI afterwards, stops processes yabridge plug-in groups left behind (before Resolve, after it and on `restore`). Calls the built tools `vst3-classes` and `resolve-check`. |
 | `src/resolve_linux_vst.cpp` | The VST2 loader: loads a plug-in for Resolve. |
+| `src/plugin_conf.cpp`, `src/plugin_conf.h` | Settings per plug-in: reads `plugins.conf` and the built-in defaults. |
+| `src/editor_size.cpp`, `src/editor_size.h` | Editor size: sits between Resolve and a plug-in's editor, scales its window sizes, fixes yabridge's frame, sends the content scale; knows the scale factor. |
+| `src/scanner.cpp` | Scanner and number format: the categories Resolve's scanner reads and `LC_NUMERIC` at start; a feature of its own. |
 | `src/wine_base.h` | Wine DPI: the decision which base DPI a Wine session has and whether to reset first, pure, so `tests/` can run it. |
 | `src/wine_dpi.cpp`, `src/wine_dpi.h` | Wine DPI: sets the DPI of a Windows plug-in's Wine prefix before it loads and tells the loader how far Wine scales it. |
-| `src/loader.h` | What the loader file offers its parts: settings per plug-in (`plugins.conf`), scale factor. |
 | `src/process.cpp`, `src/process.h` | Which program the library runs in (read once); the program names, and `editor-test` as the one exception that counts as Resolve for the Wine DPI. |
 | `src/vst3.cpp` | The VST3 adapter: shows a VST3 plug-in to Resolve as a VST2 plug-in. |
 | `src/aac.cpp` | AAC: gives Resolve an AAC decoder from a second, small FFmpeg library. |
 | `src/nev.cpp` | N-RAW: shows Resolve every `.NEV` file as `.R3D`. |
 | `src/x11.cpp` | Drops window sizes of 0 that would make a plug-in abort Resolve. |
-| `src/log.cpp`, `src/log.h` | The log: one function that writes a line with time and process; the caller sets the file. |
+| `src/log.cpp`, `src/log.h` | The log: one function that writes a line with time and process; opens the log file when the loader asks, otherwise the caller sets the file. |
 | `src/patch.cpp`, `src/patch.h` | Writes a jump into Resolve's code and knows the layout of the C++ tables loader and AAC read; no feature. |
 | `src/sites.cpp`, `src/sites.h` | Finds the places in Resolve's code by byte patterns. Knows Resolve's binary, no feature. |
 | `src/exports.map` | The list of functions the library replaces in Resolve. What is not listed here has no effect. |
@@ -91,16 +93,14 @@ Nikon N-RAW clips. A launcher script starts Resolve with a library loaded into i
 | A new VST2 command Resolve sends | `src/vst2.h` (the number), then loader or adapter |
 | Something only VST3 plug-ins need | `src/vst3.cpp` only |
 | A new launcher command | `resolve-linux-vst`, README |
-| A new setting per plug-in (`plugins.conf`) | The file that reads `plugins.conf` (today part of the loader), README |
+| A new setting per plug-in (`plugins.conf`) | `src/plugin_conf.cpp` (built-in defaults there too), README |
 | Logic that can run without Resolve | Its own function, with a test in `tests/` and a line in `make test` |
 | A release | `RELEASE.md`, `CHANGELOG.md`, landing page |
 
 ## Known deviations
 
-- The loader file has five tasks: besides loading also opening the log file, `plugins.conf`,
-  the editor size and the changes to the scanner (`AUDIT.md`, finding 9). The Wine DPI has its own file
-  but reaches back into the loader file for `plugins.conf` and scale factor
-  (`src/loader.h`).
+- The Wine DPI asks the editor size for the scale factor (`src/editor_size.h`), so two of the
+  loader's parts know each other.
 - `src/vst3.cpp` holds host objects, event loop, module loading and adapter in one file of
   1750 lines (`AUDIT.md`, finding 10).
 - No automatic tests for loading plug-ins, reading `plugins.conf`, the editor size, the VST3
