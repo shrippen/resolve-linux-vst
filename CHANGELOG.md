@@ -3,6 +3,34 @@
 The release notes of resolve-linux-vst, newest first. Each section is the text of the release on
 Gitea and GitHub and of its entry in `#changes` on the landing page (`docs/index.html`).
 
+## [1.1.1] — 2026-11-16
+
+### English
+
+VST3 plug-ins with stepped controls (mode selectors, switches with several positions) tell Resolve their steps correctly.
+
+#### Improved
+- If AAC cannot adjust Resolve, the log now says why.
+
+#### Fixed
+- A VST3 control with a fixed number of positions told Resolve to move in fractional steps of size 0, so Resolve did not know where its positions were. It now reports whole-number positions from 0 to the last one.
+- `./install.sh --source` failed with "Permission denied" because the script was not executable.
+
+All changes: https://github.com/shrippen/resolve-linux-vst/compare/v1.1.0...v1.1.1
+
+### Deutsch
+
+VST3-Plugins mit gestuften Reglern (Moduswahl, Schalter mit mehreren Stellungen) melden Resolve ihre Stufen richtig.
+
+#### Verbessert
+- Kann AAC Resolve nicht anpassen, nennt das Log jetzt den Grund.
+
+#### Behoben
+- Ein VST3-Regler mit fester Zahl an Stellungen sagte Resolve, er bewege sich in Bruchteil-Schritten der Größe 0; Resolve wusste so nicht, wo seine Stellungen liegen. Er meldet jetzt ganzzahlige Stellungen von 0 bis zur letzten.
+- `./install.sh --source` scheiterte mit „Permission denied“, weil das Skript nicht ausführbar war.
+
+Alle Änderungen: https://github.com/shrippen/resolve-linux-vst/compare/v1.1.0...v1.1.1
+
 ## [1.1.0] — 2026-11-16
 
 ### English

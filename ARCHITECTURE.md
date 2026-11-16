@@ -107,4 +107,4 @@ Nikon N-RAW clips. A launcher script starts Resolve with a library loaded into i
 
 - No automatic tests for loading plug-ins, the editor size, the VST3
   adapter and its saved state, AAC, N-RAW and the launcher's categories; only the plug-in test
-  checks the Wine DPI with real plug-ins (`AUDIT.md`, finding 8).
+  checks the Wine DPI with real plug-ins (`AUDIT.md`, finding 4).
