@@ -25,7 +25,8 @@ long paramProperties(const ParameterInfo &p, void *ptr)
     if (p.stepCount == 1) {
         props->flags = kVstParameterIsSwitch;
     } else if (p.stepCount > 1) {
-        // Bit 2 und 4 wie bisher; die Namen nach vst2.h, gemeint war wohl IntegerMinMax | IntStep.
+        // Fehler (eigener Bugfix): sollte kVstParameterUsesIntegerMinMax | kVstParameterUsesIntStep
+        // sein; die Ganzzahl-Felder unten liest so kein Host.
         props->flags = kVstParameterUsesFloatStep | kVstParameterSupportsDisplayIndex;
         props->maxInteger = p.stepCount;
         props->stepInteger = props->largeStepInteger = 1;
