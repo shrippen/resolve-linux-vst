@@ -13,7 +13,7 @@ VST3SRC  := src/vst3.cpp src/vst3_dispatch.cpp src/vst3_host.cpp src/vst3_iids.c
 VST3HDR  := src/vst3_adapter.h src/vst3_host.h src/vst3_module.h
 SOURCES := src/resolve_linux_vst.cpp src/log.cpp src/plugin_conf.cpp src/editor_size.cpp src/scanner.cpp src/wine_dpi.cpp src/process.cpp $(VST3SRC) src/aac.cpp src/nev.cpp src/x11.cpp src/sites.cpp src/patch.cpp $(VST3)/base/funknown.cpp
 
-all: $(BUILD)/libresolve-linux-vst.so $(BUILD)/vst3-classes $(BUILD)/resolve-check
+all: $(BUILD)/libresolve-linux-vst.so $(BUILD)/vst3-classes $(BUILD)/resolve-check $(BUILD)/wine-dpi-restore
 
 # Die Header binden sich als "pluginterfaces/..." ein: Verweis unter build/include.
 $(BUILD)/include/pluginterfaces:
@@ -26,6 +26,13 @@ $(BUILD)/libresolve-linux-vst.so: $(SOURCES) src/vst2.h src/log.h src/sites.h sr
 
 $(BUILD)/vst3-classes: tools/vst3-classes.cpp $(VST3SRC) src/log.cpp src/vst2.h src/log.h $(VST3HDR) | $(BUILD)/include/pluginterfaces
 	$(CXX) $(filter-out -fPIC,$(CXXFLAGS)) $(VST3INC) -o $@ tools/vst3-classes.cpp $(VST3SRC) src/log.cpp $(VST3)/base/funknown.cpp $(LDLIBS)
+
+# Setzt die Wine-DPI nach Resolve zurück (vom Starter aufgerufen). Dieselbe Wine-Logik wie die
+# Bibliothek (src/wine_dpi.cpp), ohne sie selbst zu laden.
+WINE_RESTORE_SRC := tools/wine-dpi-restore.cpp src/wine_dpi.cpp src/plugin_conf.cpp src/editor_size.cpp src/log.cpp src/process.cpp
+$(BUILD)/wine-dpi-restore: $(WINE_RESTORE_SRC) src/wine_dpi.h src/wine_restore.h src/wine_base.h src/plugin_conf.h src/editor_size.h src/log.h src/process.h
+	@mkdir -p $(BUILD)
+	$(CXX) $(filter-out -fPIC,$(CXXFLAGS)) -o $@ $(WINE_RESTORE_SRC) $(LDLIBS)
 
 # Prüft ohne Resolve, ob die Stellen für den Lader noch passen (resolve-linux-vst check).
 $(BUILD)/resolve-check: tools/resolve-check.cpp src/sites.cpp src/sites.h
@@ -57,12 +64,18 @@ $(BUILD)/plugin-conf-test: tests/plugin-conf-test.cpp src/plugin_conf.cpp src/pl
 	@mkdir -p $(BUILD)
 	$(CXX) $(filter-out -fPIC,$(CXXFLAGS)) -o $@ tests/plugin-conf-test.cpp src/plugin_conf.cpp
 
-test: $(BUILD)/process-test $(BUILD)/sites-test $(BUILD)/patch-test $(BUILD)/wine-base-test $(BUILD)/plugin-conf-test
+# Test der Auswertung der Vorwert-Datei der Wine-DPI (ohne Wine).
+$(BUILD)/wine-restore-test: tests/wine-restore-test.cpp src/wine_restore.h
+	@mkdir -p $(BUILD)
+	$(CXX) $(filter-out -fPIC,$(CXXFLAGS)) -o $@ tests/wine-restore-test.cpp
+
+test: $(BUILD)/process-test $(BUILD)/sites-test $(BUILD)/patch-test $(BUILD)/wine-base-test $(BUILD)/plugin-conf-test $(BUILD)/wine-restore-test
 	$(BUILD)/process-test
 	$(BUILD)/sites-test
 	$(BUILD)/patch-test
 	$(BUILD)/wine-base-test
 	$(BUILD)/plugin-conf-test
+	$(BUILD)/wine-restore-test
 	tests/launcher-test.sh
 	tests/scripts-test.sh
 
@@ -72,7 +85,7 @@ plugin-test: all editor-test
 
 # clean lässt den AAC-Decoder (FFmpeg-Build dauert) stehen, distclean nimmt alles.
 clean:
-	rm -f $(BUILD)/process-test $(BUILD)/libresolve-linux-vst.so $(BUILD)/vst3-classes $(BUILD)/resolve-check $(BUILD)/sites-test $(BUILD)/patch-test $(BUILD)/wine-base-test $(BUILD)/plugin-conf-test $(BUILD)/editor-test
+	rm -f $(BUILD)/process-test $(BUILD)/libresolve-linux-vst.so $(BUILD)/vst3-classes $(BUILD)/resolve-check $(BUILD)/sites-test $(BUILD)/patch-test $(BUILD)/wine-base-test $(BUILD)/plugin-conf-test $(BUILD)/wine-restore-test $(BUILD)/wine-dpi-restore $(BUILD)/editor-test
 	rm -rf $(BUILD)/dist
 
 distclean:
@@ -86,6 +99,7 @@ install: all
 	install -Dm755 $(BUILD)/libresolve-linux-vst.so $(PREFIX)/lib/resolve-linux-vst/libresolve-linux-vst.so
 	install -Dm755 $(BUILD)/vst3-classes $(PREFIX)/lib/resolve-linux-vst/vst3-classes
 	install -Dm755 $(BUILD)/resolve-check $(PREFIX)/lib/resolve-linux-vst/resolve-check
+	install -Dm755 $(BUILD)/wine-dpi-restore $(PREFIX)/lib/resolve-linux-vst/wine-dpi-restore
 	if [ -f $(AAC_LIB) ]; then install -Dm755 $(AAC_LIB) $(PREFIX)/lib/resolve-linux-vst/ffmpeg-aac/libavcodec.so.60; fi
 	install -Dm755 resolve-linux-vst $(PREFIX)/bin/resolve-linux-vst
 	install -Dm644 resolve-linux-vst.desktop $(PREFIX)/share/applications/resolve-linux-vst.desktop

@@ -26,10 +26,12 @@ here=$(dirname "$(readlink -f "$0")")
 lib=${RESOLVE_LINUX_VST_LIB:-}
 classes=""
 check=""
+wine_restore=""
 for dir in "$here/build" "$here/../lib/resolve-linux-vst"; do
     [[ -z $lib && -f $dir/libresolve-linux-vst.so ]] && lib=$(readlink -f "$dir/libresolve-linux-vst.so")
     [[ -z $classes && -x $dir/vst3-classes ]] && classes=$(readlink -f "$dir/vst3-classes")
     [[ -z $check && -x $dir/resolve-check ]] && check=$(readlink -f "$dir/resolve-check")
+    [[ -z $wine_restore && -x $dir/wine-dpi-restore ]] && wine_restore=$(readlink -f "$dir/wine-dpi-restore")
 done
 resolve=${RESOLVE_BIN:-/opt/resolve/bin/resolve}
 links=${RESOLVE_LINUX_VST_LINKS:-${XDG_DATA_HOME:-$HOME/.local/share}/resolve-linux-vst/vst}
@@ -248,27 +250,16 @@ categories() {
     fi
 }
 
-# Setzt die Wine-DPI der Prefixe zurück, die der Lader während Resolve geändert hat.
-# Zeilen, die nicht zurückgesetzt werden konnten, bleiben für den nächsten Lauf stehen.
+# Setzt die Wine-DPI der Prefixe zurück, die der Lader während Resolve geändert hat (das
+# Werkzeug wine-dpi-restore, mit denselben Wine-Regeln wie der Lader). Zeilen, die nicht
+# zurückgesetzt werden konnten, bleiben für den nächsten Lauf stehen.
 restore_wine_dpi() {
     [[ -s $restore ]] || { rm -f "$restore"; return 0; }
-    local prefix dpi args keep="" key='HKCU\Control Panel\Desktop'
-    local wine=${WINELOADER:-wine}
-    while IFS=$'\t' read -r prefix dpi; do
-        [[ -n $prefix && -d $prefix ]] || continue
-        if [[ $dpi == -1 ]]; then
-            args=(reg delete "$key" /v LogPixels /f)
-        else
-            args=(reg add "$key" /v LogPixels /t REG_DWORD /d "$dpi" /f)
-        fi
-        if WINEPREFIX=$prefix WINEDEBUG=-all "$wine" "${args[@]}" >/dev/null 2>&1; then
-            echo "resolve-linux-vst: Wine DPI in $prefix back to ${dpi/#-1/default}" >&2
-        else
-            echo "resolve-linux-vst: Wine DPI in $prefix not reset" >&2
-            keep+="$prefix"$'\t'"$dpi"$'\n'
-        fi
-    done <"$restore"
-    if [[ -n $keep ]]; then printf '%s' "$keep" >"$restore"; else rm -f "$restore"; fi
+    if [[ -z $wine_restore ]]; then
+        echo "resolve-linux-vst: wine-dpi-restore not found (make?), Wine DPI not reset" >&2
+        return 0
+    fi
+    "$wine_restore" "$restore" || true
 }
 
 # Windows-Prozesse, die eine yabridge-Plugingruppe startet (WavesLocalServer.exe von Waves),

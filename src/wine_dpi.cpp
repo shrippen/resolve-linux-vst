@@ -160,6 +160,12 @@ bool writeWineDpi(const std::string &prefix, int dpi)
                             "/f"}) == 0;
 }
 
+// Löscht den Wert über `wine reg delete` (er war vor Resolve nicht gesetzt).
+bool deleteWineDpi(const std::string &prefix)
+{
+    return runWine(prefix, {"reg", "delete", kDpiKey, "/v", kDpiValue, "/f"}) == 0;
+}
+
 // Einstellung eines Plugins: wine-zoom, wine-dpi (je einmal aus plugins.conf), sonst
 // RESOLVE_LINUX_VST_WINE_DPI, sonst auto. Jedes yabridge-Plugin läuft in einem eigenen
 // Wine-Prozess und liest die DPI bei dessen Start, darum kann sie je Plugin verschieden sein
@@ -313,6 +319,12 @@ WinePrefixState *prefixState(std::vector<WinePrefixState> &known, const std::str
 }
 
 } // namespace
+
+// Setzt die Wine-DPI auf den gemerkten Vorwert zurück (Aufrufer: wine-dpi-restore).
+bool restoreWineDpi(const std::string &prefix, int dpi)
+{
+    return dpi == kWineDpiUnset ? deleteWineDpi(prefix) : writeWineDpi(prefix, dpi);
+}
 
 // Stellt die Wine-DPI für ein Plugin ein, liefert den Faktor für Instance::zoom (Basis / DPI
 // bei wine-zoom, sonst 1). `prefix` aus winePrefixFor bzw. winePrefixForBundle.
