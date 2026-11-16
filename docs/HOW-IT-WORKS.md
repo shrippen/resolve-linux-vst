@@ -259,7 +259,8 @@ build/editor-test ~/.local/share/resolve-linux-vst/vst/VST3/TB/TB_Compressor_v4.
 
 Start it with `LD_PRELOAD=build/libresolve-linux-vst.so` to get the library first in the symbol
 order as in Resolve; otherwise the plug-in's calls into libX11 bypass it (size 0, above). The
-library sets the Wine DPI as in Resolve; `resolve-linux-vst restore` sets it back.
+library sets the Wine DPI as in Resolve only with `RESOLVE_LINUX_VST_WINE_RESTORE` set (the launcher's
+default is `~/.local/state/resolve-linux-vst/wine-dpi-restore`); `resolve-linux-vst restore` sets it back.
 
 `make plugin-test` runs `tests/wine-dpi.sh`: it opens iZotope Neoverb, then Waves Butch Vig, in its
 own X server with the built-in settings and checks that each fills its editor window (local
