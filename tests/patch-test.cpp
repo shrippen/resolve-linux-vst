@@ -131,8 +131,21 @@ void testWriteFails()
 
 } // namespace
 
+// Wann leitet redirectFunctions eine Funktion um? Nur mit gefundenem Symbol, einem Ersatz,
+// und wenn nicht schon der Ersatz an der Stelle liegt.
+void testRedirectWanted()
+{
+    int replacement = 0;
+    const uintptr_t other = 0x400000;
+    expect(redirectWanted(other, &replacement), "Symbol gefunden, Ersatz da: umleiten");
+    expect(!redirectWanted(0, &replacement), "Symbol fehlt: nicht umleiten");
+    expect(!redirectWanted(other, nullptr), "kein Ersatz: nicht umleiten");
+    expect(!redirectWanted(uintptr_t(&replacement), &replacement), "Ersatz liegt schon dort: nicht umleiten");
+}
+
 int main()
 {
+    testRedirectWanted();
     testRaxBytes();
     testIndirectBytes();
     testWrite();
