@@ -17,7 +17,6 @@ struct ClassInfo {
 // Eine Klasse der Fabrik mit allen Angaben, die Lader und Liste brauchen.
 struct FactoryClass { TUID cid; std::string category; ClassInfo info; };
 
-
 IPluginFactory *factoryFor(const std::string &bundle);
 std::vector<FactoryClass> factoryClasses(IPluginFactory *factory);
 bool classInfo(IPluginFactory *factory, const TUID cid, ClassInfo &out);

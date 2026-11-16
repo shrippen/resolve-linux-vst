@@ -93,6 +93,7 @@ IPluginFactory *factoryFor(const std::string &bundle)
     return factory;
 }
 
+// Alle Klassen der Fabrik in deren Reihenfolge. Alte Plugins ohne IPluginFactory2 liefern nur
 // PClassInfo: Hersteller dann aus der Fabrik, Version und Unterkategorien leer.
 std::vector<FactoryClass> factoryClasses(IPluginFactory *factory)
 {
