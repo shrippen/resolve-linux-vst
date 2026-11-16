@@ -240,7 +240,7 @@ are; [How it works](docs/HOW-IT-WORKS.md#finding-the-hooks-again) explains how t
   host; `resolve-linux-vst` stops them after a crash, by hand: `pkill -f 'yabridge-host.exe.so group'`.
 - **Waves plug-ins do not load ("Another process is already listening on this group's socket"):**
   `WavesLocalServer.exe` outlived the Waves group and holds its socket. `resolve-linux-vst` stops such
-  processes when Resolve exits; by hand: `resolve-linux-vst restore`.
+  processes before Resolve starts and when it exits; by hand: `resolve-linux-vst restore`.
 - **Test a plug-in without Resolve:** `make editor-test`, then
   `build/editor-test <plugin.so | link-folder entry> out.png` loads it like Resolve, runs audio,
   parameters and state through it and screenshots the editor. It sets the Wine DPI of yabridge

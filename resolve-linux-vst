@@ -6,7 +6,7 @@
 #   resolve-linux-vst list                  list the plug-ins found (VST3 with their classes)
 #   resolve-linux-vst restore               reset a changed Wine DPI, stop processes left on
 #                                           yabridge group sockets (otherwise automatic when
-#                                           Resolve exits)
+#                                           Resolve starts and exits)
 #   resolve-linux-vst categories            write categories of new plug-ins into Resolve's list
 #                                           (otherwise done on every start)
 #   resolve-linux-vst rescan                set Resolve's plug-in list aside: Resolve scans all

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Test des Launchers ohne Resolve (RESOLVE_BIN=true, eigenes HOME): nach dem Ende von Resolve
-# beendet er Prozesse, die einen yabridge-Gruppen-Socket weiter belegen, wenn kein
+# Test des Launchers ohne Resolve (RESOLVE_BIN=true, eigenes HOME): vor dem Start und nach dem
+# Ende von Resolve beendet er Prozesse, die einen yabridge-Gruppen-Socket weiter belegen, wenn kein
 # Gruppenprozess mehr darauf hört (WavesLocalServer.exe erbt den Socket der Waves-Gruppe und
 # blockiert sonst die nächste Gruppe). Gruppenprozesse und was sie mit ihnen teilen, bleiben.
 set -euo pipefail
