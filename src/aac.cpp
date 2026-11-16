@@ -36,7 +36,7 @@
 #include <string>
 
 #include "sites.h"
-#include "vst2.h"
+#include "log.h"
 
 #define EXPORT extern "C" __attribute__((visibility("default"), used))
 

@@ -37,38 +37,12 @@
 #include <vector>
 
 #include "loader.h"
+#include "log.h"
 #include "sites.h"
 #include "vst2.h"
 #include "wine_dpi.h"
 
 #define EXPORT __attribute__((visibility("default"), used, noinline))
-
-namespace {
-
-FILE *gLog = nullptr;
-
-void vlog(const char *fmt, va_list ap)
-{
-    if (!gLog)
-        return;
-    char stamp[32];
-    time_t now = time(nullptr);
-    strftime(stamp, sizeof stamp, "%F %T", localtime(&now));
-    fprintf(gLog, "%s [%d] ", stamp, getpid());
-    vfprintf(gLog, fmt, ap);
-    fputc('\n', gLog);
-    fflush(gLog);
-}
-
-__attribute__((format(printf, 1, 2))) void logf(const char *fmt, ...)
-{
-    va_list ap;
-    va_start(ap, fmt);
-    vlog(fmt, ap);
-    va_end(ap);
-}
-
-} // namespace
 
 // $XDG_STATE_HOME/resolve-linux-vst (Standard ~/.local/state/resolve-linux-vst), wird angelegt.
 // Dieselbe Regel steht in resolve-linux-vst.
@@ -96,9 +70,9 @@ void openLog()
     else if (const std::string dir = stateDir(); !dir.empty())
         path = dir + "/resolve-linux-vst.log";
     if (!path.empty() && path != "-")
-        gLog = fopen(path.c_str(), "a");
+        setLogFile(fopen(path.c_str(), "a"));
     else if (path == "-")
-        gLog = stderr;
+        setLogFile(stderr);
 }
 
 // Resolve übergibt Pfade als wchar_t (UTF-32). Nicht über wcstombs, das hängt am Locale.
@@ -232,14 +206,6 @@ std::string pluginSetting(const Names &plugin, const char *key)
     return value;
 }
 
-void logMessage(const char *fmt, ...)
-{
-    va_list ap;
-    va_start(ap, fmt);
-    vlog(fmt, ap);
-    va_end(ap);
-}
-
 namespace {
 
 // Editorgröße: Plugins melden ihre Größe (effEditGetRect, audioMasterSizeWindow) in
@@ -347,16 +313,16 @@ void sendContentScale(Instance *in, AEffect *effect)
         if (const char *env = getenv("RESOLVE_LINUX_VST_CONTENT_SCALE"))
             setting = env;
     if (setting.empty() && in->zoom != 1.0) {
-        logf("  keine Inhaltsskalierung für %s: Wine vergrößert (%.2f)", in->names[0].c_str(), in->zoom);
+        logMessage("  keine Inhaltsskalierung für %s: Wine vergrößert (%.2f)", in->names[0].c_str(), in->zoom);
         return;
     }
     const double scale = setting.empty() || setting == "auto" ? in->scale : atof(setting.c_str());
     if (scale <= 0) {
-        logf("  Inhaltsskalierung für %s abgeschaltet", in->names[0].c_str());
+        logMessage("  Inhaltsskalierung für %s abgeschaltet", in->names[0].c_str());
         return;
     }
     long result = in->dispatcher(effect, effVendorSpecific, kPreS, kAeCs, nullptr, float(scale));
-    logf("  Inhaltsskalierung %.2f an Plugin %p (Antwort %ld)", scale, static_cast<void *>(effect), result);
+    logMessage("  Inhaltsskalierung %.2f an Plugin %p (Antwort %ld)", scale, static_cast<void *>(effect), result);
 }
 
 long nowMs()
@@ -438,7 +404,7 @@ Xcb *xcb()
         return nullptr;
     void *c = x.connect(nullptr, nullptr);
     if (!c || x.hasError(c)) {
-        logf("Rahmen: keine X11-Verbindung");
+        logMessage("Rahmen: keine X11-Verbindung");
         return nullptr;
     }
     x.connection = c;
@@ -470,7 +436,7 @@ void fixFrame(Instance *in)
         if (g && (g->width != w || g->height != h)) {
             const uint32_t size[] = {uint32_t(w), uint32_t(h)};
             x->configureWindow(c, kids[i], 4 | 8, size); // XCB_CONFIG_WINDOW_WIDTH | _HEIGHT
-            logf("Rahmen: Unterfenster %#x von %dx%d auf %dx%d", kids[i], g->width, g->height, w, h);
+            logMessage("Rahmen: Unterfenster %#x von %dx%d auf %dx%d", kids[i], g->width, g->height, w, h);
         }
         free(g);
     }
@@ -494,7 +460,7 @@ long dispatch(AEffect *effect, int opcode, int index, long value, void *ptr, flo
     switch (opcode) {
     case effEditOpen: {
         in->scale = editorScale(reinterpret_cast<uintptr_t>(ptr));
-        logf("Editor öffnen: Plugin %p, Fenster %#lx, Skalierung %.2f", static_cast<void *>(effect),
+        logMessage("Editor öffnen: Plugin %p, Fenster %#lx, Skalierung %.2f", static_cast<void *>(effect),
              static_cast<unsigned long>(reinterpret_cast<uintptr_t>(ptr)), in->scale);
         sendContentScale(in, effect);
         long result = in->dispatcher(effect, opcode, index, value, ptr, opt);
@@ -537,7 +503,7 @@ long dispatch(AEffect *effect, int opcode, int index, long value, void *ptr, flo
                             scaled(r.bottom, in->scale), scaled(r.right, in->scale)};
                 *rect = &in->rect;
             }
-            logf("Editorgröße: Plugin %p meldet %dx%d%s, an Resolve %dx%d", static_cast<void *>(effect),
+            logMessage("Editorgröße: Plugin %p meldet %dx%d%s, an Resolve %dx%d", static_cast<void *>(effect),
                  reported.right - reported.left, reported.bottom - reported.top, replaced ? " (ersetzt)" : "",
                  (*rect)->right - (*rect)->left, (*rect)->bottom - (*rect)->top);
         }
@@ -564,13 +530,13 @@ long hostCallback(AEffect *effect, int opcode, int index, long value, void *ptr,
         }
         if (in && (in->scale != 1.0 || in->zoom != 1.0)) {
             const double f = in->zoom / in->scale;
-            logf("Plugin %p will %dx%d, an Resolve %ldx%ld", static_cast<void *>(effect), index, int(value),
+            logMessage("Plugin %p will %dx%d, an Resolve %ldx%ld", static_cast<void *>(effect), index, int(value),
                  lround(index * f), lround(value * f));
             index = static_cast<int>(lround(index * f));
             value = lround(value * f);
         }
         long result = gHostCallback.load(std::memory_order_relaxed)(effect, opcode, index, value, ptr, opt);
-        logf("  audioMasterSizeWindow: Resolve antwortet %ld", result);
+        logMessage("  audioMasterSizeWindow: Resolve antwortet %ld", result);
         if (in)
             fixFrame(in);
         return result;
@@ -597,7 +563,7 @@ void wrap(AEffect *effect, const Names &names, double zoom)
         effect->dispatcher = dispatch;
         return;
     }
-    logf("  zu viele Plugin-Instanzen, Editorgröße wird nicht angepasst");
+    logMessage("  zu viele Plugin-Instanzen, Editorgröße wird nicht angepasst");
 }
 
 } // namespace
@@ -630,13 +596,13 @@ private:
 AEffect *VSTPluginLoader::Load(const wchar_t *wpath, audioMasterCallback callback, bool &failed)
 {
     const std::string path = toUtf8(wpath);
-    logf("Load %s", path.c_str());
+    logMessage("Load %s", path.c_str());
 
     if (isDirectory(path)) {
         // Ordner Name.vst mit bundle und class: VST3-Plugin über den Adapter (vst3.cpp).
         // Andere Ordner wie carla.vst/ sind keine Plugins.
         if (!isVst3Entry(path)) {
-            logf("  übersprungen: Ordner");
+            logMessage("  übersprungen: Ordner");
             failed = true;
             return nullptr;
         }
@@ -653,7 +619,7 @@ AEffect *VSTPluginLoader::Load(const wchar_t *wpath, audioMasterCallback callbac
         }
         wrap(effect, names, zoom);
         loaded_ = 1;
-        logf("  ok, VST3 als AEffect %p", static_cast<void *>(effect));
+        logMessage("  ok, VST3 als AEffect %p", static_cast<void *>(effect));
         return effect;
     }
 
@@ -665,7 +631,7 @@ AEffect *VSTPluginLoader::Load(const wchar_t *wpath, audioMasterCallback callbac
         file = real;
         free(real);
         if (file != path)
-            logf("  → %s", file.c_str());
+            logMessage("  → %s", file.c_str());
     }
     const Names names{pluginName(file), pluginNameWithFolder(file)};
     const std::string prefix = winePrefixFor(file);
@@ -676,7 +642,7 @@ AEffect *VSTPluginLoader::Load(const wchar_t *wpath, audioMasterCallback callbac
         flags |= RTLD_DEEPBIND;
     void *handle = dlopen(file.c_str(), flags);
     if (!handle) {
-        logf("  dlopen: %s", dlerror());
+        logMessage("  dlopen: %s", dlerror());
         failed = true;
         return nullptr;
     }
@@ -685,7 +651,7 @@ AEffect *VSTPluginLoader::Load(const wchar_t *wpath, audioMasterCallback callbac
     if (!entry)
         entry = reinterpret_cast<VstEntry>(dlsym(handle, "main"));
     if (!entry) {
-        logf("  kein VSTPluginMain/main, kein VST2-Plugin");
+        logMessage("  kein VSTPluginMain/main, kein VST2-Plugin");
         dlclose(handle);
         failed = true;
         return nullptr;
@@ -695,7 +661,7 @@ AEffect *VSTPluginLoader::Load(const wchar_t *wpath, audioMasterCallback callbac
     gHostCallback.store(callback, std::memory_order_relaxed);
     AEffect *effect = entry(hostCallback);
     if (!effect || effect->magic != kEffectMagic) {
-        logf("  Einstiegspunkt lieferte %p, kein gültiger AEffect", static_cast<void *>(effect));
+        logMessage("  Einstiegspunkt lieferte %p, kein gültiger AEffect", static_cast<void *>(effect));
         // Handle bewusst offen lassen: manche Plugins hinterlassen nach einem
         // fehlgeschlagenen Start Threads oder atexit-Handler.
         failed = true;
@@ -704,7 +670,7 @@ AEffect *VSTPluginLoader::Load(const wchar_t *wpath, audioMasterCallback callbac
 
     wrap(effect, names, zoom);
     loaded_ = 1;
-    logf("  ok, AEffect %p", static_cast<void *>(effect));
+    logMessage("  ok, AEffect %p", static_cast<void *>(effect));
     return effect;
 }
 
@@ -729,7 +695,7 @@ bool patchJump(uintptr_t target, void *dest)
     uintptr_t page = target & ~uintptr_t(pageSize - 1);
     size_t len = (target + sizeof code) - page;
     if (mprotect(reinterpret_cast<void *>(page), len, PROT_READ | PROT_WRITE | PROT_EXEC) != 0) {
-        logf("mprotect: %s", strerror(errno));
+        logMessage("mprotect: %s", strerror(errno));
         return false;
     }
     memcpy(reinterpret_cast<void *>(target), code, sizeof code);
@@ -824,7 +790,7 @@ void patchExecutable()
             || (p.replacement == reinterpret_cast<void *>(&categoryMaskOut) && !gMaskOut))
             continue;
         bool ok = patchJump(addr, p.replacement);
-        logf("%s: %s bei %#lx %s", exe, p.name, static_cast<unsigned long>(addr), ok ? "umgeleitet" : "NICHT umgeleitet");
+        logMessage("%s: %s bei %#lx %s", exe, p.name, static_cast<unsigned long>(addr), ok ? "umgeleitet" : "NICHT umgeleitet");
     }
 }
 

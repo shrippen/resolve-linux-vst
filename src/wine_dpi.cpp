@@ -25,7 +25,7 @@
 #include <vector>
 
 #include "loader.h"
-#include "vst2.h"
+#include "log.h"
 #include "wine_dpi.h"
 
 namespace {

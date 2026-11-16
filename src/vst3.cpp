@@ -28,7 +28,7 @@
 #include "pluginterfaces/vst/ivstparameterchanges.h"
 #include "pluginterfaces/vst/ivstprocesscontext.h"
 #include "pluginterfaces/vst/vstspeaker.h"
-
+#include "log.h"
 #include "vst2.h"
 
 #include <dirent.h>
