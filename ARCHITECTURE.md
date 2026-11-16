@@ -16,7 +16,8 @@ Nikon N-RAW clips. A launcher script starts Resolve with a library loaded into i
 | `resolve-linux-vst` | The launcher: links the plug-ins into the folder Resolve scans (a VST3 plug-in as a folder with `bundle` and `class`), writes their categories, starts Resolve with the library and hands it the Wine DPI file, resets the Wine DPI afterwards, stops processes yabridge plug-in groups left behind (before Resolve, after it and on `restore`). Calls the built tools `vst3-classes` and `resolve-check`. |
 | `src/resolve_linux_vst.cpp` | The VST2 loader: loads a plug-in for Resolve. |
 | `src/plugin_conf.cpp`, `src/plugin_conf.h` | Settings per plug-in: reads `plugins.conf` and the built-in defaults. |
-| `src/editor_size.cpp`, `src/editor_size.h` | Editor size: sits between Resolve and a plug-in's editor, scales its window sizes, fixes yabridge's frame, sends the content scale; knows the scale factor. |
+| `src/editor_size.cpp`, `src/editor_size.h` | Editor size: sits between Resolve and a plug-in's editor, scales its window sizes, fixes yabridge's frame, sends the content scale. |
+| `src/scale.cpp`, `src/scale.h` | Resolve's scale factor (Qt, per window, or `RESOLVE_LINUX_VST_EDITOR_SCALE`); below editor size and Wine DPI, which both use it. |
 | `src/scanner.cpp` | Scanner and number format: the categories Resolve's scanner reads and `LC_NUMERIC` at start; a feature of its own. |
 | `src/wine_base.h` | Wine DPI: the decision which base DPI a Wine session has and whether to reset first, pure, so `tests/` can run it. |
 | `src/wine_dpi.cpp`, `src/wine_dpi.h` | Wine DPI: sets the DPI of a Windows plug-in's Wine prefix before it loads and tells the loader how far Wine scales it. |
@@ -99,8 +100,6 @@ Nikon N-RAW clips. A launcher script starts Resolve with a library loaded into i
 
 ## Known deviations
 
-- The Wine DPI asks the editor size for the scale factor (`src/editor_size.h`), so two of the
-  loader's parts know each other (`AUDIT.md`, finding 7).
 - AAC inserts into Resolve's codec table with its own copy of the C++ map logic, and the
   scanner reads the same kind of table with its own code; `patch.h` holds only the layout
   (`AUDIT.md`, finding 4).
