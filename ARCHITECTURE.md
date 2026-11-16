@@ -103,5 +103,6 @@ Nikon N-RAW clips. A launcher script starts Resolve with a library loaded into i
   (`src/loader.h`).
 - `src/vst3.cpp` holds host objects, event loop, module loading and adapter in one file of
   1750 lines (`AUDIT.md`, finding 10).
-- Loading plug-ins, the VST3 adapter, AAC and N-RAW have no automatic tests; only the
-  plug-in test checks the Wine DPI with real plug-ins (`AUDIT.md`, finding 8).
+- No automatic tests for loading plug-ins, reading `plugins.conf`, the editor size, the VST3
+  adapter and its saved state, AAC, N-RAW and the launcher's categories; only the plug-in test
+  checks the Wine DPI with real plug-ins (`AUDIT.md`, finding 8).
