@@ -1,8 +1,8 @@
 // Eingriffe in Code und Datenstrukturen von Resolve, die kein Feature allein braucht: einen
 // Sprung in Resolves Programmcode schreiben (Lader, Scanner, AAC), Funktionen des Programms
-// über ihre Namen umleiten (Namen in sites.h) und der Aufbau der Tabellen (std::map) in
-// Resolves C++-Bibliothek. Die Byte-Muster zum Finden der Stellen stehen
-// allein in sites.cpp.
+// über ihre Namen umleiten (Namen in sites.h) und Tabellen (std::map) aus Resolves
+// C++-Bibliothek lesen und in sie einfügen (Scanner, AAC). Die Byte-Muster zum Finden der
+// Stellen stehen allein in sites.cpp.
 #pragma once
 
 #include <cstddef>

@@ -105,8 +105,6 @@ Nikon N-RAW clips. A launcher script starts Resolve with a library loaded into i
 - "Is this Resolve?" has three meanings (`isResolveProcess`, a check for `resolve` in AAC and
   N-RAW, a flag in AAC for Resolve's FFmpeg); `editor-test` counts as Resolve also for the
   number format, not only for the Wine DPI (`AUDIT.md`, finding 3).
-- Writing a jump reports a failure in two ways: with its reason for loader and scanner, without
-  it for AAC (`AUDIT.md`, finding 6).
 - No automatic tests for loading plug-ins, the editor size, the VST3
   adapter and its saved state, AAC, N-RAW and the launcher's categories; only the plug-in test
   checks the Wine DPI with real plug-ins (`AUDIT.md`, finding 8).
