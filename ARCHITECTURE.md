@@ -103,8 +103,8 @@ Nikon N-RAW clips. A launcher script starts Resolve with a library loaded into i
   (`AUDIT.md`, finding 4).
 - The loader file has five tasks: besides loading also the log, `plugins.conf`, the editor
   size and the changes to the scanner (`AUDIT.md`, finding 9). The Wine DPI has its own file
-  but reaches back into the loader file for `plugins.conf`, state folder and scale factor
-  (`src/loader.h`).
+  but reaches back into the loader file for `plugins.conf`, state folder, scale factor and
+  "is this Resolve?" (`src/loader.h`).
 - `src/vst3.cpp` holds host objects, event loop, module loading and adapter in one file of
   1750 lines (`AUDIT.md`, finding 10).
 - Only the pattern search has tests (`AUDIT.md`, finding 8).
