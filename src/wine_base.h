@@ -79,7 +79,8 @@ inline WineSetting wineDpiValue(const std::string &dpi, double scale)
     }
     char *end;
     const long n = strtol(v, &end, 10);
-    if (strncmp(v, "auto", 4) != 0 && end != v && n >= 0) {
+    // Was nicht in int passt, gilt wie vorher als auto (int(n) < 0).
+    if (strncmp(v, "auto", 4) != 0 && end != v && n >= 0 && int(n) >= 0) {
         return wineFixed(int(n));
     }
     return wineFixed(int(lround(kWineDefaultDpi * scale)));
