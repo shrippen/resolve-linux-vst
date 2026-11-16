@@ -15,6 +15,16 @@ namespace {
 constexpr uint8_t kInt3 = 0xcc;
 constexpr size_t kMaxJumpLen = 32;
 
+// writeCode; der Grund eines Fehlschlags kommt ins Protokoll.
+bool writeJump(uintptr_t addr, const uint8_t *code, size_t len)
+{
+    if (writeCode(addr, code, len)) {
+        return true;
+    }
+    logMessage("mprotect: %s", strerror(errno));
+    return false;
+}
+
 // Drehungen und Balancierung wie libc++ __tree_balance_after_insert (Rot-Schwarz-Baum).
 void rotateLeft(MapNode *x)
 {
@@ -165,26 +175,18 @@ bool patchJumpRax(uintptr_t target, void *dest)
 {
     uint8_t code[kJumpRaxLen];
     buildJumpRax(dest, code);
-    return writeCode(target, code, sizeof code);
+    return writeJump(target, code, sizeof code);
 }
 
 bool patchJumpIndirect(uintptr_t addr, size_t len, void *dest)
 {
     uint8_t code[kMaxJumpLen];
     if (len < kJumpIndirectLen || len > sizeof code) {
+        logMessage("Sprunglänge %zu ungültig (%zu bis %zu)", len, kJumpIndirectLen, sizeof code);
         return false;
     }
     buildJumpIndirect(dest, code, len);
-    return writeCode(addr, code, len);
-}
-
-bool patchJump(uintptr_t target, void *dest)
-{
-    if (patchJumpRax(target, dest)) {
-        return true;
-    }
-    logMessage("mprotect: %s", strerror(errno));
-    return false;
+    return writeJump(addr, code, len);
 }
 
 bool redirectWanted(uintptr_t addr, const void *replacement)
@@ -208,7 +210,7 @@ void redirectFunctions(const ElfFile &elf, const char *exe, const Redirect *list
             continue;
         }
 
-        bool ok = patchJump(addr, list[i].replacement);
+        bool ok = patchJumpRax(addr, list[i].replacement);
         logMessage("%s: %s bei %#lx %s", exe, list[i].name, static_cast<unsigned long>(addr),
                    ok ? "umgeleitet" : "NICHT umgeleitet");
     }

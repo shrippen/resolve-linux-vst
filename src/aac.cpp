@@ -457,7 +457,7 @@ void patchResolve()
         logMessage("AAC: Resolve angepasst (aac/mp4a → FFmpeg; Weiche %#lx, Decoder %#lx, Tabelle %#lx)",
                    UL(sites.switchAt), UL(sites.codecAt), UL(sites.codecMap));
     else
-        logMessage("AAC: Anpassen fehlgeschlagen (mprotect)");
+        logMessage("AAC: Anpassen fehlgeschlagen");
 }
 
 using MainFunction = int (*)(int, char **, char **);

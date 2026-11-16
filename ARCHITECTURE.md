@@ -102,8 +102,6 @@ Nikon N-RAW clips. A launcher script starts Resolve with a library loaded into i
 
 - The launcher resets the Wine DPI with its own Wine command and registry key, the same rules
   as `src/wine_dpi.cpp` in shell (`AUDIT.md`, finding 9).
-- Writing a jump reports a failure in two ways: with its reason for loader and scanner, without
-  it for AAC (`AUDIT.md`, finding 6).
 - No automatic tests for loading plug-ins, the editor size, the VST3
   adapter and its saved state, AAC, N-RAW and the launcher's categories; only the plug-in test
   checks the Wine DPI with real plug-ins (`AUDIT.md`, finding 8).
