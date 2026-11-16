@@ -36,6 +36,7 @@
 #include <vector>
 
 #include "loader.h"
+#include "process.h"
 #include "log.h"
 #include "patch.h"
 #include "sites.h"
@@ -558,18 +559,6 @@ void wrap(AEffect *effect, const Names &names, double zoom)
 
 } // namespace
 
-bool isResolveProcess()
-{
-    char exe[4096];
-    ssize_t n = readlink("/proc/self/exe", exe, sizeof exe - 1);
-    if (n <= 0)
-        return false;
-    exe[n] = 0;
-    const char *base = strrchr(exe, '/');
-    base = base ? base + 1 : exe;
-    return strcmp(base, "resolve") == 0 || strcmp(base, "VstScanner") == 0 || strcmp(base, "editor-test") == 0;
-}
-
 // Gleiche Signatur wie in Resolve, damit der Name (Itanium-Mangling) übereinstimmt:
 // _ZN15VSTPluginLoader4LoadEPKwPFlP7AEffectiilPvfERb und _ZN15VSTPluginLoader5CloseEv.
 // Das Objekt gehört Resolve; sein Konstruktor reserviert ein Byte (geladen ja/nein), mehr
@@ -727,11 +716,10 @@ int categoryMaskOut(const void *, int mask)
 
 void patchExecutable()
 {
-    char exe[4096];
-    ssize_t n = readlink("/proc/self/exe", exe, sizeof exe - 1);
-    if (n <= 0)
+    const char *exe = exePath();
+    if (!*exe) {
         return;
-    exe[n] = 0;
+    }
 
     struct {
         const char *name;

@@ -31,6 +31,7 @@
 #include <cstring>
 
 #include "log.h"
+#include "process.h"
 
 #define EXPORT extern "C" __attribute__((visibility("default"), used))
 
@@ -152,13 +153,7 @@ int openWith(OpenFunction f, const char *path, int flags, mode_t mode)
 
 bool isResolve()
 {
-    char exe[PATH_MAX];
-    ssize_t n = readlink("/proc/self/exe", exe, sizeof exe - 1);
-    if (n <= 0)
-        return false;
-    exe[n] = 0;
-    const char *base = strrchr(exe, '/');
-    return strcmp(base ? base + 1 : exe, "resolve") == 0;
+    return strcmp(programName(), kProgResolve) == 0;
 }
 
 __attribute__((constructor)) void init()

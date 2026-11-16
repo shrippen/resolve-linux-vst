@@ -1,5 +1,5 @@
 // Was der Lader (resolve_linux_vst.cpp) seinen Teilen bietet: Einstellungen je Plugin, Zustandsordner,
-// Skalierungsfaktor und die Frage, welches Programm das ist. Der Log steht in log.h.
+// Skalierungsfaktor. Der Log steht in log.h, das laufende Programm in process.h.
 #pragma once
 
 #include <string>
@@ -18,6 +18,3 @@ std::string stateDir();
 
 // Skalierungsfaktor des Fensters, in das das Plugin zeichnet; ohne Fenster der des Hauptbildschirms.
 double editorScale(unsigned long long windowId = 0);
-
-// Läuft die Bibliothek in Resolve, im VstScanner oder in editor-test?
-bool isResolveProcess();

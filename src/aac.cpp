@@ -37,6 +37,7 @@
 #include "patch.h"
 #include "sites.h"
 #include "log.h"
+#include "process.h"
 
 #define EXPORT extern "C" __attribute__((visibility("default"), used))
 
@@ -534,13 +535,7 @@ void insert(MapHeader *map, uint32_t key, int value)
 
 bool isResolveExecutable()
 {
-    char exe[4096];
-    ssize_t n = readlink("/proc/self/exe", exe, sizeof exe - 1);
-    if (n <= 0)
-        return false;
-    exe[n] = 0;
-    const char *base = strrchr(exe, '/');
-    return strcmp(base ? base + 1 : exe, "resolve") == 0;
+    return strcmp(programName(), kProgResolve) == 0;
 }
 
 void patchResolve()
