@@ -26,6 +26,7 @@
 #include <vector>
 
 #include "loader.h"
+#include "plugin_conf.h"
 #include "log.h"
 #include "process.h"
 #include "wine_base.h"

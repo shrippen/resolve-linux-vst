@@ -4,7 +4,7 @@
 
 #include <string>
 
-#include "loader.h"
+#include "plugin_conf.h"
 
 // Prefix eines yabridge-Plugins: VST2 (Name.so mit Name.dll daneben) bzw. VST3-Bundle;
 // leer, wenn es kein Wine-Plugin ist.
