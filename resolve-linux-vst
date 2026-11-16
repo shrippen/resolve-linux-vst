@@ -33,8 +33,9 @@ for dir in "$here/build" "$here/../lib/resolve-linux-vst"; do
 done
 resolve=${RESOLVE_BIN:-/opt/resolve/bin/resolve}
 links=${RESOLVE_LINUX_VST_LINKS:-${XDG_DATA_HOME:-$HOME/.local/share}/resolve-linux-vst/vst}
-# Vorwerte der Wine-DPI, geschrieben von libresolve-linux-vst.so (stateDir() dort).
-restore=${XDG_STATE_HOME:-$HOME/.local/state}/resolve-linux-vst/wine-dpi-restore
+# Vorwerte der Wine-DPI. Der Ort steht nur hier; libresolve-linux-vst.so bekommt ihn in
+# RESOLVE_LINUX_VST_WINE_RESTORE mit und schreibt hinein.
+restore=${RESOLVE_LINUX_VST_WINE_RESTORE:-${XDG_STATE_HOME:-$HOME/.local/state}/resolve-linux-vst/wine-dpi-restore}
 # Klassen je VST3-Bundle (Auslesen startet bei yabridge Wine, darum zwischengespeichert).
 cache=${XDG_CACHE_HOME:-$HOME/.cache}/resolve-linux-vst/vst3
 # Einträge, die Resolve nicht sehen soll (siehe entries).
@@ -359,8 +360,9 @@ rescan)
     restore_wine_dpi
     # Kein exec: Nach dem Ende von Resolve (auch nach einem Absturz) die Wine-DPI
     # zurücksetzen. LD_PRELOAD nur für Resolve, nicht für die Wine-Aufrufe hier.
+    mkdir -p "$(dirname "$restore")"
     status=0
-    LD_PRELOAD="$lib${LD_PRELOAD:+:$LD_PRELOAD}" "$resolve" "$@" || status=$?
+    RESOLVE_LINUX_VST_WINE_RESTORE=$restore LD_PRELOAD="$lib${LD_PRELOAD:+:$LD_PRELOAD}" "$resolve" "$@" || status=$?
     # Nach einem Absturz hängen yabridge-Plugingruppen (z. B. Waves) beim nächsten Editor bis
     # zu zwei Minuten, weil sie den verschwundenen Host noch bedienen: beenden.
     if ((status >= 128)) && pkill -f "$group_host"; then

@@ -47,7 +47,7 @@
 
 // $XDG_STATE_HOME/resolve-linux-vst (Standard ~/.local/state/resolve-linux-vst), wird angelegt.
 // Dieselbe Regel steht in resolve-linux-vst.
-std::string stateDir()
+static std::string stateDir()
 {
     std::string base;
     if (const char *xdg = getenv("XDG_STATE_HOME"); xdg && *xdg)
