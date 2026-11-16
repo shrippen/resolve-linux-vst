@@ -7,6 +7,7 @@
 #include <cstring>
 
 #include "log.h"
+#include "sites.h"
 
 namespace {
 
@@ -70,4 +71,32 @@ bool patchJump(uintptr_t target, void *dest)
     }
     logMessage("mprotect: %s", strerror(errno));
     return false;
+}
+
+bool redirectWanted(uintptr_t addr, const void *replacement)
+{
+    if (!addr || !replacement) {
+        return false;
+    }
+    return reinterpret_cast<const void *>(addr) != replacement;
+}
+
+void redirectFunctions(const char *exe, const Redirect *list, size_t count)
+{
+    // Symboltabelle (.symtab) des Executables; nur ohne PIE ist st_value die Laufzeitadresse.
+    const ElfFile elf(exe);
+    if (!elf.isExecutable()) {
+        return;
+    }
+
+    for (size_t i = 0; i < count; ++i) {
+        uintptr_t addr = elf.symbol(list[i].name);
+        if (!redirectWanted(addr, list[i].replacement)) {
+            continue;
+        }
+
+        bool ok = patchJump(addr, list[i].replacement);
+        logMessage("%s: %s bei %#lx %s", exe, list[i].name, static_cast<unsigned long>(addr),
+                   ok ? "umgeleitet" : "NICHT umgeleitet");
+    }
 }

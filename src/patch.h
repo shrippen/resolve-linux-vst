@@ -31,6 +31,21 @@ bool patchJump(uintptr_t target, void *dest);
 // Überschreibt `len` Bytes (14 bis 32) ab `addr` mit buildJumpIndirect.
 bool patchJumpIndirect(uintptr_t addr, size_t len, void *dest);
 
+// Eine Funktion in Resolves Programmdatei (Symbolname, siehe sites.h) und ihr Ersatz.
+struct Redirect {
+    const char *name;
+    void *replacement; // nullptr: diese Funktion nicht umleiten
+};
+
+// Soll umgeleitet werden? Nur mit gefundenem Symbol (addr != 0), einem Ersatz und wenn nicht
+// schon der Ersatz an der Stelle liegt.
+bool redirectWanted(uintptr_t addr, const void *replacement);
+
+// Leitet jede Funktion von `list` im Executable `exe` auf ihren Ersatz um (Sprung an den
+// Anfang) und protokolliert je Umleitung "<exe>: <Name> bei <Adresse> umgeleitet" bzw.
+// "NICHT umgeleitet". Ist das Executable ein PIE oder fehlt ein Symbol, geschieht dafür nichts.
+void redirectFunctions(const char *exe, const Redirect *list, size_t count);
+
 // libc++ __tree_node<pair<const K, int>> und std::map: begin, end_node (nur left = Wurzel),
 // size. K ist uint32_t (AAC) oder int (Kategorien des Laders); beide 4 Byte, gleiche Bits. Der Schlüssel liegt ab 0x1c, der Wert ab 0x20; stimmt das nicht mehr,
 // bricht der Bau ab.

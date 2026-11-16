@@ -52,32 +52,20 @@ void patchCategories()
         return;
     }
 
-    struct {
-        const char *name;
-        void *replacement;
-    } const patches[] = {
-        {"_ZNK15AudioPluginHost23GetPluginCategoryMaskInEi", reinterpret_cast<void *>(&categoryMaskIn)},
-        {"_ZNK15AudioPluginHost24GetPluginCategoryMaskOutEi", reinterpret_cast<void *>(&categoryMaskOut)},
-    };
-    // Symboltabelle (.symtab) des Executables; nur ohne PIE ist st_value die Laufzeitadresse.
-    const ElfFile elf(exe);
-    if (!elf.isExecutable())
-        return;
     // Vor dem Umleiten: Tabellen der Kategorie-Masken (nur im VstScanner im Executable).
-    gMaskIn = reinterpret_cast<const MapHeader *>(elf.symbol("_ZN15AudioPluginHost19_pluginCategoryMaskE"));
-    gMaskOut = reinterpret_cast<const MapHeader *>(elf.symbol("_ZN15AudioPluginHost18_pluginCategoryMapE"));
-    for (const auto &p : patches) {
-        uintptr_t addr = elf.symbol(p.name);
-        if (!addr)
-            continue;
-        if (reinterpret_cast<void *>(addr) == p.replacement)
-            continue;
-        if ((p.replacement == reinterpret_cast<void *>(&categoryMaskIn) && !gMaskIn)
-            || (p.replacement == reinterpret_cast<void *>(&categoryMaskOut) && !gMaskOut))
-            continue;
-        bool ok = patchJump(addr, p.replacement);
-        logMessage("%s: %s bei %#lx %s", exe, p.name, static_cast<unsigned long>(addr), ok ? "umgeleitet" : "NICHT umgeleitet");
+    // Fehlt eine Tabelle, bleibt ihre Funktion unberührt (Ersatz nullptr).
+    const ElfFile elf(exe);
+    if (!elf.isExecutable()) {
+        return;
     }
+
+    gMaskIn = reinterpret_cast<const MapHeader *>(elf.symbol(kSymMaskTable));
+    gMaskOut = reinterpret_cast<const MapHeader *>(elf.symbol(kSymMapTable));
+    const Redirect patches[] = {
+        {kSymMaskIn, gMaskIn ? reinterpret_cast<void *>(&categoryMaskIn) : nullptr},
+        {kSymMaskOut, gMaskOut ? reinterpret_cast<void *>(&categoryMaskOut) : nullptr},
+    };
+    redirectFunctions(exe, patches, sizeof patches / sizeof *patches);
 }
 
 // Zahlenformat: Resolve und VstScanner lesen die Version von FXConfiguration.xml ("1.4") mit
