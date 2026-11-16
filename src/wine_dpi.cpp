@@ -26,6 +26,7 @@
 
 #include "loader.h"
 #include "log.h"
+#include "process.h"
 #include "wine_base.h"
 #include "wine_dpi.h"
 
