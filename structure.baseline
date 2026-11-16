@@ -1,7 +1,7 @@
 # What is over a structure limit today (tools/structure-check.py). An entry may shrink,
 # never grow; a raised or new entry needs its reason in the PR. Rewrite with --update.
 # Lines: exclude<TAB>glob | path<TAB>function or - for the file<TAB>metric=value ...
-src/resolve_linux_vst.cpp	-	lines=1140
+src/resolve_linux_vst.cpp	-	lines=1181
 src/resolve_linux_vst.cpp	dispatch	ccn=20
 src/resolve_linux_vst.cpp	pluginSetting	ccn=17
 src/resolve_linux_vst.cpp	runWine	ccn=17

@@ -845,6 +845,20 @@ bool resetWineSession(const std::string &prefix, int dpi)
     return false;
 }
 
+// Vor einer neuen Sitzung: DPI auf die Basis zurück. Gelingt das nicht, startet die Sitzung
+// mit dem aktuellen Wert, der dann die Basis ist.
+void startAtBase(WinePrefixState &state)
+{
+    const bool ok = resetWineSession(state.prefix, state.base);
+    logf("  Wine-DPI %s: neue Sitzung, zuerst %d → %d %s", state.prefix.c_str(), state.dpi, state.base,
+         ok ? "zurückgesetzt" : "NICHT zurückgesetzt");
+    if (ok) {
+        state.dpi = state.base;
+        return;
+    }
+    state.base = state.dpi < 0 ? kWineDefaultDpi : state.dpi;
+}
+
 // Zustand eines Prefix vor dem Laden. Basis ist der Wert vor Resolve (gemerkter Vorwert, sonst
 // der aktuelle). Läuft keine Sitzung, wird die DPI vorher auf die Basis zurückgesetzt, sonst
 // startete die nächste Sitzung mit dem zuletzt gesetzten Wert und die DPI sänke mit jeder
@@ -871,12 +885,7 @@ WinePrefixState *prefixState(std::vector<WinePrefixState> &known, const std::str
     const int base = before == kNoRestoreEntry ? current : before;
     WinePrefixState state{prefix, current, base < 0 ? kWineDefaultDpi : base};
     if (!running && current != base) {
-        const bool ok = resetWineSession(prefix, state.base);
-        logf("  Wine-DPI %s: neue Sitzung, zuerst %d → %d %s", prefix.c_str(), current, state.base,
-             ok ? "zurückgesetzt" : "NICHT zurückgesetzt");
-        // Ohne Zurücksetzen startete die Sitzung mit dem aktuellen Wert.
-        state.dpi = ok ? state.base : current;
-        state.base = ok ? state.base : (current < 0 ? kWineDefaultDpi : current);
+        startAtBase(state);
     }
     if (!k) {
         known.push_back(state);
