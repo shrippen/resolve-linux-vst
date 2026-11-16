@@ -35,7 +35,7 @@ resolve-linux-vst fills those gaps at run time:
 | **AAC render** | MP4/MOV renders with an AAC encoder plug-in such as [FDK-AAC](https://github.com/hexitnz/Resolve-Linux-Studio-AAC-FDK-Encoder-plugin) get a correct AAC-LC description, so browsers play them. |
 | **N-RAW** | Nikon `.nev` clips open through Resolve's own RED decoder. |
 
-Tested with DaVinci Resolve Studio 21.1.1 on Arch Linux.
+Tested with DaVinci Resolve Studio 21.1.1 and 21.2 on Arch Linux.
 
 > [!NOTE]
 > resolve-linux-vst is an independent project. It is not affiliated with or endorsed by Blackmagic
@@ -57,7 +57,7 @@ Requirements: Linux on x86_64, DaVinci Resolve in `/opt/resolve` (otherwise set 
 Windows plug-ins, [Carla](https://kx.studio/Applications:Carla) for LV2 and CLAP,
 [FDK-AAC encoder plug-in](https://github.com/hexitnz/Resolve-Linux-Studio-AAC-FDK-Encoder-plugin) for AAC renders.
 
-Options: `install.sh --version 1.0.2`, `--prefix DIR`, `--uninstall`.
+Options: `install.sh --version 1.1.0`, `--prefix DIR`, `--uninstall`.
 
 <details>
 <summary>Build from source</summary>

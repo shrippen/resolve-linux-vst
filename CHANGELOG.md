@@ -3,6 +3,46 @@
 The release notes of resolve-linux-vst, newest first. Each section is the text of the release on
 Gitea and GitHub and of its entry in `#changes` on the landing page (`docs/index.html`).
 
+## [1.1.0] — 2026-11-16
+
+### English
+
+Windows plug-ins through yabridge fill their editor windows again and can be used. Tested with DaVinci Resolve Studio 21.2.
+
+#### New
+- `wine-dpi = prefix` in `plugins.conf` keeps the Wine prefix's own DPI; built in for Waves
+- `resolve-linux-vst restore` also stops processes left on yabridge plug-in group sockets
+
+#### Fixed
+- Waves and iZotope editors drew only about three quarters of their window, offset to the top left, and clicks missed, whenever the Wine prefix's own DPI was not 240. Wine scales a plug-in window by the DPI its Wine session started with divided by the DPI of the plug-in; the scale is now computed from the prefix's own DPI instead of an assumed 240, and stays right when a Wine session ends and a new one starts.
+- After Resolve had been closed, Waves plug-ins could fail to load ("Another process is already listening on this group's socket"): `WavesLocalServer.exe` kept the Waves group's socket. The launcher now stops such leftovers before Resolve starts and after it exits.
+
+#### Note
+- Remove a `wine-dpi` line you added under `[WaveShell*]` in `plugins.conf` as a workaround; the built-in setting now fits every prefix.
+- Resolve's automation button in a plug-in window has no effect on VST plug-ins: Resolve implements it only for its own Fairlight FX.
+- The library changes the Wine DPI only when Resolve is started through `resolve-linux-vst`, which sets it back afterwards. `build/editor-test` needs `RESOLVE_LINUX_VST_WINE_RESTORE` for it (see README).
+
+All changes: https://github.com/shrippen/resolve-linux-vst/compare/v1.0.2...v1.1.0
+
+### Deutsch
+
+Windows-Plugins über yabridge füllen ihre Editorfenster wieder und lassen sich bedienen. Getestet mit DaVinci Resolve Studio 21.2.
+
+#### Neu
+- `wine-dpi = prefix` in `plugins.conf` behält die eigene DPI des Wine-Prefix; eingebaut für Waves
+- `resolve-linux-vst restore` beendet auch Prozesse, die auf Sockets von yabridge-Plugingruppen zurückgeblieben sind
+
+#### Behoben
+- Editoren von Waves und iZotope zeichneten nur etwa drei Viertel ihres Fensters, nach oben links versetzt, und Klicks gingen daneben, sobald die eigene DPI des Wine-Prefix nicht 240 war. Wine vergrößert ein Plugin-Fenster mit der DPI, mit der seine Wine-Sitzung startete, geteilt durch die DPI des Plugins; gerechnet wird jetzt mit der eigenen DPI des Prefix statt mit angenommenen 240, und das bleibt richtig, wenn eine Wine-Sitzung endet und eine neue startet.
+- Nach dem Beenden von Resolve ließen sich Waves-Plugins teils nicht laden („Another process is already listening on this group's socket“): `WavesLocalServer.exe` hielt den Socket der Waves-Gruppe. Der Starter beendet solche Reste jetzt vor dem Start von Resolve und nach dessen Ende.
+
+#### Hinweis
+- Eine `wine-dpi`-Zeile, die du als Notlösung unter `[WaveShell*]` in `plugins.conf` eingetragen hast, wieder entfernen; die eingebaute Einstellung passt jetzt zu jedem Prefix.
+- Der Automationsknopf in Resolves Plugin-Fenster wirkt bei VST-Plugins nicht: Resolve setzt ihn nur für seine eigenen Fairlight-FX um.
+- Die Bibliothek ändert die Wine-DPI nur, wenn Resolve über `resolve-linux-vst` startet, der sie danach zurücksetzt. `build/editor-test` braucht dafür `RESOLVE_LINUX_VST_WINE_RESTORE` (siehe README).
+
+Alle Änderungen: https://github.com/shrippen/resolve-linux-vst/compare/v1.0.2...v1.1.0
+
 ## [1.0.2] — 2026-10-27
 
 ### English
