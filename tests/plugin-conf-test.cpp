@@ -27,14 +27,14 @@ constexpr size_t kLongLine = 3000; // länger als der Lesepuffer von pluginSetti
 
 fs::path root; // Ordner dieses Laufs, wird am Ende gelöscht
 
-// Temporäre Dateien nach $TMPDIR, sonst ~/.cache/claude (nie /tmp, das liegt im RAM).
+// Temporäre Dateien nach $TMPDIR, sonst ~/.cache, wie die anderen Tests (nie /tmp, das liegt im RAM).
 fs::path tempBase()
 {
     if (const char *tmp = getenv("TMPDIR"); tmp && *tmp) {
         return tmp;
     }
     const char *home = getenv("HOME");
-    return fs::path(home ? home : ".") / ".cache" / "claude";
+    return fs::path(home ? home : ".") / ".cache";
 }
 
 fs::path confPath(const fs::path &config)
@@ -183,7 +183,7 @@ void testSyntax()
     expect(is({"Space In Name"}, "wine-dpi", "5"), "Leerzeichen im Abschnittsnamen");
     expect(is({"Padded"}, "wine-dpi", "6"), "Leerzeichen innerhalb der Klammern werden entfernt");
     expect(is({"NoKey"}, "wine-dpi", ""), "Zeile ohne =: ohne Wirkung");
-    expect(is({"Empty"}, "wine-dpi", ""), "leerer Wert: wie nicht gesetzt");
+    expect(is({"Empty"}, "wine-dpi", ""), "leerer Wert: Treffer mit leerem Ergebnis");
 }
 
 void testDefaults()
@@ -252,9 +252,9 @@ void testHome()
 int main()
 {
     std::error_code ec;
-    const fs::path base = tempBase() / "plugin-conf-test";
+    const fs::path base = tempBase();
     fs::create_directories(base, ec);
-    std::string pattern = (base / "run-XXXXXX").string();
+    std::string pattern = (base / "plugin-conf-test-XXXXXX").string();
     if (!mkdtemp(pattern.data())) {
         printf("FEHLER  kein temporärer Ordner unter %s\n", base.c_str());
         return 1;
@@ -272,6 +272,5 @@ int main()
     testHome();
 
     fs::remove_all(root, ec);
-    fs::remove(base, ec); // nur wenn leer
     return failures ? 1 : 0;
 }
