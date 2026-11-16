@@ -8,6 +8,7 @@
 #include <cerrno>
 #include <cstdio>
 #include <cstring>
+#include <string>
 
 namespace {
 
@@ -79,6 +80,48 @@ void testWrite()
     munmap(mem, pageSize);
 }
 
+// Rechte der Abbildung, die `addr` enthält, laut /proc/self/maps (z. B. "r-xp").
+std::string protOf(const void *addr)
+{
+    FILE *f = fopen("/proc/self/maps", "r");
+    char line[512];
+    std::string prot;
+    while (f && prot.empty() && fgets(line, sizeof line, f)) {
+        unsigned long from, to;
+        char perms[5];
+        if (sscanf(line, "%lx-%lx %4s", &from, &to, perms) == 3 && uintptr_t(addr) >= from && uintptr_t(addr) < to) {
+            prot = perms;
+        }
+    }
+    if (f) {
+        fclose(f);
+    }
+    return prot;
+}
+
+// Sprung über die Seitengrenze: beide Seiten müssen beschreibbar werden und danach wieder nur
+// lesbar und ausführbar sein.
+void testWriteAcrossPages()
+{
+    const size_t pageSize = size_t(sysconf(_SC_PAGESIZE));
+    void *mem = mmap(nullptr, 2 * pageSize, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    expect(mem != MAP_FAILED, "zwei Testseiten angelegt");
+    if (mem == MAP_FAILED) {
+        return;
+    }
+    memset(mem, 0x90, 2 * pageSize);
+    mprotect(mem, 2 * pageSize, PROT_READ | PROT_EXEC);
+
+    uint8_t *base = static_cast<uint8_t *>(mem);
+    uint8_t *at = base + pageSize - 5;
+    expect(patchJumpRax(uintptr_t(at), dest()), "patchJumpRax über die Seitengrenze schreibt");
+    uint8_t want[kJumpRaxLen];
+    buildJumpRax(dest(), want);
+    expect(memcmp(at, want, sizeof want) == 0, "über die Seitengrenze: Bytes stehen im Speicher");
+    expect(protOf(base) == "r-xp" && protOf(base + pageSize) == "r-xp", "danach beide Seiten wieder r-x");
+    munmap(mem, 2 * pageSize);
+}
+
 void testWriteFails()
 {
     const uint8_t code[kJumpRaxLen] = {};
@@ -93,6 +136,7 @@ int main()
     testRaxBytes();
     testIndirectBytes();
     testWrite();
+    testWriteAcrossPages();
     testWriteFails();
     printf("%s\n", failures ? "FEHLGESCHLAGEN" : "alle Tests bestanden");
     return failures ? 1 : 0;

@@ -28,8 +28,8 @@ bool patchJumpRax(uintptr_t target, void *dest);
 // Überschreibt `len` Bytes (14 bis 32) ab `addr` mit buildJumpIndirect.
 bool patchJumpIndirect(uintptr_t addr, size_t len, void *dest);
 
-// libc++ __tree_node<pair<const uint32_t, int>> und std::map: begin, end_node (nur left =
-// Wurzel), size. Der Schlüssel liegt ab 0x1c, der Wert ab 0x20; stimmt das nicht mehr,
+// libc++ __tree_node<pair<const K, int>> und std::map: begin, end_node (nur left = Wurzel),
+// size. K ist uint32_t (AAC) oder int (Kategorien des Laders); beide 4 Byte, gleiche Bits. Der Schlüssel liegt ab 0x1c, der Wert ab 0x20; stimmt das nicht mehr,
 // bricht der Bau ab.
 struct MapNode {
     MapNode *left, *right, *parent;
