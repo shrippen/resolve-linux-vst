@@ -1,0 +1,99 @@
+// Test von src/patch.cpp ohne Resolve: die Bytes der beiden Sprünge für erfundene Ziele und
+// das Schreiben in eine eigene, erst danach schreibgeschützte Seite. Läuft mit make test.
+#include "../src/patch.h"
+
+#include <sys/mman.h>
+#include <unistd.h>
+
+#include <cerrno>
+#include <cstdio>
+#include <cstring>
+
+namespace {
+
+int failures = 0;
+
+void expect(bool ok, const char *what)
+{
+    printf("%s  %s\n", ok ? "ok   " : "FEHLER", what);
+    failures += !ok;
+}
+
+constexpr uintptr_t kDest = 0x1122334455667788;
+constexpr size_t kOffset = 0x10;
+constexpr size_t kPadded = 24;
+
+void *dest()
+{
+    return reinterpret_cast<void *>(kDest);
+}
+
+void testRaxBytes()
+{
+    uint8_t code[kJumpRaxLen];
+    buildJumpRax(dest(), code);
+    const uint8_t want[kJumpRaxLen] = {0x48, 0xB8, 0x88, 0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11, 0xFF, 0xE0};
+    expect(memcmp(code, want, sizeof want) == 0, "movabs rax, dest; jmp rax");
+}
+
+void testIndirectBytes()
+{
+    uint8_t code[kPadded] = {};
+    buildJumpIndirect(dest(), code, sizeof code);
+    const uint8_t want[kPadded] = {0xff, 0x25, 0, 0, 0, 0, 0x88, 0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11,
+                                   0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc};
+    expect(memcmp(code, want, sizeof want) == 0, "jmp [rip+0]; dq dest; Rest int3 (24 Byte)");
+
+    uint8_t exact[kJumpIndirectLen];
+    buildJumpIndirect(dest(), exact, sizeof exact);
+    expect(memcmp(exact, want, sizeof exact) == 0, "jmp [rip+0]; dq dest (14 Byte)");
+}
+
+// Eigene Seite, nur lesbar und ausführbar wie Code; Nachbarbytes dürfen sich nicht ändern.
+void testWrite()
+{
+    const size_t pageSize = size_t(sysconf(_SC_PAGESIZE));
+    void *mem = mmap(nullptr, pageSize, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    expect(mem != MAP_FAILED, "Testseite angelegt");
+    if (mem == MAP_FAILED) {
+        return;
+    }
+    memset(mem, 0x90, pageSize);
+    mprotect(mem, pageSize, PROT_READ | PROT_EXEC);
+
+    uint8_t *base = static_cast<uint8_t *>(mem);
+    expect(patchJumpRax(uintptr_t(base) + kOffset, dest()), "patchJumpRax schreibt");
+    uint8_t want[kJumpRaxLen];
+    buildJumpRax(dest(), want);
+    expect(memcmp(base + kOffset, want, sizeof want) == 0, "patchJumpRax: Bytes stehen im Speicher");
+    expect(base[kOffset - 1] == 0x90 && base[kOffset + kJumpRaxLen] == 0x90, "patchJumpRax: Nachbarbytes unverändert");
+
+    expect(patchJumpIndirect(uintptr_t(base) + kOffset, kPadded, dest()), "patchJumpIndirect schreibt");
+    uint8_t wantInd[kPadded];
+    buildJumpIndirect(dest(), wantInd, sizeof wantInd);
+    expect(memcmp(base + kOffset, wantInd, sizeof wantInd) == 0, "patchJumpIndirect: Bytes stehen im Speicher");
+    expect(base[kOffset + kPadded] == 0x90, "patchJumpIndirect: Nachbarbyte unverändert");
+
+    expect(!patchJumpIndirect(uintptr_t(base) + kOffset, kJumpIndirectLen - 1, dest()), "patchJumpIndirect: zu kurz abgelehnt");
+    expect(!patchJumpIndirect(uintptr_t(base) + kOffset, 33, dest()), "patchJumpIndirect: zu lang abgelehnt");
+    munmap(mem, pageSize);
+}
+
+void testWriteFails()
+{
+    const uint8_t code[kJumpRaxLen] = {};
+    errno = 0;
+    expect(!writeCode(0x10, code, sizeof code) && errno != 0, "writeCode: ungültige Adresse liefert false mit errno");
+}
+
+} // namespace
+
+int main()
+{
+    testRaxBytes();
+    testIndirectBytes();
+    testWrite();
+    testWriteFails();
+    printf("%s\n", failures ? "FEHLGESCHLAGEN" : "alle Tests bestanden");
+    return failures ? 1 : 0;
+}

@@ -35,8 +35,14 @@ $(BUILD)/sites-test: tests/sites-test.cpp src/sites.cpp src/sites.h
 	@mkdir -p $(BUILD)
 	$(CXX) $(filter-out -fPIC,$(CXXFLAGS)) -o $@ tests/sites-test.cpp src/sites.cpp
 
-test: $(BUILD)/sites-test
+# Test des Sprungs in Resolves Code (src/patch.cpp), an eigenem Speicher.
+$(BUILD)/patch-test: tests/patch-test.cpp src/patch.cpp src/patch.h
+	@mkdir -p $(BUILD)
+	$(CXX) $(filter-out -fPIC,$(CXXFLAGS)) -o $@ tests/patch-test.cpp src/patch.cpp
+
+test: $(BUILD)/sites-test $(BUILD)/patch-test
 	$(BUILD)/sites-test
+	$(BUILD)/patch-test
 	tests/launcher-test.sh
 
 # Plugin-Test mit Waves über yabridge (nur lokal, sonst übersprungen).
@@ -45,7 +51,7 @@ plugin-test: all editor-test
 
 # clean lässt den AAC-Decoder (FFmpeg-Build dauert) stehen, distclean nimmt alles.
 clean:
-	rm -f $(BUILD)/libresolve-linux-vst.so $(BUILD)/vst3-classes $(BUILD)/resolve-check $(BUILD)/sites-test $(BUILD)/editor-test
+	rm -f $(BUILD)/libresolve-linux-vst.so $(BUILD)/vst3-classes $(BUILD)/resolve-check $(BUILD)/sites-test $(BUILD)/patch-test $(BUILD)/editor-test
 	rm -rf $(BUILD)/dist
 
 distclean:
