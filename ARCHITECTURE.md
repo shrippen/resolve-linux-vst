@@ -21,7 +21,7 @@ Nikon N-RAW clips. A launcher script starts Resolve with a library loaded into i
 | `src/wine_base.h` | Wine DPI: the decision which base DPI a Wine session has and whether to reset first, pure, so `tests/` can run it. |
 | `src/wine_dpi.cpp`, `src/wine_dpi.h` | Wine DPI: sets the DPI of a Windows plug-in's Wine prefix before it loads and tells the loader how far Wine scales it. |
 | `src/process.cpp`, `src/process.h` | Which program the library runs in (read once); the program names, and `editor-test` as the one exception that counts as Resolve for the Wine DPI. |
-| `src/vst3.cpp` | The VST3 adapter: shows a VST3 plug-in to Resolve as a VST2 plug-in. |
+| `src/vst3*.cpp`, `src/vst3*.h` | The VST3 adapter: shows a VST3 plug-in to Resolve as a VST2 plug-in. `vst3.cpp` builds it and runs audio, `vst3_dispatch.cpp` answers Resolve's commands (editor, state, speakers), `vst3_host.cpp` the host objects and event loop a plug-in asks for, `vst3_module.cpp` opens a bundle and lists its classes, `vst3_iids.cpp` defines the interface IDs once. |
 | `src/aac.cpp` | AAC: gives Resolve an AAC decoder from a second, small FFmpeg library. |
 | `src/nev.cpp` | N-RAW: shows Resolve every `.NEV` file as `.R3D`. |
 | `src/x11.cpp` | Drops window sizes of 0 that would make a plug-in abort Resolve. |
@@ -91,7 +91,7 @@ Nikon N-RAW clips. A launcher script starts Resolve with a library loaded into i
 | A new feature inside Resolve (another codec, another fix) | A new `src/<feature>.cpp`, the functions it replaces in `src/exports.map`, `SOURCES` in the `Makefile`, `docs/HOW-IT-WORKS.md`, its switch in the README |
 | A new place to find in Resolve, or a pattern after a Resolve update | `src/sites.cpp`, `src/sites.h`, `tests/sites-test.cpp`, `tools/resolve-check.cpp` |
 | A new VST2 command Resolve sends | `src/vst2.h` (the number), then loader or adapter |
-| Something only VST3 plug-ins need | `src/vst3.cpp` only |
+| Something only VST3 plug-ins need | `src/vst3*.cpp` only |
 | A new launcher command | `resolve-linux-vst`, README |
 | A new setting per plug-in (`plugins.conf`) | `src/plugin_conf.cpp` (built-in defaults there too), README |
 | Logic that can run without Resolve | Its own function, with a test in `tests/` and a line in `make test` |
@@ -101,8 +101,6 @@ Nikon N-RAW clips. A launcher script starts Resolve with a library loaded into i
 
 - The Wine DPI asks the editor size for the scale factor (`src/editor_size.h`), so two of the
   loader's parts know each other.
-- `src/vst3.cpp` holds host objects, event loop, module loading and adapter in one file of
-  1750 lines (`AUDIT.md`, finding 10).
 - No automatic tests for loading plug-ins, reading `plugins.conf`, the editor size, the VST3
   adapter and its saved state, AAC, N-RAW and the launcher's categories; only the plug-in test
   checks the Wine DPI with real plug-ins (`AUDIT.md`, finding 8).

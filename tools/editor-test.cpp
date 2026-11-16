@@ -50,20 +50,20 @@ long host(AEffect *e, int opcode, int index, long value, void *, float)
 {
     if (opcode == 1) // audioMasterVersion
         return 2400;
-    if (opcode == 13 && e) { // audioMasterIOChanged
+    if (opcode == audioMasterIOChanged && e) {
         // Wie ein Host, der darauf das Plugin neu startet (Latenz übernehmen): Das darf nicht
         // hängen, auch nicht mitten in effMainsChanged.
         static bool inside = false;
         printf("audioMasterIOChanged, Latenz %d\n", e->initialDelay);
         if (!inside) {
             inside = true;
-            e->dispatcher(e, 12, 0, 0, nullptr, 0);
-            e->dispatcher(e, 12, 0, 1, nullptr, 0);
+            e->dispatcher(e, effMainsChanged, 0, 0, nullptr, 0);
+            e->dispatcher(e, effMainsChanged, 0, 1, nullptr, 0);
             inside = false;
         }
         return 1;
     }
-    if (opcode == 15) { // audioMasterSizeWindow
+    if (opcode == audioMasterSizeWindow) {
         printf("audioMasterSizeWindow %dx%ld (logisch)\n", index, value);
         resize(index, int(value));
         return 1;
@@ -89,7 +89,7 @@ void tree(Window w, int depth)
 void rect(AEffect *e, const char *when)
 {
     ERect *r = nullptr;
-    e->dispatcher(e, 13, 0, 0, &r, 0); // effEditGetRect
+    e->dispatcher(e, effEditGetRect, 0, 0, &r, 0);
     if (!r)
         return;
     printf("effEditGetRect %s: %dx%d (logisch)\n", when, r->right - r->left, r->bottom - r->top);
@@ -140,10 +140,10 @@ int main(int argc, char **argv)
         fprintf(stderr, "Plugin nicht geladen (Log: ~/.local/state/resolve-linux-vst/resolve-linux-vst.log)\n");
         return 1;
     }
-    e->dispatcher(e, 0, 0, 0, nullptr, 0);      // effOpen
-    e->dispatcher(e, 10, 0, 0, nullptr, 48000); // effSetSampleRate
-    e->dispatcher(e, 11, 0, 512, nullptr, 0);   // effSetBlockSize
-    e->dispatcher(e, 12, 0, 1, nullptr, 0);     // effMainsChanged an
+    e->dispatcher(e, effOpen, 0, 0, nullptr, 0);
+    e->dispatcher(e, effSetSampleRate, 0, 0, nullptr, 48000);
+    e->dispatcher(e, effSetBlockSize, 0, 512, nullptr, 0);
+    e->dispatcher(e, effMainsChanged, 0, 1, nullptr, 0); // an
     printf("%d Parameter, %d→%d Kanäle\n", e->numParams, e->numInputs, e->numOutputs);
     {
         // 20 Blöcke Sinus 1 kHz, -12 dBFS, auf allen Eingängen; Pegel des letzten Blocks.
@@ -172,20 +172,20 @@ int main(int argc, char **argv)
     }
     if (e->numParams > 0) {
         char name[256] = {}, display[256] = {}, label[256] = {};
-        e->dispatcher(e, 8, 0, 0, name, 0);
-        e->dispatcher(e, 7, 0, 0, display, 0);
-        e->dispatcher(e, 6, 0, 0, label, 0);
+        e->dispatcher(e, effGetParamName, 0, 0, name, 0);
+        e->dispatcher(e, effGetParamDisplay, 0, 0, display, 0);
+        e->dispatcher(e, effGetParamLabel, 0, 0, label, 0);
         printf("Parameter 0: %s = %s %s (%.3f)\n", name, display, label, e->getParameter(e, 0));
     }
     void *chunk = nullptr;
-    long chunkSize = e->dispatcher(e, 23, 0, 0, &chunk, 0); // effGetChunk
+    long chunkSize = e->dispatcher(e, effGetChunk, 0, 0, &chunk, 0);
     if (chunkSize > 0) {
         std::vector<char> copy(static_cast<char *>(chunk), static_cast<char *>(chunk) + chunkSize);
-        long ok = e->dispatcher(e, 24, 0, chunkSize, copy.data(), 0); // effSetChunk
+        long ok = e->dispatcher(e, effSetChunk, 0, chunkSize, copy.data(), 0);
         printf("Chunk: %ld Bytes, zurückgeschrieben: %ld\n", chunkSize, ok);
     }
     rect(e, "vor effEditOpen");
-    e->dispatcher(e, 14, 0, 0, reinterpret_cast<void *>(win), 0); // effEditOpen
+    e->dispatcher(e, effEditOpen, 0, 0, reinterpret_cast<void *>(win), 0);
     rect(e, "nach effEditOpen");
 
     for (int i = 0; i < seconds * 50; ++i) {
@@ -193,7 +193,7 @@ int main(int argc, char **argv)
             XEvent ev;
             XNextEvent(dpy, &ev);
         }
-        e->dispatcher(e, 19, 0, 0, nullptr, 0); // effEditIdle
+        e->dispatcher(e, effEditIdle, 0, 0, nullptr, 0);
         while (g_main_context_iteration(nullptr, FALSE)) // IRunLoop des VST3-Adapters
             ;
         usleep(20000);
@@ -242,8 +242,8 @@ int main(int argc, char **argv)
     // Hosts: nach 10 s ohne Aufräumen beenden.
     signal(SIGALRM, [](int) { _Exit(3); });
     alarm(10);
-    e->dispatcher(e, 15, 0, 0, nullptr, 0); // effEditClose
-    e->dispatcher(e, 12, 0, 0, nullptr, 0); // effMainsChanged aus
-    e->dispatcher(e, 1, 0, 0, nullptr, 0);  // effClose
+    e->dispatcher(e, effEditClose, 0, 0, nullptr, 0);
+    e->dispatcher(e, effMainsChanged, 0, 0, nullptr, 0); // aus
+    e->dispatcher(e, effClose, 0, 0, nullptr, 0);
     _Exit(status == 0 ? 0 : 1);
 }

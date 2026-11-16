@@ -1,5 +1,5 @@
 // VST2-Schnittstelle, soweit Lader und VST3-Adapter sie brauchen (Aufbau wie aeffect.h,
-// eigene Deklarationen). Gemeinsam für resolve_linux_vst.cpp und vst3.cpp.
+// eigene Deklarationen). Gemeinsam für resolve_linux_vst.cpp und den VST3-Adapter (vst3*.cpp).
 #pragma once
 
 #include <cstdint>
@@ -59,7 +59,7 @@ enum {
 constexpr int kPreS = 0x50726553; // 'PreS'
 constexpr long kAeCs = 0x41654373; // 'AeCs'
 
-// VST3-Adapter (vst3.cpp): Ein VST3-Plugin erscheint als VST2-Plugin. `dir` ist ein
+// VST3-Adapter (vst3*.cpp): Ein VST3-Plugin erscheint als VST2-Plugin. `dir` ist ein
 // Ordner Name.vst mit den Dateien `bundle` (Symlink auf das .vst3-Bundle) und `class`
 // (Klassen-ID, 32 Hexziffern), angelegt von resolve-linux-vst.
 bool isVst3Entry(const std::string &dir);

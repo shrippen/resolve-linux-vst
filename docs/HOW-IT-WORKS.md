@@ -10,7 +10,7 @@ resolve-linux-vst (bash) ── links plug-ins, writes categories, sets Wine DPI
       ▼
 resolve / VstScanner ──► libresolve-linux-vst.so
                            ├─ VSTPluginLoader::Load/Close    VST2 loader (resolve_linux_vst.cpp)
-                           ├─ VST3 adapter                    VST3 as VST2 (vst3.cpp)
+                           ├─ VST3 adapter                    VST3 as VST2 (vst3*.cpp)
                            ├─ dispatcher / host callback      HiDPI, frame fix (editor_size.cpp)
                            ├─ before a yabridge plug-in       Wine DPI (wine_dpi.cpp)
                            ├─ category tables, LC_NUMERIC     scanner fixes (scanner.cpp)
@@ -42,7 +42,7 @@ and `dlopen` counts references anyway).
 
 ## VST3 adapter
 
-Resolve has no VST3 support on Linux at all (`VST3Host` consists of empty bodies). `src/vst3.cpp`
+Resolve has no VST3 support on Linux at all (`VST3Host` consists of empty bodies). `src/vst3*.cpp`
 loads a VST3 plug-in and presents it as a VST2 plug-in to Resolve's host:
 
 - **Entries:** a bundle can contain several plug-ins (classes). The launcher lists them with
