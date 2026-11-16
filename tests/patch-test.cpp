@@ -7,11 +7,11 @@
 #include <sys/mman.h>
 #include <unistd.h>
 
+#include <algorithm>
 #include <cerrno>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <algorithm>
 #include <string>
 #include <vector>
 
@@ -306,6 +306,13 @@ template <typename F> std::string logOf(F run)
     return text;
 }
 
+// Genau eine Logzeile, die (nach Zeit und Prozess) mit `want` endet.
+bool isOneLine(const std::string &log, const std::string &want)
+{
+    const size_t lines = size_t(std::count(log.begin(), log.end(), '\n'));
+    return lines == 1 && log.size() >= want.size() && log.compare(log.size() - want.size(), want.size(), want) == 0;
+}
+
 // Beide Sprungarten melden einen Fehlschlag gleich: eine Zeile "mprotect: <Grund>".
 void testJumpErrors()
 {
@@ -317,11 +324,8 @@ void testJumpErrors()
     bool raxOk = true, indirectOk = true;
     std::string rax = logOf([&] { raxOk = patchJumpRax(0x10, dest()); });
     std::string indirect = logOf([&] { indirectOk = patchJumpIndirect(0x10, kPadded, dest()); });
-    expect(!raxOk && rax.size() >= want.size() && rax.compare(rax.size() - want.size(), want.size(), want) == 0,
-           "patchJumpRax: Fehlschlag meldet mprotect und Grund");
-    expect(!indirectOk && indirect.size() >= want.size()
-               && indirect.compare(indirect.size() - want.size(), want.size(), want) == 0,
-           "patchJumpIndirect: Fehlschlag meldet mprotect und Grund");
+    expect(!raxOk && isOneLine(rax, want), "patchJumpRax: Fehlschlag meldet mprotect und Grund");
+    expect(!indirectOk && isOneLine(indirect, want), "patchJumpIndirect: Fehlschlag meldet mprotect und Grund");
 
     const size_t pageSize = size_t(sysconf(_SC_PAGESIZE));
     void *mem = mmap(nullptr, pageSize, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
