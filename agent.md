@@ -18,7 +18,7 @@ plug-ins, AAC import and render, and Nikon N-RAW to DaVinci Resolve Studio on Li
 - Resolve's files are never changed on disk; everything happens in memory at run time.
 - Code comments and the library log are German; everything a user sees (CLI, installer,
   README, landing page) is English, the landing page also German.
-- Tested against Resolve Studio 21.1.1. After a Resolve update run `resolve-linux-vst check` first.
+- Tested against Resolve Studio 21.1.1 and 21.2. After a Resolve update run `resolve-linux-vst check` first.
 
 ## GUI (this project)
 

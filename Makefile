@@ -64,6 +64,7 @@ test: $(BUILD)/process-test $(BUILD)/sites-test $(BUILD)/patch-test $(BUILD)/win
 	$(BUILD)/wine-base-test
 	$(BUILD)/plugin-conf-test
 	tests/launcher-test.sh
+	tests/scripts-test.sh
 
 # Plugin-Test mit Waves über yabridge (nur lokal, sonst übersprungen).
 plugin-test: all editor-test
