@@ -16,9 +16,9 @@ long paramProperties(const ParameterInfo &p, void *ptr)
     if (p.stepCount == 1) {
         props->flags = kVstParameterIsSwitch;
     } else if (p.stepCount > 1) {
-        // Fehler (eigener Bugfix): sollte kVstParameterUsesIntegerMinMax | kVstParameterUsesIntStep
-        // sein; die Ganzzahl-Felder unten liest so kein Host.
-        props->flags = kVstParameterUsesFloatStep | kVstParameterSupportsDisplayIndex;
+        // Ein VST2-Host liest die Ganzzahl-Felder nur mit diesen Flags; Werte 0..stepCount.
+        props->flags = kVstParameterUsesIntegerMinMax | kVstParameterUsesIntStep;
+        props->minInteger = 0;
         props->maxInteger = p.stepCount;
         props->stepInteger = props->largeStepInteger = 1;
     }
