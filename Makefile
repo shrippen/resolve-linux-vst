@@ -9,7 +9,9 @@ LDLIBS   += -ldl
 
 BUILD ?= build
 
-SOURCES := src/resolve_linux_vst.cpp src/log.cpp src/wine_dpi.cpp src/process.cpp src/vst3.cpp src/aac.cpp src/nev.cpp src/x11.cpp src/sites.cpp $(VST3)/base/funknown.cpp
+VST3SRC  := src/vst3.cpp src/vst3_dispatch.cpp src/vst3_host.cpp src/vst3_iids.cpp src/vst3_module.cpp
+VST3HDR  := src/vst3_adapter.h src/vst3_host.h src/vst3_module.h
+SOURCES := src/resolve_linux_vst.cpp src/log.cpp src/wine_dpi.cpp src/process.cpp $(VST3SRC) src/aac.cpp src/nev.cpp src/x11.cpp src/sites.cpp $(VST3)/base/funknown.cpp
 
 all: $(BUILD)/libresolve-linux-vst.so $(BUILD)/vst3-classes $(BUILD)/resolve-check
 
@@ -19,11 +21,11 @@ $(BUILD)/include/pluginterfaces:
 	@mkdir -p $(BUILD)/include
 	ln -sfn $(abspath $(VST3)) $@
 
-$(BUILD)/libresolve-linux-vst.so: $(SOURCES) src/vst2.h src/log.h src/sites.h src/loader.h src/process.h src/wine_dpi.h src/wine_base.h src/exports.map | $(BUILD)/include/pluginterfaces
+$(BUILD)/libresolve-linux-vst.so: $(SOURCES) src/vst2.h src/log.h src/sites.h src/loader.h src/process.h src/wine_dpi.h src/wine_base.h $(VST3HDR) src/exports.map | $(BUILD)/include/pluginterfaces
 	$(CXX) $(CXXFLAGS) $(VST3INC) $(LDFLAGS) -o $@ $(SOURCES) $(LDLIBS)
 
-$(BUILD)/vst3-classes: tools/vst3-classes.cpp src/vst3.cpp src/log.cpp src/vst2.h src/log.h | $(BUILD)/include/pluginterfaces
-	$(CXX) $(filter-out -fPIC,$(CXXFLAGS)) $(VST3INC) -o $@ tools/vst3-classes.cpp src/vst3.cpp src/log.cpp $(VST3)/base/funknown.cpp $(LDLIBS)
+$(BUILD)/vst3-classes: tools/vst3-classes.cpp $(VST3SRC) src/log.cpp src/vst2.h src/log.h $(VST3HDR) | $(BUILD)/include/pluginterfaces
+	$(CXX) $(filter-out -fPIC,$(CXXFLAGS)) $(VST3INC) -o $@ tools/vst3-classes.cpp $(VST3SRC) src/log.cpp $(VST3)/base/funknown.cpp $(LDLIBS)
 
 # Prüft ohne Resolve, ob die Stellen für den Lader noch passen (resolve-linux-vst check).
 $(BUILD)/resolve-check: tools/resolve-check.cpp src/sites.cpp src/sites.h
