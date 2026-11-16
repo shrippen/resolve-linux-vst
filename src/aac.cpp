@@ -25,7 +25,6 @@
 // das ins Log.
 
 #include <dlfcn.h>
-#include <sys/mman.h>
 #include <unistd.h>
 
 #include <cstdint>
@@ -35,6 +34,7 @@
 #include <mutex>
 #include <string>
 
+#include "patch.h"
 #include "sites.h"
 #include "log.h"
 
@@ -421,46 +421,7 @@ bool audioSpecificConfig(const uint8_t *p, size_t n, const uint8_t **asc, size_t
     return false;
 }
 
-// Überschreibt `len` Bytes ab `addr` mit `jmp [rip+0]; dq dest` (14 Byte), Rest int3.
-bool writeJump(uintptr_t addr, size_t len, void *dest)
-{
-    uint8_t code[32];
-    if (len < 14 || len > sizeof code)
-        return false;
-    memset(code, 0xcc, sizeof code);
-    const uint8_t jump[6] = {0xff, 0x25, 0, 0, 0, 0};
-    memcpy(code, jump, sizeof jump);
-    uintptr_t d = reinterpret_cast<uintptr_t>(dest);
-    memcpy(code + 6, &d, sizeof d);
-
-    long pageSize = sysconf(_SC_PAGESIZE);
-    uintptr_t page = addr & ~uintptr_t(pageSize - 1);
-    size_t span = addr + len - page;
-    if (mprotect(reinterpret_cast<void *>(page), span, PROT_READ | PROT_WRITE | PROT_EXEC) != 0)
-        return false;
-    memcpy(reinterpret_cast<void *>(addr), code, len);
-    mprotect(reinterpret_cast<void *>(page), span, PROT_READ | PROT_EXEC);
-    __builtin___clear_cache(reinterpret_cast<char *>(addr), reinterpret_cast<char *>(addr + len));
-    return true;
-}
-
-// libc++ __tree_node<pair<const uint32_t, int>> und std::map: begin, end_node (nur left =
-// Wurzel), size.
-struct CodecNode {
-    CodecNode *left, *right, *parent;
-    bool black;
-    uint32_t key;
-    int value;
-};
-static_assert(offsetof(CodecNode, key) == 0x1c && offsetof(CodecNode, value) == 0x20);
-struct CodecMap {
-    CodecNode *begin;
-    CodecNode *root;
-    size_t size;
-    CodecNode *endNode() { return reinterpret_cast<CodecNode *>(&root); }
-};
-
-int collect(const CodecNode *node, uint32_t *keys, int *values, int n, int max)
+int collect(const MapNode *node, uint32_t *keys, int *values, int n, int max)
 {
     if (!node || n < 0)
         return n;
@@ -472,9 +433,9 @@ int collect(const CodecNode *node, uint32_t *keys, int *values, int n, int max)
     return collect(node->right, keys, values, n + 1, max);
 }
 
-void rotateLeft(CodecNode *x)
+void rotateLeft(MapNode *x)
 {
-    CodecNode *y = x->right;
+    MapNode *y = x->right;
     x->right = y->left;
     if (x->right)
         x->right->parent = x;
@@ -487,9 +448,9 @@ void rotateLeft(CodecNode *x)
     x->parent = y;
 }
 
-void rotateRight(CodecNode *x)
+void rotateRight(MapNode *x)
 {
-    CodecNode *y = x->left;
+    MapNode *y = x->left;
     x->left = y->right;
     if (x->left)
         x->left->parent = x;
@@ -503,13 +464,13 @@ void rotateRight(CodecNode *x)
 }
 
 // Wie libc++ __tree_balance_after_insert.
-void balanceAfterInsert(CodecNode *root, CodecNode *x)
+void balanceAfterInsert(MapNode *root, MapNode *x)
 {
     x->black = x == root;
     while (x != root && !x->parent->black) {
-        CodecNode *grand = x->parent->parent;
+        MapNode *grand = x->parent->parent;
         if (x->parent == grand->left) {
-            CodecNode *y = grand->right;
+            MapNode *y = grand->right;
             if (y && !y->black) {
                 x = x->parent;
                 x->black = true;
@@ -529,7 +490,7 @@ void balanceAfterInsert(CodecNode *root, CodecNode *x)
                 break;
             }
         } else {
-            CodecNode *y = grand->left;
+            MapNode *y = grand->left;
             if (y && !y->black) {
                 x = x->parent;
                 x->black = true;
@@ -553,12 +514,12 @@ void balanceAfterInsert(CodecNode *root, CodecNode *x)
 }
 
 // Trägt key → value ein (Knoten mit malloc; libc++ gibt ihn mit operator delete = free frei).
-void insert(CodecMap *map, uint32_t key, int value)
+void insert(MapHeader *map, uint32_t key, int value)
 {
-    auto *node = static_cast<CodecNode *>(malloc(sizeof(CodecNode)));
-    *node = CodecNode{nullptr, nullptr, nullptr, false, key, value};
-    CodecNode *parent = map->endNode();
-    CodecNode **link = &map->root;
+    auto *node = static_cast<MapNode *>(malloc(sizeof(MapNode)));
+    *node = MapNode{nullptr, nullptr, nullptr, false, key, value};
+    MapNode *parent = map->endNode();
+    MapNode **link = &map->root;
     while (*link) {
         parent = *link;
         link = key < parent->key ? &parent->left : &parent->right;
@@ -593,7 +554,7 @@ void patchResolve()
         return;
     }
 
-    auto *map = reinterpret_cast<CodecMap *>(sites.codecMap);
+    auto *map = reinterpret_cast<MapHeader *>(sites.codecMap);
     uint32_t keys[8];
     int values[8];
     const int n = collect(map->root, keys, values, 0, 8);
@@ -612,8 +573,8 @@ void patchResolve()
     resolveVstCodecTargets[1] = sites.codecExtradata;
     insert(map, kFourccAac, kCodecAac);
     insert(map, kFourccMp4a, kCodecAac);
-    bool ok = writeJump(sites.codecAt, 24, reinterpret_cast<void *>(&resolveVstCodec))
-              && writeJump(sites.switchAt, 14, reinterpret_cast<void *>(&resolveVstSwitch));
+    bool ok = patchJumpIndirect(sites.codecAt, 24, reinterpret_cast<void *>(&resolveVstCodec))
+              && patchJumpIndirect(sites.switchAt, kJumpIndirectLen, reinterpret_cast<void *>(&resolveVstSwitch));
     using UL = unsigned long;
     if (ok)
         logMessage("AAC: Resolve angepasst (aac/mp4a → FFmpeg; Weiche %#lx, Decoder %#lx, Tabelle %#lx)",
