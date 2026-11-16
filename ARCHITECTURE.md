@@ -107,5 +107,5 @@ Nikon N-RAW clips. A launcher script starts Resolve with a library loaded into i
   (`src/loader.h`).
 - `src/vst3.cpp` holds host objects, event loop, module loading and adapter in one file of
   1750 lines (`AUDIT.md`, finding 10).
-- Only the pattern search, the launcher's cleanup and the Wine DPI base decision have tests
-  (`AUDIT.md`, finding 8).
+- Only the pattern search, the launcher's cleanup, the Wine DPI base decision and the program
+  name have tests (`AUDIT.md`, finding 8).
