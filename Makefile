@@ -37,6 +37,11 @@ $(BUILD)/sites-test: tests/sites-test.cpp src/sites.cpp src/sites.h
 
 test: $(BUILD)/sites-test
 	$(BUILD)/sites-test
+	tests/launcher-test.sh
+
+# Plugin-Test mit Waves über yabridge (nur lokal, sonst übersprungen).
+plugin-test: all editor-test
+	tests/waves-dpi.sh
 
 # clean lässt den AAC-Decoder (FFmpeg-Build dauert) stehen, distclean nimmt alles.
 clean:
@@ -46,7 +51,7 @@ clean:
 distclean:
 	rm -rf $(BUILD)
 
-.PHONY: all test clean distclean
+.PHONY: all test plugin-test clean distclean
 
 PREFIX ?= $(HOME)/.local
 

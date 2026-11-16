@@ -118,6 +118,13 @@ How large the plug-in draws is up to the plug-in:
 value is remembered in `~/.local/state/resolve-linux-vst/wine-dpi-restore` and the launcher restores it
 when Resolve exits, also after a crash.
 
+**Stale group sockets.** Windows processes started inside a yabridge plug-in group inherit the
+group's socket. Waves starts `WavesLocalServer.exe`, which outlives the group and keeps listening;
+the next group finds the socket taken and does not start ("Another process is already listening
+on this group's socket"). Before Resolve starts and when it exits, the launcher stops every
+process listening on a group socket that no group process (`yabridge-host.exe.so group`) listens
+on any more. Groups still serving another host stay (`tests/launcher-test.sh`).
+
 **Frame fix.** yabridge embeds the Wine window in an intermediate window that gets its size from
 `effEditGetRect` at open time and does not grow afterwards. JUCE plug-ins under Wine also report
 their base size again after opening but draw scaled, so the editor gets cut off. The library
@@ -134,8 +141,10 @@ height 0; the window keeps its size (`src/x11.cpp`). Resolve's Qt uses xcb and i
 
 - **MPC Beats** (JUCE under Wine 9.21 and 11.11) draws with the screen factor (`Xft.dpi`), not the
   host's. A higher Wine DPI makes it smaller or blank; the host factor only grows the window.
-- **Waves** (WaveShell, VST3 through yabridge) draws with factor 240 / Wine DPI but reports its
-  size without it. At 240 DPI drawing and size match and Waves scales sharply with the host's
+- **Waves** (WaveShell, VST3 through yabridge) under Wine 9.21 draws with factor 180 / Wine DPI
+  but reports its size without it (at 240 it filled 75 % of the window, offset to the top left,
+  and clicks missed); under Wine 11.22 its drawing does not depend on the DPI. At 180 DPI drawing
+  and size match and Waves scales sharply with the host's
   content scale. Built in for `WaveShell*`.
 - **iZotope** (Neoverb, Ozone, Neutron, Nectar, RX) also draws with 240 / Wine DPI but has no
   content scaling and only gets more area when the window grows. `wine-zoom` sets the DPI to
@@ -239,8 +248,12 @@ build/editor-test ~/.local/share/resolve-linux-vst/vst/VST3/TB/TB_Compressor_v4.
 ```
 
 Start it with `LD_PRELOAD=build/libresolve-linux-vst.so` to get the library first in the symbol
-order as in Resolve; otherwise the plug-in's calls into libX11 bypass it (size 0, above). It does
-not set the Wine DPI; set it by hand first.
+order as in Resolve; otherwise the plug-in's calls into libX11 bypass it (size 0, above). The
+library sets the Wine DPI as in Resolve; `resolve-linux-vst restore` sets it back.
+
+`make plugin-test` runs `tests/waves-dpi.sh`: it opens a Waves plug-in in its own X server with the
+built-in DPI and checks that Waves fills the editor window (local only, needs Waves through
+yabridge, Xvfb and python3-PIL; skipped otherwise).
 
 `EDITOR_TEST_OFFSCREEN=1` opens the test window outside all screens (override-redirect, no window
 manager involved) and takes the screenshot from the window with `XGetImage`. Plug-ins drawing

@@ -72,7 +72,8 @@ cd resolve-linux-vst
 
 Or run it straight from the checkout without installing: `./start.sh` builds what is missing and
 starts Resolve. Make targets: `all`, `aac` (downloads FFmpeg 6.0 and builds the AAC decoder),
-`test`, `install`/`uninstall` (`PREFIX=…`), `dist`, `editor-test`.
+`test`, `install`/`uninstall` (`PREFIX=…`), `dist`, `editor-test`, `plugin-test` (Waves through
+yabridge, local only).
 
 </details>
 
@@ -112,7 +113,8 @@ resolve-linux-vst list                  list the plug-ins found (VST3 with their
 resolve-linux-vst rescan                make Resolve rescan all plug-ins on the next start
 resolve-linux-vst check                 check the hooks against the installed Resolve
 resolve-linux-vst categories            write categories of new plug-ins (done on every start)
-resolve-linux-vst restore               reset a changed Wine DPI (done when Resolve exits)
+resolve-linux-vst restore               reset a changed Wine DPI, stop leftovers of yabridge groups
+                                        (done when Resolve exits)
 resolve-linux-vst link                  only refresh the links
 ```
 
@@ -145,7 +147,7 @@ plug-ins that support it (JUCE, VST3 content scaling) to draw at that scale. Win
 under Wine draw with the DPI of their Wine prefix, which resolve-linux-vst sets per plug-in before
 loading it and restores when Resolve exits.
 
-Built-in defaults cover Waves (Wine DPI 240) and iZotope (`wine-zoom`, Wine scales the editor
+Built-in defaults cover Waves (Wine DPI 180) and iZotope (`wine-zoom`, Wine scales the editor
 up). Everything else can be set per plug-in in `~/.config/resolve-linux-vst/plugins.conf`. A section is
 the plug-in's file name without extension, the VST3 plug-in or bundle name, or `Vendor/Name`;
 shell patterns work, the first match wins:
@@ -156,7 +158,7 @@ wine-dpi = 96          # number, auto (96 × Resolve's factor), 0 = leave alone
 content-scale = 0      # number, auto (Resolve's factor), 0 = do not send
 
 [WaveShell*]           # all Waves plug-ins
-wine-dpi = 240
+wine-dpi = 180
 
 [iZotope/*]            # all iZotope plug-ins
 wine-zoom = auto       # number, auto (Resolve's factor), 0 = off
@@ -236,9 +238,13 @@ are; [How it works](docs/HOW-IT-WORKS.md#finding-the-hooks-again) explains how t
   `resolve-linux-vst rescan`, start it through `resolve-linux-vst`.
 - **A plug-in editor hangs after Resolve crashed:** yabridge plug-in groups still serve the dead
   host; `resolve-linux-vst` stops them after a crash, by hand: `pkill -f 'yabridge-host.exe.so group'`.
+- **Waves plug-ins do not load ("Another process is already listening on this group's socket"):**
+  `WavesLocalServer.exe` outlived the Waves group and holds its socket. `resolve-linux-vst` stops such
+  processes before Resolve starts and when it exits; by hand: `resolve-linux-vst restore`.
 - **Test a plug-in without Resolve:** `make editor-test`, then
   `build/editor-test <plugin.so | link-folder entry> out.png` loads it like Resolve, runs audio,
-  parameters and state through it and screenshots the editor.
+  parameters and state through it and screenshots the editor. It sets the Wine DPI of yabridge
+  plug-ins like Resolve; `resolve-linux-vst restore` sets it back.
 
 ## Uninstall
 
