@@ -31,6 +31,44 @@ struct VstParameterProperties {
     char future[16];
 };
 
+// effGetParameterProperties: Name, Kurzname und Stufen eines Parameters im VST2-Format.
+long paramProperties(const ParameterInfo &p, void *ptr)
+{
+    auto *props = static_cast<VstParameterProperties *>(ptr);
+    memset(props, 0, sizeof *props);
+    copyString(props->label, utf8(p.title, 63), 64);
+    copyString(props->shortLabel, utf8(p.shortTitle, 7), 8);
+    if (p.stepCount == 1) {
+        props->flags = 1; // kVstParameterIsSwitch
+    } else if (p.stepCount > 1) {
+        props->flags = 4 | 16; // kVstParameterUsesIntegerMinMax | kVstParameterUsesIntStep
+        props->maxInteger = p.stepCount;
+        props->stepInteger = props->largeStepInteger = 1;
+    }
+    return 1;
+}
+
+// effGetPlugCategory: VST2-Kategorie aus den Unterkategorien der VST3-Klasse.
+long plugCategory(const std::string &s)
+{
+    auto has = [&s](const char *what) { return s.find(what) != std::string::npos; };
+    if (has("Instrument"))
+        return 2; // kPlugCategSynth
+    if (has("Analyzer"))
+        return 3;
+    if (has("Mastering"))
+        return 4;
+    if (has("Spatial"))
+        return 5;
+    if (has("Reverb"))
+        return 6;
+    if (has("Restoration"))
+        return 8;
+    if (has("Generator"))
+        return 11;
+    return 1; // kPlugCategEffect
+}
+
 } // namespace
 
 long Adapter::editorRect(ERect **out)
@@ -145,6 +183,37 @@ long Adapter::setChunk(const char *data, long size)
     return 1;
 }
 
+// effSetSpeakerArrangement.
+long Adapter::setSpeakers(long value, void *ptr)
+{
+    // value: Eingang, ptr: Ausgang (VstSpeakerArrangement, numChannels an Byte 4).
+    if (active || !value || !ptr)
+        return 0;
+    auto channels = [](const void *arr) { return reinterpret_cast<const int32_t *>(arr)[1]; };
+    auto arrangement = [](int32_t c) -> SpeakerArrangement {
+        switch (c) {
+        case 1: return SpeakerArr::kMono;
+        case 2: return SpeakerArr::kStereo;
+        case 6: return SpeakerArr::k51;
+        case 8: return SpeakerArr::k71Cine;
+        default: return SpeakerArr::kEmpty;
+        }
+    };
+    std::vector<SpeakerArrangement> in = inArr, out = outArr;
+    if (!in.empty())
+        in[0] = arrangement(channels(reinterpret_cast<void *>(value)));
+    if (!out.empty())
+        out[0] = arrangement(channels(ptr));
+    if (processor->setBusArrangements(in.data(), int32(in.size()), out.data(), int32(out.size())) != kResultTrue)
+        return 0;
+    inArr = in;
+    outArr = out;
+    effect.numInputs = in.empty() ? 0 : SpeakerArr::getChannelCount(in[0]);
+    effect.numOutputs = out.empty() ? 0 : SpeakerArr::getChannelCount(out[0]);
+    setupBuffers();
+    return 1;
+}
+
 long Adapter::dispatch(int opcode, int index, long value, void *ptr, float opt)
 {
     auto paramInfo = [this](int index, ParameterInfo &p) {
@@ -201,22 +270,10 @@ long Adapter::dispatch(int opcode, int index, long value, void *ptr, float opt)
         setParameter(index, float(v));
         return 1;
     }
-    case effGetParameterProperties: {
+    case effGetParameterProperties:
         if (!ptr || !paramInfo(index, p))
             return 0;
-        auto *props = static_cast<VstParameterProperties *>(ptr);
-        memset(props, 0, sizeof *props);
-        copyString(props->label, utf8(p.title, 63), 64);
-        copyString(props->shortLabel, utf8(p.shortTitle, 7), 8);
-        if (p.stepCount == 1) {
-            props->flags = 1; // kVstParameterIsSwitch
-        } else if (p.stepCount > 1) {
-            props->flags = 4 | 16; // kVstParameterUsesIntegerMinMax | kVstParameterUsesIntStep
-            props->maxInteger = p.stepCount;
-            props->stepInteger = props->largeStepInteger = 1;
-        }
-        return 1;
-    }
+        return paramProperties(p, ptr);
     case effSetSampleRate:
     case effSetBlockSize: {
         const bool was = active;
@@ -260,53 +317,10 @@ long Adapter::dispatch(int opcode, int index, long value, void *ptr, float opt)
         pin->arrangementType = channels == 1 ? 0 : channels == 2 ? 1 : -2; // Mono, Stereo, unbekannt
         return 1;
     }
-    case effGetPlugCategory: {
-        const std::string &s = info.subCategories;
-        auto has = [&s](const char *what) { return s.find(what) != std::string::npos; };
-        if (has("Instrument"))
-            return 2; // kPlugCategSynth
-        if (has("Analyzer"))
-            return 3;
-        if (has("Mastering"))
-            return 4;
-        if (has("Spatial"))
-            return 5;
-        if (has("Reverb"))
-            return 6;
-        if (has("Restoration"))
-            return 8;
-        if (has("Generator"))
-            return 11;
-        return 1; // kPlugCategEffect
-    }
-    case effSetSpeakerArrangement: {
-        // value: Eingang, ptr: Ausgang (VstSpeakerArrangement, numChannels an Byte 4).
-        if (active || !value || !ptr)
-            return 0;
-        auto channels = [](const void *arr) { return reinterpret_cast<const int32_t *>(arr)[1]; };
-        auto arrangement = [](int32_t c) -> SpeakerArrangement {
-            switch (c) {
-            case 1: return SpeakerArr::kMono;
-            case 2: return SpeakerArr::kStereo;
-            case 6: return SpeakerArr::k51;
-            case 8: return SpeakerArr::k71Cine;
-            default: return SpeakerArr::kEmpty;
-            }
-        };
-        std::vector<SpeakerArrangement> in = inArr, out = outArr;
-        if (!in.empty())
-            in[0] = arrangement(channels(reinterpret_cast<void *>(value)));
-        if (!out.empty())
-            out[0] = arrangement(channels(ptr));
-        if (processor->setBusArrangements(in.data(), int32(in.size()), out.data(), int32(out.size())) != kResultTrue)
-            return 0;
-        inArr = in;
-        outArr = out;
-        effect.numInputs = in.empty() ? 0 : SpeakerArr::getChannelCount(in[0]);
-        effect.numOutputs = out.empty() ? 0 : SpeakerArr::getChannelCount(out[0]);
-        setupBuffers();
-        return 1;
-    }
+    case effGetPlugCategory:
+        return plugCategory(info.subCategories);
+    case effSetSpeakerArrangement:
+        return setSpeakers(value, ptr);
     case effSetBypass:
         if (bypassIndex < 0)
             return 0;

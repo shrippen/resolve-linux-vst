@@ -167,6 +167,13 @@ bool Adapter::init(IPluginFactory *factory, const TUID cid)
     setupBuses();
     readParameters();
 
+    fillEffect(cid);
+    return true;
+}
+
+// VST2-Beschreibung des Plugins ausfüllen: Aufrufe, Anzahlen, Flags, ID, Version.
+void Adapter::fillEffect(const TUID cid)
+{
     effect.magic = kEffectMagic;
     effect.object = this;
     effect.dispatcher = [](AEffect *e, int op, int index, long value, void *ptr, float opt) -> long {
@@ -193,7 +200,6 @@ bool Adapter::init(IPluginFactory *factory, const TUID cid)
     int major = 0, minor = 0, patch = 0;
     sscanf(info.version.c_str(), "%d.%d.%d", &major, &minor, &patch);
     effect.version = major * 1000 + minor * 100 + patch;
-    return true;
 }
 
 // Hauptbusse (Index 0) aktiv und nach Möglichkeit Stereo, Nebenbusse aus. VST2 sieht nur
@@ -316,14 +322,9 @@ void Adapter::setParameter(int32 index, float value)
         toController.push(ids[size_t(index)], value);
 }
 
-void Adapter::process(float **in, float **out, int32 frames)
+// Zeitangaben von Resolve (Tempo, Takt, Position) für das Plugin übersetzen.
+void Adapter::fillContext()
 {
-    if (!active || frames <= 0)
-        return;
-    inChanges.clear();
-    outChanges.clear();
-    toProcessor.drain([this](ParamID id, ParamValue v) { inChanges.add(id, v); }, false);
-
     context = {};
     context.sampleRate = setup.sampleRate;
     const long want = kVstNanosValid | kVstPpqPosValid | kVstTempoValid | kVstBarsValid | kVstCyclePosValid
@@ -365,6 +366,17 @@ void Adapter::process(float **in, float **out, int32 frames)
             context.timeSigDenominator = t->timeSigDenominator;
         }
     }
+}
+
+void Adapter::process(float **in, float **out, int32 frames)
+{
+    if (!active || frames <= 0)
+        return;
+    inChanges.clear();
+    outChanges.clear();
+    toProcessor.drain([this](ParamID id, ParamValue v) { inChanges.add(id, v); }, false);
+
+    fillContext();
 
     // Nebenbusse haben Puffer für setup.maxSamplesPerBlock; größere Blöcke ohne sie.
     const bool auxFits = frames <= setup.maxSamplesPerBlock;

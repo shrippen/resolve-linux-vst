@@ -153,15 +153,18 @@ public:
     bool onMainThread() const { return pthread_equal(pthread_self(), mainThread); }
 
     bool init(IPluginFactory *factory, const TUID cid);
+    void fillEffect(const TUID cid);
     void setupBuses();
     void setupBuffers();
     void readParameters();
     void refreshValues();
     void setActive(bool on);
+    void fillContext();
     void process(float **in, float **out, int32 frames);
     void setParameter(int32 index, float value);
     void idle();
     long dispatch(int opcode, int index, long value, void *ptr, float opt);
+    long setSpeakers(long value, void *ptr);
     long editorRect(ERect **out);
     long openEditor(void *window);
     void closeEditor();
