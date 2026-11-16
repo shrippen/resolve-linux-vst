@@ -71,6 +71,20 @@ std::string winePrefixForBundle(const std::string &bundle)
 
 namespace {
 
+// Umgebung für Wine: die eigene, ohne WINEPREFIX, WINEDEBUG und LD_PRELOAD, dazu das Prefix
+// und WINEDEBUG=-all.
+std::vector<std::string> wineEnv(const std::string &prefix)
+{
+    std::vector<std::string> env;
+    for (char **e = environ; *e; ++e)
+        if (strncmp(*e, "WINEPREFIX=", 11) != 0 && strncmp(*e, "WINEDEBUG=", 10) != 0
+            && strncmp(*e, "LD_PRELOAD=", 11) != 0)
+            env.emplace_back(*e);
+    env.push_back("WINEPREFIX=" + prefix);
+    env.push_back("WINEDEBUG=-all");
+    return env;
+}
+
 // Führt `wine <args>` im Prefix aus, über $WINELOADER wie yabridge (z. B. Runner aus
 // bottle.yml). Mit `out` wird stdout gesammelt. Liefert den Exit-Code, -1 wenn Wine nicht
 // startet.
@@ -83,13 +97,7 @@ int runWine(const std::string &prefix, std::vector<std::string> args, std::strin
         argv.push_back(a.data());
     argv.push_back(nullptr);
 
-    std::vector<std::string> env;
-    for (char **e = environ; *e; ++e)
-        if (strncmp(*e, "WINEPREFIX=", 11) != 0 && strncmp(*e, "WINEDEBUG=", 10) != 0
-            && strncmp(*e, "LD_PRELOAD=", 11) != 0)
-            env.emplace_back(*e);
-    env.push_back("WINEPREFIX=" + prefix);
-    env.push_back("WINEDEBUG=-all");
+    std::vector<std::string> env = wineEnv(prefix);
     std::vector<char *> envp;
     for (auto &e : env)
         envp.push_back(e.data());
