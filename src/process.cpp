@@ -39,7 +39,12 @@ const char *programName()
     return slash ? slash + 1 : path;
 }
 
-bool isResolveProcess()
+bool isResolveMain()
+{
+    return strcmp(programName(), kProgResolve) == 0;
+}
+
+bool loadsLikeResolve()
 {
     const char *name = programName();
     return strcmp(name, kProgResolve) == 0 || strcmp(name, kProgScanner) == 0 || strcmp(name, kProgEditorTest) == 0;
