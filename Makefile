@@ -19,7 +19,7 @@ $(BUILD)/include/pluginterfaces:
 	@mkdir -p $(BUILD)/include
 	ln -sfn $(abspath $(VST3)) $@
 
-$(BUILD)/libresolve-linux-vst.so: $(SOURCES) src/vst2.h src/sites.h src/loader.h src/wine_dpi.h src/exports.map | $(BUILD)/include/pluginterfaces
+$(BUILD)/libresolve-linux-vst.so: $(SOURCES) src/vst2.h src/sites.h src/loader.h src/wine_dpi.h src/wine_base.h src/exports.map | $(BUILD)/include/pluginterfaces
 	$(CXX) $(CXXFLAGS) $(VST3INC) $(LDFLAGS) -o $@ $(SOURCES) $(LDLIBS)
 
 $(BUILD)/vst3-classes: tools/vst3-classes.cpp src/vst3.cpp src/vst2.h | $(BUILD)/include/pluginterfaces
