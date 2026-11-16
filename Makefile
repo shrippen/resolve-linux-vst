@@ -40,7 +40,12 @@ $(BUILD)/wine-base-test: tests/wine-base-test.cpp src/wine_base.h
 	@mkdir -p $(BUILD)
 	$(CXX) $(filter-out -fPIC,$(CXXFLAGS)) -o $@ tests/wine-base-test.cpp
 
-test: $(BUILD)/sites-test $(BUILD)/wine-base-test
+# Ohne weggelassene Kopien, damit ein Zeiger in eine Kopie auffällt.
+$(BUILD)/process-test: tests/process-test.cpp src/process.cpp src/process.h
+	$(CXX) $(filter-out -fPIC,$(CXXFLAGS)) -fno-elide-constructors -o $@ tests/process-test.cpp src/process.cpp
+
+test: $(BUILD)/process-test $(BUILD)/sites-test $(BUILD)/wine-base-test
+	$(BUILD)/process-test
 	$(BUILD)/sites-test
 	$(BUILD)/wine-base-test
 	tests/launcher-test.sh
@@ -51,7 +56,7 @@ plugin-test: all editor-test
 
 # clean lässt den AAC-Decoder (FFmpeg-Build dauert) stehen, distclean nimmt alles.
 clean:
-	rm -f $(BUILD)/libresolve-linux-vst.so $(BUILD)/vst3-classes $(BUILD)/resolve-check $(BUILD)/sites-test $(BUILD)/wine-base-test $(BUILD)/editor-test
+	rm -f $(BUILD)/process-test $(BUILD)/libresolve-linux-vst.so $(BUILD)/vst3-classes $(BUILD)/resolve-check $(BUILD)/sites-test $(BUILD)/wine-base-test $(BUILD)/editor-test
 	rm -rf $(BUILD)/dist
 
 distclean:
