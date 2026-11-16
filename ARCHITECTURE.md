@@ -98,8 +98,6 @@ Nikon N-RAW clips. A launcher script starts Resolve with a library loaded into i
 
 - Writing a jump into Resolve's code is built twice, in loader and AAC
   (`AUDIT.md`, finding 7).
-- Launcher and library keep place and format of the Wine DPI file equal by hand
-  (`AUDIT.md`, finding 4).
 - The loader file has five tasks: besides loading also opening the log file, `plugins.conf`,
   the editor size and the changes to the scanner (`AUDIT.md`, finding 9). The Wine DPI has its own file
   but reaches back into the loader file for `plugins.conf`, state folder and scale factor

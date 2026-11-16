@@ -5,7 +5,8 @@
 // Laden jedes yabridge-Plugins auf den Wert für dieses Plugin gestellt (pluginWineSetting), in
 // resolve und im VstScanner: Plugin-Prozesse können ihn überleben (eine yabridge-Plugingruppe
 // wie die von Waves läuft weiter und wird später von Resolve benutzt). Den Vorwert merkt sich
-// stateDir()/wine-dpi-restore; resolve-linux-vst setzt ihn zurück, sobald Resolve beendet ist.
+// die Datei, die resolve-linux-vst in RESOLVE_LINUX_VST_WINE_RESTORE mitgibt, und setzt ihn
+// zurück, sobald Resolve beendet ist. Ohne die Variable bleibt die DPI unverändert.
 // editor-test zählt mit: Es lädt wie Resolve, auch mit Wine-DPI (tests/wine-dpi.sh).
 
 #include <dirent.h>
@@ -163,11 +164,19 @@ WineSetting pluginWineSetting(const Names &names)
 
 constexpr int kNoRestoreEntry = -2;
 
+// Datei der Vorwerte; Ort bestimmt der Starter (leer: nicht gestartet über resolve-linux-vst).
+std::string restoreFile()
+{
+    const char *path = getenv("RESOLVE_LINUX_VST_WINE_RESTORE");
+    return path ? path : "";
+}
+
 // Gemerkter Vorwert eines Prefix (Wert vor Resolve, -1 = war nicht gesetzt), sonst
 // kNoRestoreEntry.
 int rememberedWineDpi(const std::string &prefix)
 {
-    FILE *f = fopen((stateDir() + "/wine-dpi-restore").c_str(), "r");
+    const std::string file = restoreFile();
+    FILE *f = file.empty() ? nullptr : fopen(file.c_str(), "r");
     if (!f) {
         return kNoRestoreEntry;
     }
@@ -189,7 +198,8 @@ bool rememberWineDpi(const std::string &prefix, int previous)
     if (rememberedWineDpi(prefix) != kNoRestoreEntry) {
         return true;
     }
-    FILE *f = fopen((stateDir() + "/wine-dpi-restore").c_str(), "a");
+    const std::string file = restoreFile();
+    FILE *f = file.empty() ? nullptr : fopen(file.c_str(), "a");
     if (!f)
         return false;
     bool ok = fprintf(f, "%s\t%d\n", prefix.c_str(), previous) > 0;
