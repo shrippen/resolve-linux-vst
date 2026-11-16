@@ -74,12 +74,14 @@ xvfb=$!
 sleep 2
 
 # Wartet, bis keine Wine-Sitzung mehr läuft (wineserver endet einige Sekunden nach dem letzten
-# Wine-Prozess).
+# Wine-Prozess). Hält ein Prozess sie offen (z. B. MicrosoftEdgeUpdate.exe im Prefix), prüft der
+# Test den Neustart der Sitzung nicht: übersprungen.
 await_session_end() {
     for _ in {1..30}; do
         pgrep -x wineserver >/dev/null || return 0
         sleep 1
     done
+    skip "eine Wine-Sitzung endet nicht ($(pgrep -a -x wineserver | head -1))"
 }
 
 fail=0

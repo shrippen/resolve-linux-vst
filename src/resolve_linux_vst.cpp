@@ -877,14 +877,15 @@ WinePrefixState *prefixState(std::vector<WinePrefixState> &known, const std::str
         return k;
     }
 
-    const int current = k ? k->dpi : queryWineDpi(prefix);
+    // Aus der Registry, nicht k->dpi: Ein anderer Prozess (VstScanner) kann sie geändert haben.
+    const int current = queryWineDpi(prefix);
     if (current == -2) {
         return nullptr;
     }
     const int before = rememberedWineDpi(prefix);
     const int base = before == kNoRestoreEntry ? current : before;
     WinePrefixState state{prefix, current, base < 0 ? kWineDefaultDpi : base};
-    if (!running && current != base) {
+    if (!running && (current < 0 ? kWineDefaultDpi : current) != state.base) {
         startAtBase(state);
     }
     if (!k) {
