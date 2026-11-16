@@ -97,6 +97,92 @@ void rect(AEffect *e, const char *when)
     resize(r->right - r->left, r->bottom - r->top);
 }
 
+// Audio durchschicken, Pegel ausgeben.
+void runAudio(AEffect *e)
+{
+    // 20 Blöcke Sinus 1 kHz, -12 dBFS, auf allen Eingängen; Pegel des letzten Blocks.
+    const int n = 512;
+    std::vector<std::vector<float>> in(size_t(e->numInputs), std::vector<float>(n)), out(size_t(e->numOutputs), std::vector<float>(n));
+    std::vector<float *> ip, op;
+    for (auto &c : in)
+        ip.push_back(c.data());
+    for (auto &c : out)
+        op.push_back(c.data());
+    double rmsIn = 0, rmsOut = 0;
+    for (int b = 0; b < 20; ++b) {
+        for (auto &c : in)
+            for (int i = 0; i < n; ++i)
+                c[size_t(i)] = 0.25f * float(sin(2 * M_PI * 1000 * (b * n + i) / 48000.0));
+        e->processReplacing(e, ip.data(), op.data(), n);
+    }
+    for (auto &c : in)
+        for (float v : c)
+            rmsIn += double(v) * v;
+    for (auto &c : out)
+        for (float v : c)
+            rmsOut += double(v) * v;
+    auto db = [](double sum, size_t count) { return count ? 10 * log10(sum / double(count) + 1e-20) : -200.0; };
+    printf("Audio: Eingang %.1f dBFS, Ausgang %.1f dBFS\n", db(rmsIn, in.size() * n), db(rmsOut, out.size() * n));
+}
+
+// Parameter 0 und Zustand (Chunk) prüfen.
+void checkState(AEffect *e)
+{
+    if (e->numParams > 0) {
+        char name[256] = {}, display[256] = {}, label[256] = {};
+        e->dispatcher(e, effGetParamName, 0, 0, name, 0);
+        e->dispatcher(e, effGetParamDisplay, 0, 0, display, 0);
+        e->dispatcher(e, effGetParamLabel, 0, 0, label, 0);
+        printf("Parameter 0: %s = %s %s (%.3f)\n", name, display, label, e->getParameter(e, 0));
+    }
+    void *chunk = nullptr;
+    long chunkSize = e->dispatcher(e, effGetChunk, 0, 0, &chunk, 0);
+    if (chunkSize > 0) {
+        std::vector<char> copy(static_cast<char *>(chunk), static_cast<char *>(chunk) + chunkSize);
+        long ok = e->dispatcher(e, effSetChunk, 0, chunkSize, copy.data(), 0);
+        printf("Chunk: %ld Bytes, zurückgeschrieben: %ld\n", chunkSize, ok);
+    }
+}
+
+// Fenster aufnehmen; Rückgabe 0 bei Erfolg.
+int capture(bool offscreen, const char *outPath)
+{
+    int status = 0;
+    if (offscreen) {
+        XWindowAttributes a;
+        XGetWindowAttributes(dpy, win, &a);
+        XImage *img = XGetImage(dpy, win, 0, 0, unsigned(a.width), unsigned(a.height), AllPlanes, ZPixmap);
+        if (!img || img->bits_per_pixel != 32) {
+            fprintf(stderr, "XGetImage fehlgeschlagen\n");
+            status = 1;
+        } else {
+            const std::string cmd = "ffmpeg -loglevel error -y -f rawvideo -pix_fmt bgr0 -video_size " + std::to_string(a.width)
+                                    + "x" + std::to_string(a.height) + " -i - -frames:v 1 '" + outPath + "'";
+            FILE *ff = popen(cmd.c_str(), "w");
+            for (int row = 0; ff && row < a.height; ++row)
+                fwrite(img->data + row * img->bytes_per_line, 4, size_t(a.width), ff);
+            status = ff ? pclose(ff) : 1;
+        }
+        if (img)
+            XDestroyImage(img);
+    } else {
+        XMapRaised(dpy, win);
+        XSync(dpy, False);
+        usleep(300000);
+        XWindowAttributes a;
+        XGetWindowAttributes(dpy, win, &a);
+        int x = 0, y = 0;
+        Window child;
+        XTranslateCoordinates(dpy, win, DefaultRootWindow(dpy), 0, 0, &x, &y, &child);
+        printf("Fenster bei %d,%d\n", x, y);
+        const std::string cmd = "ffmpeg -loglevel error -y -f x11grab -video_size " + std::to_string(a.width) + "x"
+                                + std::to_string(a.height) + " -i " + getenv("DISPLAY") + "+" + std::to_string(x) + ","
+                                + std::to_string(y) + " -frames:v 1 '" + outPath + "'";
+        status = system(cmd.c_str());
+    }
+    return status;
+}
+
 } // namespace
 
 int main(int argc, char **argv)
@@ -146,45 +232,8 @@ int main(int argc, char **argv)
     e->dispatcher(e, effSetBlockSize, 0, 512, nullptr, 0);
     e->dispatcher(e, effMainsChanged, 0, 1, nullptr, 0); // an
     printf("%d Parameter, %d→%d Kanäle\n", e->numParams, e->numInputs, e->numOutputs);
-    {
-        // 20 Blöcke Sinus 1 kHz, -12 dBFS, auf allen Eingängen; Pegel des letzten Blocks.
-        const int n = 512;
-        std::vector<std::vector<float>> in(size_t(e->numInputs), std::vector<float>(n)), out(size_t(e->numOutputs), std::vector<float>(n));
-        std::vector<float *> ip, op;
-        for (auto &c : in)
-            ip.push_back(c.data());
-        for (auto &c : out)
-            op.push_back(c.data());
-        double rmsIn = 0, rmsOut = 0;
-        for (int b = 0; b < 20; ++b) {
-            for (auto &c : in)
-                for (int i = 0; i < n; ++i)
-                    c[size_t(i)] = 0.25f * float(sin(2 * M_PI * 1000 * (b * n + i) / 48000.0));
-            e->processReplacing(e, ip.data(), op.data(), n);
-        }
-        for (auto &c : in)
-            for (float v : c)
-                rmsIn += double(v) * v;
-        for (auto &c : out)
-            for (float v : c)
-                rmsOut += double(v) * v;
-        auto db = [](double sum, size_t count) { return count ? 10 * log10(sum / double(count) + 1e-20) : -200.0; };
-        printf("Audio: Eingang %.1f dBFS, Ausgang %.1f dBFS\n", db(rmsIn, in.size() * n), db(rmsOut, out.size() * n));
-    }
-    if (e->numParams > 0) {
-        char name[256] = {}, display[256] = {}, label[256] = {};
-        e->dispatcher(e, effGetParamName, 0, 0, name, 0);
-        e->dispatcher(e, effGetParamDisplay, 0, 0, display, 0);
-        e->dispatcher(e, effGetParamLabel, 0, 0, label, 0);
-        printf("Parameter 0: %s = %s %s (%.3f)\n", name, display, label, e->getParameter(e, 0));
-    }
-    void *chunk = nullptr;
-    long chunkSize = e->dispatcher(e, effGetChunk, 0, 0, &chunk, 0);
-    if (chunkSize > 0) {
-        std::vector<char> copy(static_cast<char *>(chunk), static_cast<char *>(chunk) + chunkSize);
-        long ok = e->dispatcher(e, effSetChunk, 0, chunkSize, copy.data(), 0);
-        printf("Chunk: %ld Bytes, zurückgeschrieben: %ld\n", chunkSize, ok);
-    }
+    runAudio(e);
+    checkState(e);
     rect(e, "vor effEditOpen");
     e->dispatcher(e, effEditOpen, 0, 0, reinterpret_cast<void *>(win), 0);
     rect(e, "nach effEditOpen");
@@ -205,39 +254,7 @@ int main(int argc, char **argv)
     XWindowAttributes before;
     XGetWindowAttributes(dpy, win, &before);
     printf("Fenster %s\n", before.map_state == IsViewable ? "sichtbar" : "nicht sichtbar, wird gezeigt");
-    int status = 0;
-    if (offscreen) {
-        XWindowAttributes a;
-        XGetWindowAttributes(dpy, win, &a);
-        XImage *img = XGetImage(dpy, win, 0, 0, unsigned(a.width), unsigned(a.height), AllPlanes, ZPixmap);
-        if (!img || img->bits_per_pixel != 32) {
-            fprintf(stderr, "XGetImage fehlgeschlagen\n");
-            status = 1;
-        } else {
-            const std::string cmd = "ffmpeg -loglevel error -y -f rawvideo -pix_fmt bgr0 -video_size " + std::to_string(a.width)
-                                    + "x" + std::to_string(a.height) + " -i - -frames:v 1 '" + argv[2] + "'";
-            FILE *ff = popen(cmd.c_str(), "w");
-            for (int row = 0; ff && row < a.height; ++row)
-                fwrite(img->data + row * img->bytes_per_line, 4, size_t(a.width), ff);
-            status = ff ? pclose(ff) : 1;
-        }
-        if (img)
-            XDestroyImage(img);
-    } else {
-        XMapRaised(dpy, win);
-        XSync(dpy, False);
-        usleep(300000);
-        XWindowAttributes a;
-        XGetWindowAttributes(dpy, win, &a);
-        int x = 0, y = 0;
-        Window child;
-        XTranslateCoordinates(dpy, win, DefaultRootWindow(dpy), 0, 0, &x, &y, &child);
-        printf("Fenster bei %d,%d\n", x, y);
-        const std::string cmd = "ffmpeg -loglevel error -y -f x11grab -video_size " + std::to_string(a.width) + "x"
-                                + std::to_string(a.height) + " -i " + getenv("DISPLAY") + "+" + std::to_string(x) + ","
-                                + std::to_string(y) + " -frames:v 1 '" + argv[2] + "'";
-        status = system(cmd.c_str());
-    }
+    const int status = capture(offscreen, argv[2]);
     // Sauber schließen wie Resolve (eine yabridge-Plugingruppe hängt sonst beim nächsten
     // Editor). Manche Plugins (MPC Beats) hängen beim Schließen ohne Ereignisschleife des
     // Hosts: nach 10 s ohne Aufräumen beenden.

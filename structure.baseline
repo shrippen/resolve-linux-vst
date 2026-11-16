@@ -5,4 +5,3 @@ src/editor_size.cpp	xcb	ccn=17
 src/plugin_conf.cpp	pluginSetting	ccn=17
 src/sites.cpp	ElfFile::imports	ccn=17
 src/vst3_dispatch.cpp	vst3::Adapter::dispatch	ccn=80 length=153
-tools/editor-test.cpp	main	ccn=33 length=149
