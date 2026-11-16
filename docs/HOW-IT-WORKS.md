@@ -121,10 +121,12 @@ when Resolve exits, also after a crash.
 **Base DPI.** Wine scales every window by base DPI / the DPI the plug-in process started with.
 The base is the DPI when the prefix's Wine session started (wineserver, `explorer.exe`); later
 changes reach only new processes. Measured with Wine 9.21 on Neoverb (factor 3.75, DPI 64): with
-180 at session start it filled 75 % of its window, with 240 all of it. The library keeps the base
-per prefix: when no session runs (`/tmp/.wine-<uid>/server-<dev>-<inode>/socket` missing), the
-next one starts with the current value; a session this process did not start (scanner, a
-plug-in group) is taken to have started with the value before Resolve.
+180 at session start it filled 75 % of its window, with 240 all of it. The base is the value
+before Resolve (from `wine-dpi-restore`, else the current one). When no session runs
+(`/tmp/.wine-<uid>/server-<dev>-<inode>/socket` missing) and the DPI differs from the base, the
+library first sets it back and waits until that short session ends (a few seconds); otherwise
+the next session would start with the last value set and the DPI would sink with each one
+(base / factor / factor …). A running session keeps its base.
 
 **Stale group sockets.** Windows processes started inside a yabridge plug-in group inherit the
 group's socket. Waves starts `WavesLocalServer.exe`, which outlives the group and keeps listening;

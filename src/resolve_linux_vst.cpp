@@ -826,32 +826,64 @@ struct WinePrefixState {
     int base; // DPI beim Start der laufenden Wine-Sitzung
 };
 
-// Zustand eines Prefix vor dem Laden. Läuft keine Sitzung, startet die nächste mit dem
-// aktuellen Wert. Läuft eine, die dieser Prozess nicht kennt (VstScanner, Waves-Gruppe), gilt
-// der Wert vor Resolve. nullptr, wenn Wine nicht abfragbar ist.
+constexpr int kSessionEndWaitMs = 10000;
+
+// Setzt die DPI eines Prefix ohne laufende Sitzung und wartet, bis die dafür gestartete
+// Sitzung endet (wineserver bleibt einige Sekunden): Die nächste startet dann mit `dpi`.
+bool resetWineSession(const std::string &prefix, int dpi)
+{
+    if (runWine(prefix, {"reg", "add", "HKCU\\Control Panel\\Desktop", "/v", "LogPixels", "/t", "REG_DWORD", "/d",
+                         std::to_string(dpi), "/f"}) != 0) {
+        return false;
+    }
+    for (int ms = 0; ms < kSessionEndWaitMs; ms += 100) {
+        if (!wineSessionRunning(prefix)) {
+            return true;
+        }
+        usleep(100 * 1000);
+    }
+    return false;
+}
+
+// Zustand eines Prefix vor dem Laden. Basis ist der Wert vor Resolve (gemerkter Vorwert, sonst
+// der aktuelle). Läuft keine Sitzung, wird die DPI vorher auf die Basis zurückgesetzt, sonst
+// startete die nächste Sitzung mit dem zuletzt gesetzten Wert und die DPI sänke mit jeder
+// (Basis / Faktor / Faktor …). Eine laufende Sitzung, die dieser Prozess kennt, behält ihre
+// Basis. nullptr, wenn Wine nicht abfragbar ist.
 WinePrefixState *prefixState(std::vector<WinePrefixState> &known, const std::string &prefix)
 {
     const bool running = wineSessionRunning(prefix);
-    for (auto &k : known) {
-        if (k.prefix != prefix) {
-            continue;
+    WinePrefixState *k = nullptr;
+    for (auto &entry : known) {
+        if (entry.prefix == prefix) {
+            k = &entry;
         }
-        if (!running) {
-            k.base = k.dpi < 0 ? kWineDefaultDpi : k.dpi;
-        }
-        return &k;
+    }
+    if (k && running) {
+        return k;
     }
 
-    const int current = queryWineDpi(prefix);
+    const int current = k ? k->dpi : queryWineDpi(prefix);
     if (current == -2) {
         return nullptr;
     }
-    int base = current;
-    if (const int before = rememberedWineDpi(prefix); running && before != kNoRestoreEntry) {
-        base = before;
+    const int before = rememberedWineDpi(prefix);
+    const int base = before == kNoRestoreEntry ? current : before;
+    WinePrefixState state{prefix, current, base < 0 ? kWineDefaultDpi : base};
+    if (!running && current != base) {
+        const bool ok = resetWineSession(prefix, state.base);
+        logf("  Wine-DPI %s: neue Sitzung, zuerst %d → %d %s", prefix.c_str(), current, state.base,
+             ok ? "zurückgesetzt" : "NICHT zurückgesetzt");
+        // Ohne Zurücksetzen startete die Sitzung mit dem aktuellen Wert.
+        state.dpi = ok ? state.base : current;
+        state.base = ok ? state.base : (current < 0 ? kWineDefaultDpi : current);
     }
-    known.push_back({prefix, current, base < 0 ? kWineDefaultDpi : base});
-    return &known.back();
+    if (!k) {
+        known.push_back(state);
+        return &known.back();
+    }
+    *k = state;
+    return k;
 }
 
 // Stellt die Wine-DPI für ein Plugin ein, liefert den Faktor für Instance::zoom (Basis / DPI

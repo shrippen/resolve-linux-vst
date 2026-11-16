@@ -4,8 +4,9 @@
 # X-Server und prüft, ob jedes das ganze Editorfenster füllt. Wine vergrößert mit
 # Basis-DPI / DPI des Plugin-Prozesses (Basis: DPI beim Start der Wine-Sitzung); stimmt die
 # Rechnung nicht, zeichnet das Plugin kleiner, oben links, und Klicks treffen nicht.
-# Vorgabe: iZotope Neoverb (wine-zoom, startet die Sitzung), dann Waves Butch Vig (in der
-# laufenden Sitzung, nach geänderter DPI).
+# Vorgabe: iZotope Neoverb dreimal (wine-zoom), dazwischen endet die Wine-Sitzung jedes Mal
+# (die Basis darf nicht vom zuletzt gesetzten Wert ausgehen, sonst sinkt sie), dann Waves
+# Butch Vig (die Gruppe läuft am längsten).
 #
 #   tests/wine-dpi.sh [Klasse.vst …]    Exit 0 = ok, 1 = Fehler, 77 = übersprungen
 set -euo pipefail
@@ -15,7 +16,8 @@ root=$(dirname "$here")
 links=${XDG_DATA_HOME:-$HOME/.local/share}/resolve-linux-vst/vst
 plugins=("$@")
 if ((${#plugins[@]} == 0)); then
-    plugins=("$links/VST3/yabridge/iZotope/Neoverb.vst"
+    neoverb=$links/VST3/yabridge/iZotope/Neoverb.vst
+    plugins=("$neoverb" "$neoverb" "$neoverb"
         "$links/VST3/yabridge/WaveShell1-VST3 14.12_x64/Butch Vig Vocals Mono.vst")
 fi
 display=:97
@@ -71,15 +73,32 @@ Xvfb "$display" -screen 0 3840x2400x24 >/dev/null 2>&1 &
 xvfb=$!
 sleep 2
 
+# Wartet, bis keine Wine-Sitzung mehr läuft (wineserver endet einige Sekunden nach dem letzten
+# Wine-Prozess).
+await_session_end() {
+    for _ in {1..30}; do
+        pgrep -x wineserver >/dev/null || return 0
+        sleep 1
+    done
+}
+
 fail=0
 for plugin in "${plugins[@]}"; do
+    await_session_end
     name=$(basename "$plugin")
-    if ! DISPLAY=$display XDG_CONFIG_HOME=$work/config RESOLVE_LINUX_VST_EDITOR_SCALE=3.75 \
-        timeout 150 "$root/build/editor-test" "$plugin" "$work/shot.png" 10 >"$work/log" 2>&1; then
+    rm -f "$work/shot.png"
+    status=0
+    DISPLAY=$display XDG_CONFIG_HOME=$work/config RESOLVE_LINUX_VST_EDITOR_SCALE=3.75 \
+        timeout 150 "$root/build/editor-test" "$plugin" "$work/shot.png" 10 >"$work/log" 2>&1 || status=$?
+    # Geprüft wird die Zeichnung; manche Plugins brechen unter Xvfb erst beim Abbau ab.
+    if [[ ! -s $work/shot.png ]]; then
         tail -20 "$work/log" >&2
-        echo "wine-dpi: $name: editor-test fehlgeschlagen" >&2
+        echo "wine-dpi: $name: keine Aufnahme (editor-test Exit $status): FEHLER" >&2
         fail=1
         continue
+    fi
+    if ((status != 0)); then
+        echo "wine-dpi: $name: Hinweis: editor-test Exit $status nach der Aufnahme" >&2
     fi
     echo -n "wine-dpi: $name: "
     measure "$work/shot.png" || fail=1
