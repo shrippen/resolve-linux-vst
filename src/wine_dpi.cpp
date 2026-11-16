@@ -27,6 +27,7 @@
 #include "loader.h"
 #include "log.h"
 #include "process.h"
+#include "wine_base.h"
 #include "wine_dpi.h"
 
 namespace {
@@ -230,8 +231,6 @@ bool wineSessionRunning(const std::string &prefix)
     return access(socket, F_OK) == 0;
 }
 
-constexpr int kWineDefaultDpi = 96; // LogPixels nicht gesetzt
-
 // Wine-Vergrößerung: Wine vergrößert jedes Fenster mit Basis-DPI / DPI des Plugin-Prozesses.
 // Die Basis ist die DPI beim Start der Wine-Sitzung des Prefix (wineserver, explorer.exe);
 // spätere Änderungen sehen nur neue Prozesse. Gemessen mit Wine 9.21 an Neoverb (Faktor 3.75,
@@ -275,7 +274,7 @@ void startAtBase(WinePrefixState &state)
         state.dpi = state.base;
         return;
     }
-    state.base = state.dpi < 0 ? kWineDefaultDpi : state.dpi;
+    state.base = wineDpiOrDefault(state.dpi);
 }
 
 // Zustand eines Prefix vor dem Laden. Basis ist der Wert vor Resolve (gemerkter Vorwert, sonst
@@ -285,14 +284,14 @@ void startAtBase(WinePrefixState &state)
 // Basis. nullptr, wenn Wine nicht abfragbar ist.
 WinePrefixState *prefixState(std::vector<WinePrefixState> &known, const std::string &prefix)
 {
-    const bool running = wineSessionRunning(prefix);
+    const WineSession session = wineSessionRunning(prefix) ? WineSession::Running : WineSession::Stopped;
     WinePrefixState *k = nullptr;
     for (auto &entry : known) {
         if (entry.prefix == prefix) {
             k = &entry;
         }
     }
-    if (k && running) {
+    if (k && session == WineSession::Running) {
         return k;
     }
 
@@ -302,9 +301,10 @@ WinePrefixState *prefixState(std::vector<WinePrefixState> &known, const std::str
         return nullptr;
     }
     const int before = rememberedWineDpi(prefix);
-    const int base = before == kNoRestoreEntry ? current : before;
-    WinePrefixState state{prefix, current, base < 0 ? kWineDefaultDpi : base};
-    if (!running && (current < 0 ? kWineDefaultDpi : current) != state.base) {
+    const WineBase decision = wineBaseFor(session, current,
+                                          before == kNoRestoreEntry ? std::nullopt : std::optional<int>(before));
+    WinePrefixState state{prefix, current, decision.base};
+    if (decision.reset == WineReset::Yes) {
         startAtBase(state);
     }
     if (!k) {
