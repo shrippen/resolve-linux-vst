@@ -1,6 +1,7 @@
 // Test von src/patch.cpp ohne Resolve: die Bytes der beiden Sprünge für erfundene Ziele, das
 // Schreiben in eine eigene, erst danach schreibgeschützte Seite und Auslesen, Suchen und
 // Einfügen in eine selbst gebaute std::map-Tabelle. Läuft mit make test.
+#include "../src/log.h"
 #include "../src/patch.h"
 
 #include <sys/mman.h>
@@ -275,6 +276,52 @@ void testMapCollect()
     expect(mapCollect(&empty.map, keys, values, 8) == 0, "mapCollect: leere Tabelle");
 }
 
+// Was `run` ins Protokoll schreibt (Speicher statt Datei).
+template <typename F> std::string logOf(F run)
+{
+    char *buf = nullptr;
+    size_t size = 0;
+    FILE *f = open_memstream(&buf, &size);
+    setLogFile(f);
+    run();
+    setLogFile(nullptr);
+    fclose(f);
+    std::string text(buf ? buf : "", size);
+    free(buf);
+    return text;
+}
+
+// Beide Sprungarten melden einen Fehlschlag gleich: eine Zeile "mprotect: <Grund>".
+void testJumpErrors()
+{
+    const uint8_t code[kJumpRaxLen] = {};
+    errno = 0;
+    writeCode(0x10, code, sizeof code);
+    const std::string want = std::string("mprotect: ") + strerror(errno) + "\n";
+
+    bool raxOk = true, indirectOk = true;
+    std::string rax = logOf([&] { raxOk = patchJumpRax(0x10, dest()); });
+    std::string indirect = logOf([&] { indirectOk = patchJumpIndirect(0x10, kPadded, dest()); });
+    expect(!raxOk && rax.size() >= want.size() && rax.compare(rax.size() - want.size(), want.size(), want) == 0,
+           "patchJumpRax: Fehlschlag meldet mprotect und Grund");
+    expect(!indirectOk && indirect.size() >= want.size()
+               && indirect.compare(indirect.size() - want.size(), want.size(), want) == 0,
+           "patchJumpIndirect: Fehlschlag meldet mprotect und Grund");
+
+    const size_t pageSize = size_t(sysconf(_SC_PAGESIZE));
+    void *mem = mmap(nullptr, pageSize, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    if (mem == MAP_FAILED) {
+        expect(false, "Testseite angelegt");
+        return;
+    }
+    const uintptr_t at = uintptr_t(mem);
+    std::string tooLong = logOf([&] { indirectOk = patchJumpIndirect(at, 33, dest()); });
+    expect(!indirectOk && tooLong.find("Sprunglänge 33") != std::string::npos, "patchJumpIndirect: ungültige Länge wird gemeldet");
+    std::string okLog = logOf([&] { raxOk = patchJumpRax(at, dest()) && patchJumpIndirect(at, kPadded, dest()); });
+    expect(raxOk && okLog.empty(), "erfolgreiche Sprünge schreiben nichts ins Protokoll");
+    munmap(mem, pageSize);
+}
+
 } // namespace
 
 // Wann leitet redirectFunctions eine Funktion um? Nur mit gefundenem Symbol, einem Ersatz,
@@ -297,6 +344,7 @@ int main()
     testWrite();
     testWriteAcrossPages();
     testWriteFails();
+    testJumpErrors();
     testMapInsert();
     testMapCollect();
     printf("%s\n", failures ? "FEHLGESCHLAGEN" : "alle Tests bestanden");

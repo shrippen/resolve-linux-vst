@@ -25,13 +25,12 @@ void buildJumpIndirect(void *dest, uint8_t *out, size_t len);
 // Fehler in errno und nichts ist geschrieben.
 bool writeCode(uintptr_t addr, const uint8_t *code, size_t len);
 
-// Überschreibt den Anfang von `target` mit buildJumpRax.
+// Überschreibt den Anfang von `target` mit buildJumpRax. Der Grund eines Fehlschlags
+// ("mprotect: <strerror>") kommt ins Protokoll (log.h).
 bool patchJumpRax(uintptr_t target, void *dest);
 
-// Wie patchJumpRax; der Grund eines Fehlschlags kommt ins Protokoll (log.h).
-bool patchJump(uintptr_t target, void *dest);
-
-// Überschreibt `len` Bytes (14 bis 32) ab `addr` mit buildJumpIndirect.
+// Überschreibt `len` Bytes (14 bis 32) ab `addr` mit buildJumpIndirect. Fehlschläge wie bei
+// patchJumpRax, dazu eine Länge außerhalb von 14 bis 32.
 bool patchJumpIndirect(uintptr_t addr, size_t len, void *dest);
 
 // Eine Funktion in Resolves Programmdatei (Symbolname, siehe sites.h) und ihr Ersatz.
