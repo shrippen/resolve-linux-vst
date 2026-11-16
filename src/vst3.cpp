@@ -28,7 +28,7 @@
 #include "pluginterfaces/vst/ivstparameterchanges.h"
 #include "pluginterfaces/vst/ivstprocesscontext.h"
 #include "pluginterfaces/vst/vstspeaker.h"
-
+#include "log.h"
 #include "vst2.h"
 
 #include <dirent.h>
@@ -680,32 +680,51 @@ struct ClassInfo {
     std::string name, vendor, version, subCategories;
 };
 
-// Angaben zu einer Klasse; false, wenn die Fabrik sie nicht kennt.
-bool classInfo(IPluginFactory *factory, const TUID cid, ClassInfo &out)
+// Eine Klasse der Fabrik mit allen Angaben, die Lader und Liste brauchen.
+struct FactoryClass { TUID cid; std::string category; ClassInfo info; };
+
+// Alle Klassen der Fabrik in deren Reihenfolge. Alte Plugins ohne IPluginFactory2 liefern nur
+// PClassInfo: Hersteller dann aus der Fabrik, Version und Unterkategorien leer.
+std::vector<FactoryClass> factoryClasses(IPluginFactory *factory)
 {
+    std::vector<FactoryClass> out;
     PFactoryInfo fi{};
     factory->getFactoryInfo(&fi);
     IPluginFactory2 *f2 = nullptr;
     factory->queryInterface(IPluginFactory2::iid, reinterpret_cast<void **>(&f2));
-    bool found = false;
-    for (int32 i = 0, n = factory->countClasses(); i < n && !found; ++i) {
+    for (int32 i = 0, n = factory->countClasses(); i < n; ++i) {
+        FactoryClass fc{};
         PClassInfo2 c2{};
+        PClassInfo c{};
         if (f2 && f2->getClassInfo2(i, &c2) == kResultOk) {
-            if (!FUnknownPrivate::iidEqual(c2.cid, cid))
-                continue;
-            out = {c2.name, *c2.vendor ? c2.vendor : fi.vendor, c2.version, c2.subCategories};
-            found = true;
+            memcpy(fc.cid, c2.cid, sizeof fc.cid);
+            fc.category = c2.category;
+            fc.info = {c2.name, *c2.vendor ? c2.vendor : fi.vendor, c2.version, c2.subCategories};
+        } else if (factory->getClassInfo(i, &c) == kResultOk) {
+            memcpy(fc.cid, c.cid, sizeof fc.cid);
+            fc.category = c.category;
+            fc.info = {c.name, fi.vendor, "", ""};
         } else {
-            PClassInfo c{};
-            if (factory->getClassInfo(i, &c) != kResultOk || !FUnknownPrivate::iidEqual(c.cid, cid))
-                continue;
-            out = {c.name, fi.vendor, "", ""};
-            found = true;
+            continue;
+        }
+        out.push_back(fc);
+    }
+    if (f2) {
+        f2->release();
+    }
+    return out;
+}
+
+// Angaben zu einer Klasse; false, wenn die Fabrik sie nicht kennt.
+bool classInfo(IPluginFactory *factory, const TUID cid, ClassInfo &out)
+{
+    for (const FactoryClass &fc : factoryClasses(factory)) {
+        if (FUnknownPrivate::iidEqual(fc.cid, cid)) {
+            out = fc.info;
+            return true;
         }
     }
-    if (f2)
-        f2->release();
-    return found;
+    return false;
 }
 
 // --- Adapter --------------------------------------------------------------------------
@@ -1718,33 +1737,12 @@ int vst3ListClasses(const std::string &bundle)
     IPluginFactory *factory = factoryFor(bundle);
     if (!factory)
         return 1;
-    IPluginFactory2 *f2 = nullptr;
-    factory->queryInterface(IPluginFactory2::iid, reinterpret_cast<void **>(&f2));
-    for (int32 i = 0, n = factory->countClasses(); i < n; ++i) {
-        PClassInfo2 c2{};
-        PClassInfo c{};
-        const char *category, *name, *sub = "";
-        const char *cid;
-        if (f2 && f2->getClassInfo2(i, &c2) == kResultOk) {
-            category = c2.category;
-            name = c2.name;
-            sub = c2.subCategories;
-            cid = c2.cid;
-        } else if (factory->getClassInfo(i, &c) == kResultOk) {
-            category = c.category;
-            name = c.name;
-            cid = c.cid;
-        } else {
+    for (const FactoryClass &fc : factoryClasses(factory)) {
+        if (fc.category != kVstAudioEffectClass) {
             continue;
         }
-        if (strcmp(category, kVstAudioEffectClass) != 0)
-            continue;
-        TUID id;
-        memcpy(id, cid, sizeof id);
-        printf("%s\t%s\t%s\n", hexId(id).c_str(), name, sub);
+        printf("%s\t%s\t%s\n", hexId(fc.cid).c_str(), fc.info.name.c_str(), fc.info.subCategories.c_str());
     }
-    if (f2)
-        f2->release();
     fflush(stdout);
     return 0;
 }

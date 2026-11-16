@@ -2,23 +2,16 @@
 // Unterkategorien (Tab-getrennt). resolve-linux-vst legt daraus die Einträge Name.vst an.
 //
 //   build/vst3-classes <Bundle.vst3>
+#include "../src/log.h"
 #include "../src/vst2.h"
 
-#include <cstdarg>
 #include <cstdio>
 #include <unistd.h>
 
-void logMessage(const char *fmt, ...)
-{
-    va_list ap;
-    va_start(ap, fmt);
-    vfprintf(stderr, fmt, ap);
-    va_end(ap);
-    fputc('\n', stderr);
-}
-
 int main(int argc, char **argv)
 {
+    setLogFile(stderr);
+
     if (argc != 2) {
         fprintf(stderr, "Aufruf: %s <Bundle.vst3>\n", argv[0]);
         return 2;

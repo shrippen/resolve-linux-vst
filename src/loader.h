@@ -1,5 +1,5 @@
 // Was der Lader (resolve_linux_vst.cpp) seinen Teilen bietet: Einstellungen je Plugin, Zustandsordner,
-// Skalierungsfaktor und die Frage, welches Programm das ist. Der Log steht in vst2.h (logMessage).
+// Skalierungsfaktor und die Frage, welches Programm das ist. Der Log steht in log.h.
 #pragma once
 
 #include <string>

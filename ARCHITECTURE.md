@@ -22,6 +22,7 @@ Nikon N-RAW clips. A launcher script starts Resolve with a library loaded into i
 | `src/aac.cpp` | AAC: gives Resolve an AAC decoder from a second, small FFmpeg library. |
 | `src/nev.cpp` | N-RAW: shows Resolve every `.NEV` file as `.R3D`. |
 | `src/x11.cpp` | Drops window sizes of 0 that would make a plug-in abort Resolve. |
+| `src/log.cpp`, `src/log.h` | The log: one function that writes a line with time and process; the caller sets the file. |
 | `src/sites.cpp`, `src/sites.h` | Finds the places in Resolve's code by byte patterns. Knows Resolve's binary, no feature. |
 | `src/exports.map` | The list of functions the library replaces in Resolve. What is not listed here has no effect. |
 | `src/vst2.h` | The VST2 interface, shared by loader and adapter: structures, command numbers, the adapter's entry points. |
@@ -94,16 +95,14 @@ Nikon N-RAW clips. A launcher script starts Resolve with a library loaded into i
 
 ## Known deviations
 
-- The log lives in the VST2 loader and is declared in `vst2.h`; AAC, N-RAW and X11
-  include the VST2 interface only for it (`AUDIT.md`, finding 1).
 - Loader and adapter each keep their own list of the VST2 numbers (`AUDIT.md`, finding 2).
 - "Is this Resolve?" is built three times (`AUDIT.md`, finding 3).
 - Writing a jump into Resolve's code is built twice, in loader and AAC
   (`AUDIT.md`, finding 7).
 - Launcher and library keep place and format of the Wine DPI file equal by hand
   (`AUDIT.md`, finding 4).
-- The loader file has five tasks: besides loading also the log, `plugins.conf`, the editor
-  size and the changes to the scanner (`AUDIT.md`, finding 9). The Wine DPI has its own file
+- The loader file has five tasks: besides loading also opening the log file, `plugins.conf`,
+  the editor size and the changes to the scanner (`AUDIT.md`, finding 9). The Wine DPI has its own file
   but reaches back into the loader file for `plugins.conf`, state folder, scale factor and
   "is this Resolve?" (`src/loader.h`).
 - `src/vst3.cpp` holds host objects, event loop, module loading and adapter in one file of

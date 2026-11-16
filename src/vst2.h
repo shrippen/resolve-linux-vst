@@ -35,9 +35,6 @@ struct ERect {
 
 constexpr int32_t kEffectMagic = 0x56737450; // 'VstP'
 
-// Log von resolve_linux_vst.cpp (bzw. stderr im Werkzeug vst3-classes).
-void logMessage(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
-
 // VST3-Adapter (vst3.cpp): Ein VST3-Plugin erscheint als VST2-Plugin. `dir` ist ein
 // Ordner Name.vst mit den Dateien `bundle` (Symlink auf das .vst3-Bundle) und `class`
 // (Klassen-ID, 32 Hexziffern), angelegt von resolve-linux-vst.
