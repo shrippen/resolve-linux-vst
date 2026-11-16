@@ -1,7 +1,7 @@
 # Code-Audit resolve-linux-vst, 16.11.2026, Stand dde5d41
 
 ## Urteil
-Das Repo ist deutlich besser wartbar als beim letzten Audit. Alle zehn Funde vom 16.11. (Stand 53320c0) wurden in den PRs #13 bis #23 bearbeitet. Neun sind behoben, einer zum Teil: Bei den Tests fehlt noch viel. Das sieht man an den Zahlen. Die größte Datei hat statt 1750 jetzt 648 Zeilen, und die Bestandsliste hat statt 11 jetzt 6 Einträge. Jeder Teil hat seine eigene Datei, und `make test` läuft auf dde5d41 grün. Übrig sind kleinere Doppelungen, an denen `ARCHITECTURE.md` noch nicht eingehalten ist: die Namen der umgeleiteten Funktionen in Resolve und die Zahlen der VST2-Schnittstelle. Dazu kommen Lücken bei den Tests.
+Das Repo ist deutlich besser wartbar als beim letzten Audit. Alle zehn Funde vom 16.11. (Stand 53320c0) wurden in den PRs #13 bis #23 bearbeitet. Sieben sind behoben, drei zum Teil: der Programmname, die Wine-DPI zwischen Starter und Bibliothek und vor allem die Tests. Das sieht man an den Zahlen. Die größte Datei hat statt 1750 jetzt 648 Zeilen, und die Bestandsliste hat statt 11 jetzt 6 Einträge. Jeder Teil hat seine eigene Datei, und `make test` läuft auf dde5d41 grün. Übrig sind kleinere Doppelungen, an denen `ARCHITECTURE.md` noch nicht eingehalten ist: die Namen der umgeleiteten Funktionen in Resolve und die Zahlen der VST2-Schnittstelle. Dazu kommen Lücken bei den Tests.
 
 ## Kennzahlen
 | | letztes Audit | jetzt |
@@ -38,7 +38,7 @@ Den Programmnamen liest die Bibliothek jetzt nur noch an einer Stelle (alter Fun
 - AAC und NEV fragen jeweils mit einer eigenen, gleichen kleinen Funktion, ob das Programm genau „resolve“ ist.
 - Im AAC-Teil heißt ein Wert `isResolve`, meint aber „Resolves FFmpeg in Version 60 gefunden“.
 
-`process.h` und `ARCHITECTURE.md` sagen, dass `editor-test` nur für die Wine-DPI als Resolve zählt. Der Scanner-Teil nutzt dieselbe Funktion aber auch für die Korrektur des Zahlenformats. Damit ändert auch das Testwerkzeug sein Zahlenformat. Wer die Ausnahme für das Testwerkzeug ändert oder einen weiteren Programmnamen braucht, kann am Namen der Funktion nicht erkennen, welche Teile mitbetroffen sind.
+`ARCHITECTURE.md` sagt, dass `editor-test` nur für die Wine-DPI als Resolve zählt. Der Scanner-Teil nutzt dieselbe Funktion aber auch für die Korrektur des Zahlenformats. Damit ändert auch das Testwerkzeug sein Zahlenformat. Wer die Ausnahme für das Testwerkzeug ändert oder einen weiteren Programmnamen braucht, kann am Namen der Funktion nicht erkennen, welche Teile mitbetroffen sind.
 
 Vorschlag: In `process.h` kommen zwei Fragen, deren Namen sagen, was sie fragen, etwa „ist das Hauptprogramm resolve“ und „lädt Plugins wie Resolve“. AAC und NEV nutzen die erste, und der Wert im AAC-Teil bekommt einen eigenen Namen. Danach entscheidet der Eigentümer, ob das Zahlenformat im Testwerkzeug gelten soll, und Code oder Doku folgen. Aufwand klein. Risiko: Der Test prüft nur das Lesen des Namens, alles andere zeigt nur ein Start von Resolve. Beleg: `src/process.h:8`, `src/process.h:18`, `src/process.cpp:42`, `src/aac.cpp:64`, `src/aac.cpp:536`, `src/nev.cpp:154`, `src/scanner.cpp:90`, `ARCHITECTURE.md:23`.
 
@@ -97,11 +97,11 @@ Die Liste hat statt 11 jetzt 6 Einträge. Keine Datei liegt mehr über 800 Zeile
 Aufwand klein, je ein kleiner PR. Risiko: Für den Adapter gibt es keine Tests, siehe Fund 8. Beleg: `structure.baseline:4`, `structure.baseline:9`, `src/vst3_dispatch.cpp:217`, `src/vst3.cpp:107`, `tools/editor-test.cpp:101`.
 
 ## Seit dem letzten Audit
-Neun der zehn Funde vom 16.11.2026 sind behoben, einer zum Teil. Kein Fund ist als abgelehnt vermerkt.
+Sieben der zehn Funde vom 16.11.2026 sind behoben, drei zum Teil (3, 4 und 8). Kein Fund ist als abgelehnt vermerkt.
 - **Alter Fund 1, Protokoll:** behoben. Es gibt eine eigene Protokolldatei mit einer einzigen Schreibfunktion, und NEV, X11 und `vst3-classes` binden nur noch sie ein.
 - **Alter Fund 2, VST2-Befehlsnummern:** behoben, sie stehen nur noch in `vst2.h`. Andere Teile der Schnittstelle stehen noch im Adapter, siehe neuer Fund 2.
-- **Alter Fund 3, Programmname:** im Kern behoben. Er wird nur noch in `process.cpp` gelesen, und `editor-test` ist dort als Ausnahme benannt. Übrig sind zwei gleiche kleine Vergleiche und die unklaren Namen, siehe neuer Fund 3.
-- **Alter Fund 4, Wine-DPI:** in der Bibliothek behoben. Es gibt eine Funktion zum Schreiben der DPI, eine zum Bestimmen der Einstellung und eine Konstante für 96. Der Starter gibt der Bibliothek den Ort der Datei mit. Übrig ist der Wine-Aufruf im Starter, siehe neuer Fund 9.
+- **Alter Fund 3, Programmname:** zum Teil behoben. Er wird nur noch in `process.cpp` gelesen, und `editor-test` ist dort als Ausnahme benannt. Übrig sind zwei gleiche kleine Vergleiche, die unklaren Namen und das Zahlenformat im Testwerkzeug, siehe neuer Fund 3.
+- **Alter Fund 4, Wine-DPI:** zum Teil behoben, in der Bibliothek ganz. Es gibt eine Funktion zum Schreiben der DPI, eine zum Bestimmen der Einstellung und eine Konstante für 96. Der Starter gibt der Bibliothek den Ort der Datei mit. Übrig ist der Wine-Aufruf im Starter, siehe neuer Fund 9.
 - **Alter Fund 5, `ARCHITECTURE.md`:** behoben. Die Zeile des Starters und die Tests sind nachgezogen.
 - **Alter Fund 6, VST3-Klassen:** behoben. Es gibt eine Funktion, die Lader und Liste beide nutzen.
 - **Alter Fund 7, Sprung in Resolves Code:** behoben. Er steht jetzt in `patch.cpp` und hat einen Test. Übrig sind die zwei Arten der Fehlermeldung (neuer Fund 6) und das Einfügen in die Tabelle im AAC-Teil (neuer Fund 4).
