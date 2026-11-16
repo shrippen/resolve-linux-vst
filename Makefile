@@ -76,6 +76,8 @@ $(BUILD)/wine-restore-test: tests/wine-restore-test.cpp src/wine_restore.h
 
 test: $(BUILD)/process-test $(BUILD)/sites-test $(BUILD)/patch-test $(BUILD)/wine-base-test $(BUILD)/plugin-conf-test $(BUILD)/vst3-params-test $(BUILD)/wine-restore-test
 	$(BUILD)/process-test
+	@mkdir -p $(BUILD)/process-names
+	for name in resolve VstScanner editor-test; do cp $(BUILD)/process-test $(BUILD)/process-names/$$name && $(BUILD)/process-names/$$name || exit 1; done
 	$(BUILD)/sites-test
 	$(BUILD)/patch-test
 	$(BUILD)/wine-base-test
@@ -92,7 +94,7 @@ plugin-test: all editor-test
 # clean lässt den AAC-Decoder (FFmpeg-Build dauert) stehen, distclean nimmt alles.
 clean:
 	rm -f $(BUILD)/process-test $(BUILD)/libresolve-linux-vst.so $(BUILD)/vst3-classes $(BUILD)/resolve-check $(BUILD)/sites-test $(BUILD)/patch-test $(BUILD)/wine-base-test $(BUILD)/plugin-conf-test $(BUILD)/vst3-params-test $(BUILD)/wine-restore-test $(BUILD)/wine-dpi-restore $(BUILD)/editor-test
-	rm -rf $(BUILD)/dist
+	rm -rf $(BUILD)/dist $(BUILD)/process-names
 
 distclean:
 	rm -rf $(BUILD)

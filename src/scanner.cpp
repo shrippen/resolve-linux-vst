@@ -22,17 +22,27 @@ constexpr int kInitScanner = 102;
 // die Maske unverändert.
 const MapHeader *gMaskIn = nullptr, *gMaskOut = nullptr;
 
-int translateMask(const MapNode *node, int mask)
+struct Translate {
+    int mask;
+    int result;
+};
+
+void translateOne(uint32_t key, int value, void *ctx)
 {
-    if (!node)
-        return 0;
-    return ((node->key & mask) ? node->value : 0) | translateMask(node->left, mask) | translateMask(node->right, mask);
+    auto *t = static_cast<Translate *>(ctx);
+    if (key & t->mask) {
+        t->result |= value;
+    }
 }
 
 int translateMask(const MapHeader *map, int mask)
 {
-    const MapNode *root = map ? map->root : nullptr;
-    return root ? translateMask(root, mask) : mask;
+    if (!map || !map->root) {
+        return mask;
+    }
+    Translate t{mask, 0};
+    mapEach(map, translateOne, &t);
+    return t.result;
 }
 
 int categoryMaskIn(const void *, int mask)
@@ -75,7 +85,7 @@ void patchCategories()
 // erbt es). LC_ALL ginge vor, sein Wert wandert darum nach LANG.
 void fixNumericLocale()
 {
-    if (!isResolveProcess())
+    if (!loadsLikeResolve())
         return;
     if (const char *all = getenv("LC_ALL"); all && *all) {
         setenv("LANG", all, 1);

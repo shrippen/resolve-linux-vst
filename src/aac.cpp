@@ -61,13 +61,13 @@ bool isAacName(const char *name)
 // Resolves Funktion. Nur Version 60: Andere Programme, die LD_PRELOAD erben und ein anderes
 // FFmpeg benutzen, bekommen ihre eigene Funktion und keinen AAC-Decoder von hier.
 template <typename F>
-F realFunction(const char *name, bool *isResolve)
+F realFunction(const char *name, bool *isFfmpeg60)
 {
     if (void *f = dlvsym(RTLD_NEXT, name, "LIBAVCODEC_60")) {
-        *isResolve = true;
+        *isFfmpeg60 = true;
         return reinterpret_cast<F>(f);
     }
-    *isResolve = false;
+    *isFfmpeg60 = false;
     return reinterpret_cast<F>(dlsym(RTLD_NEXT, name));
 }
 
@@ -118,10 +118,10 @@ F aacFunction(const char *name)
 EXPORT const void *avcodec_find_decoder(int id)
 {
     using F = const void *(*)(int);
-    static bool resolve = false;
-    static F real = realFunction<F>("avcodec_find_decoder", &resolve);
+    static bool isFfmpeg60 = false;
+    static F real = realFunction<F>("avcodec_find_decoder", &isFfmpeg60);
     const void *codec = real ? real(id) : nullptr;
-    if (!codec && resolve && isAac(id))
+    if (!codec && isFfmpeg60 && isAac(id))
         if (static F own = aacFunction<F>("avcodec_find_decoder"); own)
             codec = own(id);
     return codec;
@@ -130,10 +130,10 @@ EXPORT const void *avcodec_find_decoder(int id)
 EXPORT const void *avcodec_find_decoder_by_name(const char *name)
 {
     using F = const void *(*)(const char *);
-    static bool resolve = false;
-    static F real = realFunction<F>("avcodec_find_decoder_by_name", &resolve);
+    static bool isFfmpeg60 = false;
+    static F real = realFunction<F>("avcodec_find_decoder_by_name", &isFfmpeg60);
     const void *codec = real ? real(name) : nullptr;
-    if (!codec && resolve && isAacName(name))
+    if (!codec && isFfmpeg60 && isAacName(name))
         if (static F own = aacFunction<F>("avcodec_find_decoder_by_name"); own)
             codec = own(name);
     return codec;
@@ -145,10 +145,10 @@ EXPORT const void *avcodec_find_decoder_by_name(const char *name)
 EXPORT void *av_parser_init(int id)
 {
     using F = void *(*)(int);
-    static bool resolve = false;
-    static F real = realFunction<F>("av_parser_init", &resolve);
+    static bool isFfmpeg60 = false;
+    static F real = realFunction<F>("av_parser_init", &isFfmpeg60);
     void *parser = real ? real(id) : nullptr;
-    if (!parser && resolve && isAac(id))
+    if (!parser && isFfmpeg60 && isAac(id))
         if (static F own = aacFunction<F>("av_parser_init"); own)
             parser = own(id);
     return parser;
@@ -177,8 +177,6 @@ constexpr size_t kParChLayoutChannels = 0x94;
 constexpr int kMediaAudio = 1;
 constexpr int kProfileUnknown = -99;
 constexpr int kProfileAacLow = 1;
-
-bool isResolveExecutable();
 
 template <typename T>
 T &field(void *base, size_t offset)
@@ -245,7 +243,7 @@ EXPORT int avformat_write_header(void *format, void **options)
     static auto real = reinterpret_cast<F>(dlvsym(RTLD_NEXT, "avformat_write_header", "LIBAVFORMAT_60"));
     if (!real) { // anderes FFmpeg: Aufbau unbekannt, nichts anfassen
         static std::once_flag logged;
-        if (isResolveExecutable())
+        if (isResolveMain())
             std::call_once(logged, [] {
                 logMessage("AAC: libavformat ist nicht Version 60, AudioSpecificConfig beim Rendern nicht ergänzt; resolve-linux-vst check");
             });
@@ -422,122 +420,6 @@ bool audioSpecificConfig(const uint8_t *p, size_t n, const uint8_t **asc, size_t
     return false;
 }
 
-int collect(const MapNode *node, uint32_t *keys, int *values, int n, int max)
-{
-    if (!node || n < 0)
-        return n;
-    n = collect(node->left, keys, values, n, max);
-    if (n < 0 || n >= max)
-        return -1;
-    keys[n] = node->key;
-    values[n] = node->value;
-    return collect(node->right, keys, values, n + 1, max);
-}
-
-void rotateLeft(MapNode *x)
-{
-    MapNode *y = x->right;
-    x->right = y->left;
-    if (x->right)
-        x->right->parent = x;
-    y->parent = x->parent;
-    if (x == x->parent->left)
-        x->parent->left = y;
-    else
-        x->parent->right = y;
-    y->left = x;
-    x->parent = y;
-}
-
-void rotateRight(MapNode *x)
-{
-    MapNode *y = x->left;
-    x->left = y->right;
-    if (x->left)
-        x->left->parent = x;
-    y->parent = x->parent;
-    if (x == x->parent->left)
-        x->parent->left = y;
-    else
-        x->parent->right = y;
-    y->right = x;
-    x->parent = y;
-}
-
-// Wie libc++ __tree_balance_after_insert.
-void balanceAfterInsert(MapNode *root, MapNode *x)
-{
-    x->black = x == root;
-    while (x != root && !x->parent->black) {
-        MapNode *grand = x->parent->parent;
-        if (x->parent == grand->left) {
-            MapNode *y = grand->right;
-            if (y && !y->black) {
-                x = x->parent;
-                x->black = true;
-                x = x->parent;
-                x->black = x == root;
-                y->black = true;
-            } else {
-                if (x != x->parent->left) {
-                    x = x->parent;
-                    rotateLeft(x);
-                }
-                x = x->parent;
-                x->black = true;
-                x = x->parent;
-                x->black = false;
-                rotateRight(x);
-                break;
-            }
-        } else {
-            MapNode *y = grand->left;
-            if (y && !y->black) {
-                x = x->parent;
-                x->black = true;
-                x = x->parent;
-                x->black = x == root;
-                y->black = true;
-            } else {
-                if (x == x->parent->left) {
-                    x = x->parent;
-                    rotateRight(x);
-                }
-                x = x->parent;
-                x->black = true;
-                x = x->parent;
-                x->black = false;
-                rotateLeft(x);
-                break;
-            }
-        }
-    }
-}
-
-// Trägt key → value ein (Knoten mit malloc; libc++ gibt ihn mit operator delete = free frei).
-void insert(MapHeader *map, uint32_t key, int value)
-{
-    auto *node = static_cast<MapNode *>(malloc(sizeof(MapNode)));
-    *node = MapNode{nullptr, nullptr, nullptr, false, key, value};
-    MapNode *parent = map->endNode();
-    MapNode **link = &map->root;
-    while (*link) {
-        parent = *link;
-        link = key < parent->key ? &parent->left : &parent->right;
-    }
-    node->parent = parent;
-    *link = node;
-    if (map->begin->left)
-        map->begin = map->begin->left;
-    balanceAfterInsert(map->root, node);
-    ++map->size;
-}
-
-bool isResolveExecutable()
-{
-    return strcmp(programName(), kProgResolve) == 0;
-}
-
 void patchResolve()
 {
     CodeImage code;
@@ -552,7 +434,7 @@ void patchResolve()
     auto *map = reinterpret_cast<MapHeader *>(sites.codecMap);
     uint32_t keys[8];
     int values[8];
-    const int n = collect(map->root, keys, values, 0, 8);
+    const int n = mapCollect(map, keys, values, 8);
     const uint32_t wantKeys[] = {0x2e6d7033, 0x61632d33, 0x616c6163, 0x666c6163}; // .mp3 ac-3 alac flac
     const int wantValues[] = {0x15001, 0x15003, 0x15010, 0x1500c};
     if (n != 4 || map->size != 4 || !map->begin || memcmp(keys, wantKeys, sizeof wantKeys) != 0
@@ -566,8 +448,8 @@ void patchResolve()
     resolveVstSwitchTargets[2] = sites.switchDiscard;
     resolveVstCodecTargets[0] = sites.codecOther;
     resolveVstCodecTargets[1] = sites.codecExtradata;
-    insert(map, kFourccAac, kCodecAac);
-    insert(map, kFourccMp4a, kCodecAac);
+    mapInsert(map, kFourccAac, kCodecAac);
+    mapInsert(map, kFourccMp4a, kCodecAac);
     bool ok = patchJumpIndirect(sites.codecAt, 24, reinterpret_cast<void *>(&resolveVstCodec))
               && patchJumpIndirect(sites.switchAt, kJumpIndirectLen, reinterpret_cast<void *>(&resolveVstSwitch));
     using UL = unsigned long;
@@ -575,7 +457,7 @@ void patchResolve()
         logMessage("AAC: Resolve angepasst (aac/mp4a → FFmpeg; Weiche %#lx, Decoder %#lx, Tabelle %#lx)",
                    UL(sites.switchAt), UL(sites.codecAt), UL(sites.codecMap));
     else
-        logMessage("AAC: Anpassen fehlgeschlagen (mprotect)");
+        logMessage("AAC: Anpassen fehlgeschlagen");
 }
 
 using MainFunction = int (*)(int, char **, char **);
@@ -640,7 +522,7 @@ EXPORT int __libc_start_main(MainFunction main, int argc, char **argv, void (*in
     auto real = reinterpret_cast<F>(dlvsym(RTLD_NEXT, "__libc_start_main", "GLIBC_2.2.5"));
     if (!real)
         real = reinterpret_cast<F>(dlsym(RTLD_NEXT, "__libc_start_main"));
-    if (isResolveExecutable() && aacLibrary()) {
+    if (isResolveMain() && aacLibrary()) {
         gMain = main;
         main = wrappedMain;
     }

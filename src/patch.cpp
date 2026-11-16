@@ -4,6 +4,7 @@
 #include <unistd.h>
 
 #include <cerrno>
+#include <cstdlib>
 #include <cstring>
 
 #include "log.h"
@@ -13,6 +14,129 @@ namespace {
 
 constexpr uint8_t kInt3 = 0xcc;
 constexpr size_t kMaxJumpLen = 32;
+
+// writeCode; der Grund eines Fehlschlags kommt ins Protokoll.
+bool writeJump(uintptr_t addr, const uint8_t *code, size_t len)
+{
+    if (writeCode(addr, code, len)) {
+        return true;
+    }
+    logMessage("mprotect: %s", strerror(errno));
+    return false;
+}
+
+// Drehungen und Balancierung wie libc++ __tree_balance_after_insert (Rot-Schwarz-Baum).
+void rotateLeft(MapNode *x)
+{
+    MapNode *y = x->right;
+    x->right = y->left;
+    if (x->right) {
+        x->right->parent = x;
+    }
+    y->parent = x->parent;
+    if (x == x->parent->left) {
+        x->parent->left = y;
+    } else {
+        x->parent->right = y;
+    }
+    y->left = x;
+    x->parent = y;
+}
+
+void rotateRight(MapNode *x)
+{
+    MapNode *y = x->left;
+    x->left = y->right;
+    if (x->left) {
+        x->left->parent = x;
+    }
+    y->parent = x->parent;
+    if (x == x->parent->left) {
+        x->parent->left = y;
+    } else {
+        x->parent->right = y;
+    }
+    y->right = x;
+    x->parent = y;
+}
+
+// Wie libc++ __tree_balance_after_insert.
+void balanceAfterInsert(MapNode *root, MapNode *x)
+{
+    x->black = x == root;
+    while (x != root && !x->parent->black) {
+        MapNode *grand = x->parent->parent;
+        if (x->parent == grand->left) {
+            MapNode *y = grand->right;
+            if (y && !y->black) {
+                x = x->parent;
+                x->black = true;
+                x = x->parent;
+                x->black = x == root;
+                y->black = true;
+            } else {
+                if (x != x->parent->left) {
+                    x = x->parent;
+                    rotateLeft(x);
+                }
+                x = x->parent;
+                x->black = true;
+                x = x->parent;
+                x->black = false;
+                rotateRight(x);
+                break;
+            }
+        } else {
+            MapNode *y = grand->left;
+            if (y && !y->black) {
+                x = x->parent;
+                x->black = true;
+                x = x->parent;
+                x->black = x == root;
+                y->black = true;
+            } else {
+                if (x == x->parent->left) {
+                    x = x->parent;
+                    rotateRight(x);
+                }
+                x = x->parent;
+                x->black = true;
+                x = x->parent;
+                x->black = false;
+                rotateLeft(x);
+                break;
+            }
+        }
+    }
+}
+
+struct Collect {
+    uint32_t *keys;
+    int *values;
+    int max;
+    int n;
+};
+
+void collectOne(uint32_t key, int value, void *ctx)
+{
+    auto *c = static_cast<Collect *>(ctx);
+    if (c->n < c->max) {
+        c->keys[c->n] = key;
+        c->values[c->n] = value;
+    }
+    ++c->n;
+}
+
+// Inorder: aufsteigende Schlüssel.
+void walk(const MapNode *node, MapVisit visit, void *ctx)
+{
+    if (!node) {
+        return;
+    }
+    walk(node->left, visit, ctx);
+    visit(node->key, node->value, ctx);
+    walk(node->right, visit, ctx);
+}
 
 } // namespace
 
@@ -51,26 +175,18 @@ bool patchJumpRax(uintptr_t target, void *dest)
 {
     uint8_t code[kJumpRaxLen];
     buildJumpRax(dest, code);
-    return writeCode(target, code, sizeof code);
+    return writeJump(target, code, sizeof code);
 }
 
 bool patchJumpIndirect(uintptr_t addr, size_t len, void *dest)
 {
     uint8_t code[kMaxJumpLen];
     if (len < kJumpIndirectLen || len > sizeof code) {
+        logMessage("Sprunglänge %zu ungültig (%zu bis %zu)", len, kJumpIndirectLen, sizeof code);
         return false;
     }
     buildJumpIndirect(dest, code, len);
-    return writeCode(addr, code, len);
-}
-
-bool patchJump(uintptr_t target, void *dest)
-{
-    if (patchJumpRax(target, dest)) {
-        return true;
-    }
-    logMessage("mprotect: %s", strerror(errno));
-    return false;
+    return writeJump(addr, code, len);
 }
 
 bool redirectWanted(uintptr_t addr, const void *replacement)
@@ -94,8 +210,39 @@ void redirectFunctions(const ElfFile &elf, const char *exe, const Redirect *list
             continue;
         }
 
-        bool ok = patchJump(addr, list[i].replacement);
+        bool ok = patchJumpRax(addr, list[i].replacement);
         logMessage("%s: %s bei %#lx %s", exe, list[i].name, static_cast<unsigned long>(addr),
                    ok ? "umgeleitet" : "NICHT umgeleitet");
     }
+}
+
+void mapEach(const MapHeader *map, MapVisit visit, void *ctx)
+{
+    walk(map->root, visit, ctx);
+}
+
+int mapCollect(const MapHeader *map, uint32_t *keys, int *values, int max)
+{
+    Collect c{keys, values, max, 0};
+    mapEach(map, collectOne, &c);
+    return c.n > max ? -1 : c.n;
+}
+
+void mapInsert(MapHeader *map, uint32_t key, int value)
+{
+    auto *node = static_cast<MapNode *>(malloc(sizeof(MapNode)));
+    *node = MapNode{nullptr, nullptr, nullptr, false, key, value};
+    MapNode *parent = map->endNode();
+    MapNode **link = &map->root;
+    while (*link) {
+        parent = *link;
+        link = key < parent->key ? &parent->left : &parent->right;
+    }
+    node->parent = parent;
+    *link = node;
+    if (map->begin->left) {
+        map->begin = map->begin->left;
+    }
+    balanceAfterInsert(map->root, node);
+    ++map->size;
 }
