@@ -1,7 +1,7 @@
 // Prüft den N-RAW-Referenzdecoder bitgenau gegen Mitschnitte von fastticolib. Die Prüfdaten sind
 // privat und nicht im Repo: $NRAW_FIXTURES (Standard ~/.cache/claude/tico-test/fixtures) mit
 // lut.bin (int32 LE), iso800.in/.out, iso3200.in/.out, bright.in/.out (helles Motiv: Werte über
-// int16 nach der waagerechten Hebung). Läuft nicht in `make test`.
+// int16 nach der waagerechten Hebung), clip.in/.out (ausgebrannte Lichter, Ausgabe von RED). Läuft nicht in `make test`.
 // Je Threadzahl und Variante (CPU, GPU): 0 abweichende Pixel, Wandzeit je Bild (min/Median/max),
 // CPU-Zeit (Median). Die GPU-Variante braucht build/libresolve-linux-vst-nraw-cuda.so neben dem
 // Programm und eine Karte, sonst wird sie übersprungen. Zeitaufteilung der GPU-Variante: Vorabsuche
@@ -491,7 +491,7 @@ int main()
     }
 
     size_t bad = 0;
-    for (const char *name : {"iso800", "iso3200", "bright"}) {
+    for (const char *name : {"iso800", "iso3200", "bright", "clip"}) {
         for (unsigned threads : THREAD_COUNTS) {
             for (NrawBackend backend : {NrawBackend::Cpu, NrawBackend::Gpu}) {
                 size_t n = check(dir, name, lut, threads, backend);
