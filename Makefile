@@ -11,7 +11,7 @@ BUILD ?= build
 
 VST3SRC  := src/vst3.cpp src/vst3_dispatch.cpp src/vst3_host.cpp src/vst3_iids.cpp src/vst3_module.cpp src/vst3_params.cpp
 NRAWSRC  := src/nraw_decode.cpp src/nraw_entropy.cpp src/nraw_color.cpp src/nraw_pool.cpp src/nraw_gpu.cpp
-NRAWHDR  := src/nraw_decode.h src/nraw_frame.h src/nraw_pool.h src/nraw_gpu.h src/log.h
+NRAWHDR  := src/nraw_decode.h src/nraw_frame.h src/nraw_pool.h src/nraw_gpu.h src/nraw_curves.h src/log.h
 VST3HDR  := src/vst3_adapter.h src/vst3_host.h src/vst3_module.h src/vst3_params.h
 SOURCES := src/resolve_linux_vst.cpp src/log.cpp src/plugin_conf.cpp src/scale.cpp src/editor_size.cpp src/scanner.cpp src/wine_dpi.cpp src/process.cpp $(VST3SRC) src/aac.cpp src/nev.cpp src/nraw.cpp src/x11.cpp src/sites.cpp src/patch.cpp $(NRAWSRC) $(VST3)/base/funknown.cpp
 
@@ -34,7 +34,7 @@ $(BUILD)/nraw_cuda.ptx: src/nraw_cuda.cu src/nraw_cuda_entropy.cuh src/nraw_gpu.
 	@mkdir -p $(BUILD)
 	$(NVCC) -ptx -arch=compute_75 -std=c++17 -o $@ $<
 
-$(CUDA_LIB): src/nraw_cuda.cpp src/nraw_gpu.h src/nraw_decode.h $(BUILD)/nraw_cuda.ptx
+$(CUDA_LIB): src/nraw_cuda.cpp src/nraw_gpu.h $(BUILD)/nraw_cuda.ptx
 	$(CXX) $(CXXFLAGS) -I$(CUDA_INC) -DNRAW_PTX_PATH='"$(abspath $(BUILD)/nraw_cuda.ptx)"' -pthread -shared -Wl,-z,defs -static-libstdc++ -static-libgcc -Wl,--exclude-libs,ALL -o $@ src/nraw_cuda.cpp -ldl
 
 # Die Header binden sich als "pluginterfaces/..." ein: Verweis unter build/include.

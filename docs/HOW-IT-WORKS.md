@@ -245,7 +245,8 @@ On the GPU (`libresolve-linux-vst-nraw-cuda.so`, driver API through `dlopen`, ow
 frame takes about 5 ms and 11 ms of CPU time; RED needs about 11 ms on all cores. Without the
 library, `libcuda` or a card, the same decoder runs on the CPU. Frames 1 to 3 and every 500th
 are decoded by RED too and compared; a difference switches our decoder off for the run and
-saves the frame next to the log (`~/.local/state/resolve-linux-vst/nraw-mismatch.*`). The tone curves are
+saves the frame as `nraw-mismatch.*` in `$XDG_STATE_HOME/resolve-linux-vst` (default
+`~/.local/state/resolve-linux-vst`). The tone curves are
 kept per decoder context until Resolve exits, as another thread may still decode with one.
 
 ## Finding the hooks again
