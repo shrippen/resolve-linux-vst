@@ -46,7 +46,10 @@ constexpr size_t PIH_HF = 10;
 constexpr size_t PIH_CW = 12;
 constexpr size_t PIH_HSL = 14;
 constexpr size_t PIH_FIXED = 16; // ab hier Nc, Ng, Ss, Bw, Fq|Br, Fslc|Ppoc|Cpih, Nlx|Nly, Lh..Rm
-constexpr uint8_t PIH_EXPECT[] = {4, 4, 8, 18, 0x44, 0x10, 0x51, 0x14};
+constexpr uint8_t PIH_BR = 4; // Bitebenen je Datenteil-Gruppe (Br, unteres Halbbyte neben Fq)
+constexpr uint8_t PIH_EXPECT[] = {4, NRAW_GPU_GROUP, NRAW_GPU_SIG_RUN, NRAW_GPU_MAX_GCLI,
+                                  (NRAW_GPU_FQ_SHIFT << 4) | PIH_BR, 0x10, 0x51, 0x14};
+static_assert(PIH_EXPECT[4] == 0x44, "Fq|Br wie im gemessenen Strom");
 constexpr uint8_t DEPTH = 14; // Bittiefe der Ausgabe (CDT)
 constexpr uint8_t CDT_EXPECT[CDT_PAYLOAD] = {DEPTH, 0x11, 0x51, DEPTH, 0x11, 0x51, DEPTH, 0x11, 0x00, DEPTH, 0x11, 0x51};
 constexpr size_t HSL_EXPECT = NRAW_GPU_SLICE_PRECS; // Precincts je Slice

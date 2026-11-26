@@ -53,6 +53,8 @@ private:
 enum class Compare { Same, Different, NotDecoded };
 
 // Dekodiert denselben Codestream mit dem eigenen Decoder und vergleicht mit dem Bild von RED
-// (`red`, `count` Pixel). Loggt das Ergebnis und legt ein abweichendes Bild für die Fehlersuche ab.
+// (`red`, `count` Pixel) und loggt das Ergebnis. Mit `switchOff` (eigener Decoder) wird er bei einer
+// Abweichung sofort abgeschaltet und erst danach das Bild für die Fehlersuche abgelegt; ohne
+// (Messmodus) nur geloggt.
 Compare compareWithRed(uint64_t n, const uint8_t *cs, size_t size, const NrawCurve &curve, const uint16_t *red,
-                       size_t count);
+                       size_t count, std::atomic<bool> *switchOff);

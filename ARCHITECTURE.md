@@ -40,7 +40,7 @@ Nikon N-RAW clips. A launcher script starts Resolve with a library loaded into i
 | `src/exports.map` | The list of functions the library replaces in Resolve. What is not listed here has no effect. |
 | `src/vst2.h` | The VST2 interface, shared by loader and adapter: structures, command numbers, the adapter's entry points. |
 | `tools/*.cpp` | Programs built from `src/`: `resolve-check` (do the patterns still match?), `vst3-classes` (list the plug-ins of a bundle), `wine-dpi-restore` (set the Wine DPI back from the file of previous values, through `src/wine_reg.cpp`, its log on stderr), `editor-test` (open a plug-in window without Resolve). Also the patch the AAC decoder's FFmpeg is built with. |
-| `tests/` | Tests that run without Resolve (`make test`: pattern search, program name, writing a jump, the C++ map, Wine DPI decisions, editor size arithmetic, the file of previous values, `plugins.conf`, VST3 parameter properties, launcher cleanup, executable scripts, N-RAW decoder on broken input, kept tone curves, AAC configuration, N-RAW names) and two local tests: plug-ins with `wine-dpi.sh` (`make plugin-test`), the N-RAW decoder bit for bit against frames captured from RED (`make nraw-test`, private frames outside the repository). |
+| `tests/` | Tests that run without Resolve (`make test`: pattern search, program name, writing a jump, the C++ map, Wine DPI decisions, editor size arithmetic, the file of previous values, `plugins.conf`, VST3 parameter properties, launcher cleanup, executable scripts, N-RAW decoder on broken input, kept tone curves, the N-RAW hook's fallback rule, AAC configuration, N-RAW names) and two local tests: plug-ins with `wine-dpi.sh` (`make plugin-test`), the N-RAW decoder bit for bit against frames captured from RED (`make nraw-test`, private frames outside the repository). |
 | `install.sh`, `start.sh`, `Makefile` | Install, start from the source folder, build, release tarball (`make dist`). |
 | `third_party/vst3_pluginterfaces` | The VST3 interface headers (submodule), unchanged. |
 | `docs/`, `scripts/`, `tools/structure-check.py` | Landing page and internals; release notes; the structure check (synced copy). |
@@ -118,6 +118,7 @@ Nikon N-RAW clips. A launcher script starts Resolve with a library loaded into i
 
 ## Known deviations
 
-- No automatic tests for loading plug-ins, the editor size, the VST3
-  adapter and its saved state, the N-RAW hook and the launcher's categories; only the plug-in test
-  checks the Wine DPI with real plug-ins (`AUDIT.md`, finding 4).
+- No automatic tests for loading plug-ins, the editor size (beyond its arithmetic), the VST3
+  adapter and its saved state, the AAC hooks, the N-RAW hook (beyond its fallback rule) and the
+  launcher's categories; only the plug-in test checks the Wine DPI with real plug-ins (`AUDIT.md`,
+  finding 6).

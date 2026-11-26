@@ -1,7 +1,7 @@
 // Wine-DPI zurücksetzen: Auswertung der Datei mit den Vorwerten ("Prefix<Tab>DPI" je Zeile,
 // geschrieben von wine_dpi.cpp), rein gerechnet ohne Wine und Dateisystem. Das Zurücksetzen
 // selbst übergibt der Aufrufer als Funktion; tools/wine-dpi-restore.cpp ruft Wine auf,
-// tests/wine-restore-test.cpp zählt nur. Eigene Datei, damit der Test sie ohne Wine baut.
+// tests/wine-restore-test.cpp zählt nur. Das Lesen einer Zeile nutzt auch wine_dpi.cpp. Eigene Datei, damit der Test sie ohne Wine baut.
 #pragma once
 
 #include <cerrno>
@@ -11,7 +11,6 @@
 
 constexpr int kWineDpiUnset = -1;    // LogPixels war nicht gesetzt (Vorwert in der Datei)
 constexpr int kNoRestoreEntry = -2;  // kein Eintrag für das Prefix in der Datei
-constexpr int kWineQueryFailed = -2; // `wine reg query` war nicht möglich
 
 enum class RestoreResult {
     Done,   // zurückgesetzt: Zeile entfällt
@@ -19,7 +18,7 @@ enum class RestoreResult {
     Failed, // nicht zurückgesetzt: Zeile bleibt für den nächsten Lauf
 };
 
-// Setzt die DPI des Prefix auf den Wert des Textes (-1 = war nicht gesetzt).
+// Setzt die DPI des Prefix auf den Wert des Textes (kWineDpiUnset = war nicht gesetzt).
 using RestoreFn = std::function<RestoreResult(const std::string &prefix, const std::string &dpiText)>;
 
 // Eine Zeile der Datei: "Prefix<Tab>DPI-Text". Ohne Tab ist der DPI-Text leer.

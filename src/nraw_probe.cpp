@@ -104,7 +104,7 @@ void checkReference(uint64_t n, void *ctx, const uint8_t *cs, size_t size, size_
         logMessage("N-RAW: Referenz übersprungen, Kennlinie nicht lesbar");
         return;
     }
-    compareWithRed(n, cs, size, NrawCurve{curve.data(), curve.size()}, dst, dstBytes / sizeof(uint16_t));
+    compareWithRed(n, cs, size, NrawCurve{curve.data(), curve.size()}, dst, dstBytes / sizeof(uint16_t), nullptr);
 }
 
 // Statistik über alle Aufrufe; Zähler atomar, Decoder laufen in mehreren Threads.

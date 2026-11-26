@@ -10,10 +10,7 @@
 // editor-test zählt mit: Es lädt wie Resolve, auch mit Wine-DPI (tests/wine-dpi.sh).
 
 #include <dirent.h>
-#include <fcntl.h>
-#include <spawn.h>
 #include <sys/stat.h>
-#include <sys/wait.h>
 #include <unistd.h>
 
 #include <cmath>

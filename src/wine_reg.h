@@ -5,8 +5,10 @@
 
 #include <string>
 
-// Aktueller Wert; kWineDpiUnset = nicht gesetzt, kWineQueryFailed = Abfrage nicht möglich
-// (beide in wine_restore.h).
+constexpr int kWineQueryFailed = -2; // `wine reg query` war nicht möglich
+
+// Aktueller Wert; kWineDpiUnset (wine_restore.h) = nicht gesetzt, kWineQueryFailed = Abfrage
+// nicht möglich.
 int queryWineDpi(const std::string &prefix);
 
 // Schreibt die DPI des Prefix.

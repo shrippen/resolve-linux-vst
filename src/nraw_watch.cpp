@@ -147,7 +147,7 @@ void ArgWatch::observe(uint64_t n, void *a3, long a8, long a9)
 }
 
 Compare compareWithRed(uint64_t n, const uint8_t *cs, size_t size, const NrawCurve &curve, const uint16_t *red,
-                       size_t count)
+                       size_t count, std::atomic<bool> *switchOff)
 {
     std::vector<uint16_t> own(count);
     const Stopwatch watch;
@@ -181,6 +181,11 @@ Compare compareWithRed(uint64_t n, const uint8_t *cs, size_t size, const NrawCur
     logMessage("N-RAW: Vergleich %llu: %zu von %zu Pixeln verschieden, erster Index %zu, letzter %zu (Wand %.1f ms, "
                "CPU %.1f ms)",
                (unsigned long long)n, different, count, first, last, ms, cpuMs);
+    if (!switchOff) {
+        return Compare::Different;
+    }
+    switchOff->store(true);
+    logMessage("N-RAW: Prüfbild weicht von RED ab, eigener Decoder für diesen Lauf aus");
     dumpMismatch(cs, size, red, own.data(), count);
     return Compare::Different;
 }

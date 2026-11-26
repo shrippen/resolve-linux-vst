@@ -1,6 +1,7 @@
 // wine-dpi-restore: setzt die Wine-DPI der Prefixe zurück, die libresolve-linux-vst.so während
 // Resolve geändert hat (aufgerufen von resolve-linux-vst nach dem Ende von Resolve und bei
-// `resolve-linux-vst restore`). Wine-Befehl und Registry-Schlüssel kommen aus src/wine_reg.cpp; dessen Log geht auf stderr.
+// `resolve-linux-vst restore`). Wine-Befehl und Registry-Schlüssel kommen aus src/wine_reg.cpp;
+// dessen Log geht auf stderr.
 //
 //   build/wine-dpi-restore <Datei mit den Vorwerten>
 //
