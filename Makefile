@@ -4,14 +4,16 @@ override CXXFLAGS += -std=c++17 -fPIC -fvisibility=hidden -fno-exceptions -fno-r
 # VST3-Schnittstellen von Steinberg (MIT), Submodul: git submodule update --init
 VST3     := third_party/vst3_pluginterfaces
 VST3INC   = -I$(BUILD)/include
-LDFLAGS  += -shared -Wl,-z,defs -static-libstdc++ -static-libgcc -Wl,--exclude-libs,ALL -Wl,--version-script=src/exports.map
+LDFLAGS  += -pthread -shared -Wl,-z,defs -static-libstdc++ -static-libgcc -Wl,--exclude-libs,ALL -Wl,--version-script=src/exports.map
 LDLIBS   += -ldl
 
 BUILD ?= build
 
 VST3SRC  := src/vst3.cpp src/vst3_dispatch.cpp src/vst3_host.cpp src/vst3_iids.cpp src/vst3_module.cpp src/vst3_params.cpp
+NRAWSRC  := src/nraw_decode.cpp src/nraw_entropy.cpp src/nraw_color.cpp src/nraw_pool.cpp
+NRAWHDR  := src/nraw_decode.h src/nraw_frame.h src/nraw_pool.h
 VST3HDR  := src/vst3_adapter.h src/vst3_host.h src/vst3_module.h src/vst3_params.h
-SOURCES := src/resolve_linux_vst.cpp src/log.cpp src/plugin_conf.cpp src/scale.cpp src/editor_size.cpp src/scanner.cpp src/wine_dpi.cpp src/process.cpp $(VST3SRC) src/aac.cpp src/nev.cpp src/nraw.cpp src/x11.cpp src/sites.cpp src/patch.cpp src/nraw_decode.cpp $(VST3)/base/funknown.cpp
+SOURCES := src/resolve_linux_vst.cpp src/log.cpp src/plugin_conf.cpp src/scale.cpp src/editor_size.cpp src/scanner.cpp src/wine_dpi.cpp src/process.cpp $(VST3SRC) src/aac.cpp src/nev.cpp src/nraw.cpp src/x11.cpp src/sites.cpp src/patch.cpp $(NRAWSRC) $(VST3)/base/funknown.cpp
 
 all: $(BUILD)/libresolve-linux-vst.so $(BUILD)/vst3-classes $(BUILD)/resolve-check $(BUILD)/wine-dpi-restore
 
@@ -21,7 +23,7 @@ $(BUILD)/include/pluginterfaces:
 	@mkdir -p $(BUILD)/include
 	ln -sfn $(abspath $(VST3)) $@
 
-$(BUILD)/libresolve-linux-vst.so: $(SOURCES) src/vst2.h src/log.h src/sites.h src/patch.h src/nraw.h src/nraw_decode.h src/editor_size.h src/scale.h src/plugin_conf.h src/process.h src/wine_dpi.h src/wine_base.h $(VST3HDR) src/exports.map | $(BUILD)/include/pluginterfaces
+$(BUILD)/libresolve-linux-vst.so: $(SOURCES) src/vst2.h src/log.h src/sites.h src/patch.h src/nraw.h $(NRAWHDR) src/editor_size.h src/scale.h src/plugin_conf.h src/process.h src/wine_dpi.h src/wine_base.h $(VST3HDR) src/exports.map | $(BUILD)/include/pluginterfaces
 	$(CXX) $(CXXFLAGS) $(VST3INC) $(LDFLAGS) -o $@ $(SOURCES) $(LDLIBS)
 
 $(BUILD)/vst3-classes: tools/vst3-classes.cpp $(VST3SRC) src/log.cpp src/vst2.h src/log.h $(VST3HDR) | $(BUILD)/include/pluginterfaces
@@ -75,14 +77,14 @@ $(BUILD)/wine-restore-test: tests/wine-restore-test.cpp src/wine_restore.h
 	$(CXX) $(filter-out -fPIC,$(CXXFLAGS)) -o $@ tests/wine-restore-test.cpp
 
 # Test des N-RAW-Decoders mit künstlichen Puffern (ohne Prüfdaten).
-$(BUILD)/nraw-guard-test: tests/nraw-guard-test.cpp src/nraw_decode.cpp src/nraw_decode.h
+$(BUILD)/nraw-guard-test: tests/nraw-guard-test.cpp $(NRAWSRC) $(NRAWHDR)
 	@mkdir -p $(BUILD)
-	$(CXX) $(filter-out -fPIC,$(CXXFLAGS)) -o $@ tests/nraw-guard-test.cpp src/nraw_decode.cpp
+	$(CXX) $(filter-out -fPIC,$(CXXFLAGS)) -pthread -o $@ tests/nraw-guard-test.cpp $(NRAWSRC)
 
 # Bitgenauer Test gegen fastticolib-Mitschnitte (private Prüfdaten, nicht in `make test`).
-$(BUILD)/nraw-test: tests/nraw-test.cpp src/nraw_decode.cpp src/nraw_decode.h
+$(BUILD)/nraw-test: tests/nraw-test.cpp $(NRAWSRC) $(NRAWHDR)
 	@mkdir -p $(BUILD)
-	$(CXX) $(filter-out -fPIC,$(CXXFLAGS)) -o $@ tests/nraw-test.cpp src/nraw_decode.cpp
+	$(CXX) $(filter-out -fPIC,$(CXXFLAGS)) -pthread -o $@ tests/nraw-test.cpp $(NRAWSRC)
 
 nraw-test: $(BUILD)/nraw-test
 	$(BUILD)/nraw-test

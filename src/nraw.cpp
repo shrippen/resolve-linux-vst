@@ -15,6 +15,7 @@
 #include "nraw.h"
 
 #include <sys/uio.h>
+#include <time.h>
 #include <unistd.h>
 
 #include <atomic>
@@ -53,6 +54,8 @@ constexpr uint64_t kFirstCalls = 3;    // so viele Aufrufe mit voller Ausgabe
 constexpr uint64_t kReportEvery = 200; // Statistikzeile
 constexpr uint64_t kRefEvery = 500;    // Referenzvergleich, dazu bei Aufruf 1 und 2
 
+constexpr uint64_t kNsPerSec = 1000000000ull;
+
 constexpr uint64_t kFnvBasis = 0xcbf29ce484222325ull;
 constexpr uint64_t kFnvPrime = 0x100000001b3ull;
 
@@ -62,6 +65,14 @@ using DecodeFn = int (*)(void *ctx, void *handle, void *a3, size_t size, const u
 DecodeFn gOriginal = nullptr;
 
 enum class Attach { Retry, Done };
+
+// CPU-Zeit des ganzen Prozesses in ns (alle Threads, auch die von Resolve).
+uint64_t processCpuNs()
+{
+    timespec ts;
+    clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &ts);
+    return uint64_t(ts.tv_sec) * kNsPerSec + uint64_t(ts.tv_nsec);
+}
 
 // Liest fremden Speicher; false bei ungültiger Adresse.
 bool readMem(const void *from, void *to, size_t len)
@@ -198,7 +209,9 @@ void checkReference(void *ctx, const uint8_t *cs, size_t size, size_t dstBytes, 
     const size_t count = dstBytes / sizeof(uint16_t);
     std::vector<uint16_t> ref(count);
     auto t0 = std::chrono::steady_clock::now();
+    const uint64_t cpu0 = processCpuNs();
     NrawResult r = decodeNraw(cs, size, NrawCurve{curve.data(), curve.size()}, ref.data(), count);
+    const double cpuMs = double(processCpuNs() - cpu0) / 1e6;
     double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
     if (r != NrawResult::Ok) {
         logMessage("N-RAW: Referenz liefert Ergebnis %d (0 Ok, 1 Unsupported, 2 Corrupt)", int(r));
@@ -210,10 +223,11 @@ void checkReference(void *ctx, const uint8_t *cs, size_t size, size_t dstBytes, 
         different += ref[i] != dst[i];
     }
     if (different == 0) {
-        logMessage("N-RAW: Referenz gleich (%zu Pixel, %.1f ms)", count, ms);
+        logMessage("N-RAW: Referenz gleich (%zu Pixel, Wand %.1f ms, CPU %.1f ms)", count, ms, cpuMs);
         return;
     }
-    logMessage("N-RAW: Referenz: %zu von %zu Pixeln verschieden", different, count);
+    logMessage("N-RAW: Referenz: %zu von %zu Pixeln verschieden (Wand %.1f ms, CPU %.1f ms)", different, count, ms,
+               cpuMs);
 }
 
 // Statistik über alle Aufrufe; Zähler atomar, Decoder laufen in mehreren Threads.
@@ -222,6 +236,7 @@ struct Stats {
     std::atomic<int> running{0};
     std::atomic<int> maxRunning{0};
     std::atomic<uint64_t> totalNs{0};
+    std::atomic<uint64_t> totalCpuNs{0};
     std::atomic<uint64_t> maxNs{0};
     std::atomic<uint64_t> varying{0};
     std::atomic<bool> haveFirst{false};
@@ -270,9 +285,12 @@ void logStats(uint64_t n)
 {
     double mean = double(gStats.totalNs.load()) / double(n) / 1e6;
     double max = double(gStats.maxNs.load()) / 1e6;
-    logMessage("N-RAW: %llu Aufrufe, höchstens %d gleichzeitig, Dauer mittel %.1f ms, max %.1f ms, a3/a8/a9 "
-               "abweichend in %llu Aufrufen",
-               (unsigned long long)n, gStats.maxRunning.load(), mean, max,
+    // CPU-Zeit des Prozesses während des Aufrufs: enthält Resolves übrige Threads, nur bei
+    // Einzelbildschritten (ein Aufruf, sonst ruht Resolve) die Kosten der Dekodierung selbst.
+    double cpu = double(gStats.totalCpuNs.load()) / double(n) / 1e6;
+    logMessage("N-RAW: %llu Aufrufe, höchstens %d gleichzeitig, Dauer mittel %.1f ms, max %.1f ms, CPU mittel "
+               "%.1f ms, a3/a8/a9 abweichend in %llu Aufrufen",
+               (unsigned long long)n, gStats.maxRunning.load(), mean, max, cpu,
                (unsigned long long)gStats.varying.load());
 }
 
@@ -296,10 +314,13 @@ extern "C" int nrawDecode(void *ctx, void *handle, void *a3, size_t size, const 
 
     raiseMax(gStats.maxRunning, ++gStats.running);
     auto t0 = std::chrono::steady_clock::now();
+    const uint64_t cpu0 = processCpuNs();
     int result = gOriginal(ctx, handle, a3, size, cs, dstBytes, dst, a8, a9);
+    const uint64_t cpuNs = processCpuNs() - cpu0;
     auto ns = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - t0).count();
     --gStats.running;
 
+    gStats.totalCpuNs += cpuNs;
     gStats.totalNs += uint64_t(ns);
     raiseMax(gStats.maxNs, uint64_t(ns));
 
