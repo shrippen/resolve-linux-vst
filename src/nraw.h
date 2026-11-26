@@ -4,5 +4,5 @@
 
 // Versucht, die Dekodierfunktion zu übernehmen. Vom NEV-Teil (nev.cpp) bei jedem auf eine
 // .NEV-Datei umgeleiteten Pfad gerufen: Ist REDR3D noch nicht geladen, klappt es beim nächsten.
-// Idempotent und threadsicher; ohne RESOLVE_LINUX_VST_NRAW_GPU geschieht nichts.
+// Idempotent und threadsicher; ohne RESOLVE_LINUX_VST_NRAW_DECODE geschieht nichts.
 void nrawAttach();

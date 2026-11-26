@@ -1,4 +1,4 @@
-// N-RAW auf der GPU: Eingriff in die Dekodierfunktion von fastticolib (REDR3D-x64.so).
+// N-RAW dekodieren: Eingriff in die Dekodierfunktion von fastticolib (REDR3D-x64.so).
 //
 // Resolve liest .NEV als R3D (nev.cpp); den Frame dekodiert fastticolib auf der CPU:
 //
@@ -6,7 +6,7 @@
 //                   ▲
 //                   └─ hier: Sprung auf nrawDecode; das Original bleibt über ein Trampolin erreichbar
 //
-// RESOLVE_LINUX_VST_NRAW_GPU=1: der eigene Decoder (nraw_decode.h) dekodiert statt fastticolib,
+// RESOLVE_LINUX_VST_NRAW_DECODE=1: der eigene Decoder (nraw_decode.h) dekodiert statt fastticolib,
 // die ersten Bilder und jedes 500. dekodiert zusätzlich RED zum Vergleich; bei einer Abweichung
 // oder jedem Fehler dekodiert RED. =probe: Messmodus, ruft immer das Original und protokolliert,
 // womit es gerufen wird, was es verändert, wie oft und wie parallel es läuft.
@@ -19,9 +19,11 @@
 #include <time.h>
 #include <unistd.h>
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cstdint>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <mutex>
@@ -36,7 +38,7 @@
 
 namespace {
 
-constexpr const char *kEnvMode = "RESOLVE_LINUX_VST_NRAW_GPU";
+constexpr const char *kEnvMode = "RESOLVE_LINUX_VST_NRAW_DECODE";
 constexpr const char *kModeProbe = "probe";
 constexpr const char *kModeOwn = "1";
 constexpr const char *kLibSuffix = "REDR3D-x64.so";
@@ -387,6 +389,44 @@ bool ownCurve(const void *ctx, NrawCurve *curve)
     return true;
 }
 
+// Abweichendes Prüfbild für die Fehlersuche ablegen: Codestream, Bild von RED und unser Bild in
+// ~/.local/state/resolve-linux-vst/nraw-mismatch.{in,red,own}, dazu Zahl und Lage der Pixel ins Log.
+void writeFile(const std::string &path, const void *data, size_t len)
+{
+    FILE *f = fopen(path.c_str(), "wb");
+    if (!f) {
+        return;
+    }
+    fwrite(data, 1, len, f);
+    fclose(f);
+}
+
+void dumpMismatch(const uint8_t *cs, size_t size, const uint16_t *red, const uint16_t *own, size_t count)
+{
+    size_t different = 0;
+    size_t first = count;
+    size_t last = 0;
+    for (size_t i = 0; i < count; ++i) {
+        if (red[i] == own[i]) {
+            continue;
+        }
+        ++different;
+        first = std::min(first, i);
+        last = i;
+    }
+    logMessage("N-RAW: %zu von %zu Pixeln verschieden, erster Index %zu, letzter %zu", different, count, first, last);
+
+    const char *home = getenv("HOME");
+    if (!home) {
+        return;
+    }
+    const std::string base = std::string(home) + "/.local/state/resolve-linux-vst/nraw-mismatch";
+    writeFile(base + ".in", cs, size);
+    writeFile(base + ".red", red, count * sizeof(uint16_t));
+    writeFile(base + ".own", own, count * sizeof(uint16_t));
+    logMessage("N-RAW: Prüfbild abgelegt unter %s.{in,red,own}", base.c_str());
+}
+
 // Prüfbild: RED dekodiert in dst, wir in einen eigenen Puffer. Weicht ein Pixel ab, ist der
 // eigene Decoder für den Rest des Prozesses aus.
 int ownVerify(void *ctx, void *handle, void *a3, size_t size, const uint8_t *cs, size_t dstBytes, uint16_t *dst,
@@ -407,6 +447,7 @@ int ownVerify(void *ctx, void *handle, void *a3, size_t size, const uint8_t *cs,
     if (memcmp(own.data(), dst, dstBytes) != 0) {
         gOwn.disabled = true;
         logMessage("N-RAW: Prüfbild weicht von RED ab, eigener Decoder für diesen Lauf aus");
+        dumpMismatch(cs, size, dst, own.data(), count);
         return result;
     }
     logMessage("N-RAW: Prüfbild gleich RED (Aufruf %llu)", (unsigned long long)gOwn.calls.load());
@@ -420,13 +461,29 @@ void ownStats(uint64_t n)
                double(gOwn.wallNs.load()) / double(n) / 1e6, double(gOwn.cpuNs.load()) / double(n) / 1e6);
 }
 
+// a8 und a9 waren in jedem gemessenen Aufruf 0; andere Werte (ein anderer Dekodiermodus?)
+// gehen an RED. Neue Werte von a3, a8, a9 kommen je einmal ins Log.
+void noteArgs(void *a3, long a8, long a9)
+{
+    static std::atomic<void *> lastA3{nullptr};
+    static std::atomic<bool> loggedA89{false};
+    if (lastA3.exchange(a3) != a3) {
+        logMessage("N-RAW: a3=%p", a3);
+    }
+    if ((a8 != 0 || a9 != 0) && !loggedA89.exchange(true)) {
+        logMessage("N-RAW: a8=%ld a9=%ld (nicht 0), solche Bilder dekodiert RED", a8, a9);
+    }
+}
+
 // Eigener Decoder statt fastticolib; bei jedem Zweifel dekodiert RED.
 int ownDecode(void *ctx, void *handle, void *a3, size_t size, const uint8_t *cs, size_t dstBytes, uint16_t *dst,
               long a8, long a9)
 {
     const uint64_t n = ++gOwn.calls;
+    noteArgs(a3, a8, a9);
     NrawCurve curve;
-    if (gOwn.disabled || dstBytes == 0 || dstBytes % sizeof(uint16_t) != 0 || !ownCurve(ctx, &curve)) {
+    if (gOwn.disabled || a8 != 0 || a9 != 0 || dstBytes == 0 || dstBytes % sizeof(uint16_t) != 0 ||
+        !ownCurve(ctx, &curve)) {
         ++gOwn.fallbacks;
         return gOriginal(ctx, handle, a3, size, cs, dstBytes, dst, a8, a9);
     }
@@ -473,17 +530,17 @@ Attach attachNow()
     NrawSites sites;
     std::string error;
     if (!findNrawSites(code, &sites, &error)) {
-        logMessage("N-RAW: Muster %s passt nicht, GPU-Dekodierung aus", error.c_str());
+        logMessage("N-RAW: Muster %s passt nicht, eigene Dekodierung aus", error.c_str());
         return Attach::Done;
     }
 
     gOriginal = reinterpret_cast<DecodeFn>(buildTrampoline(sites.decode, kNrawPrologLen));
     if (!gOriginal) {
-        logMessage("N-RAW: Trampolin fehlgeschlagen, GPU-Dekodierung aus");
+        logMessage("N-RAW: Trampolin fehlgeschlagen, eigene Dekodierung aus");
         return Attach::Done;
     }
     if (!patchJumpIndirect(sites.decode, kNrawPrologLen, reinterpret_cast<void *>(&nrawDecode))) {
-        logMessage("N-RAW: Sprung bei %#lx fehlgeschlagen, GPU-Dekodierung aus", (unsigned long)sites.decode);
+        logMessage("N-RAW: Sprung bei %#lx fehlgeschlagen, eigene Dekodierung aus", (unsigned long)sites.decode);
         return Attach::Done;
     }
 
