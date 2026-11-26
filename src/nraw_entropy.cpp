@@ -298,37 +298,25 @@ struct Scratch {
     std::vector<int32_t> vals;
     std::vector<int32_t> a;
     std::vector<int32_t> b;
-    std::vector<int32_t> out;
 };
 
-// Zeile als int16 ablegen; false, wenn ein Wert nicht passt.
-bool narrow(const int32_t *in, size_t n, int16_t *out)
-{
-    uint32_t overflow = 0;
-    for (size_t x = 0; x < n; x++) {
-        overflow |= uint32_t(in[x] - INT16_MIN) >> 16;
-        out[x] = int16_t(in[x]);
-    }
-    return overflow == 0;
-}
-
-// Legt die Zeile des Pakets k in den Ebenen ab; false, wenn ein Wert nicht in int16 passt.
-bool storePacket(const Frame &f, int k, size_t row, const int32_t *v, Scratch &sc)
+// Legt die Zeile des Pakets k in den Ebenen ab (waagerecht zurücktransformiert).
+void storePacket(const Frame &f, int k, size_t row, const int32_t *v, Scratch &sc)
 {
     const PacketDef &def = PACKET_DEF[k];
     const Layout &lay = f.lay[k];
     size_t w = f.compw;
 
     if (def.kind == Kind::Low) {
-        rowLow(v, lay, sc.out.data(), sc.a.data(), sc.b.data());
-        return narrow(sc.out.data(), w, f.low[def.comp] + row * w);
+        rowLow(v, lay, f.low[def.comp] + row * w, sc.a.data(), sc.b.data());
+        return;
     }
     if (def.kind == Kind::High) {
-        inv53(v + lay.cOff[0], lay.width[0], v + lay.cOff[1], lay.width[1], sc.out.data());
-        return narrow(sc.out.data(), w, f.high[def.comp] + row * w);
+        inv53(v + lay.cOff[0], lay.width[0], v + lay.cOff[1], lay.width[1], f.high[def.comp] + row * w);
+        return;
     }
     size_t line = 2 * row + (k == PACKET_K2B ? 1 : 0);
-    return narrow(v, w, f.low[K2] + line * w);
+    memcpy(f.low[K2] + line * w, v, w * sizeof(Coef));
 }
 
 } // namespace
@@ -362,7 +350,6 @@ NrawResult decodeChain(const Frame &f, const uint8_t *d, const Precinct *precs, 
     sc.vals.resize(maxVals);
     sc.a.resize(f.compw);
     sc.b.resize(f.compw);
-    sc.out.resize(f.compw);
 
     Pred state[2];
     Pred next;
@@ -382,9 +369,7 @@ NrawResult decodeChain(const Frame &f, const uint8_t *d, const Precinct *precs, 
                 return res;
             }
             std::swap(state[j], next);
-            if (!storePacket(f, k, row0 + i, sc.vals.data(), sc)) {
-                return NrawResult::Unsupported;
-            }
+            storePacket(f, k, row0 + i, sc.vals.data(), sc);
         }
     }
     return NrawResult::Ok;

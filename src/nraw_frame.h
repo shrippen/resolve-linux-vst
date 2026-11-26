@@ -55,15 +55,16 @@ struct Layout {
 
 // Wavelet-Ebenen im Arbeitsspeicher, je nprec Zeilen zu compw Werten (K2: 2 * nprec Zeilen).
 // Tiefe Zeile = LL5 + HL5..HL1 waagerecht zurücktransformiert, hohe Zeile = LH1 + HH1.
-// Als int16 gespeichert (halber Speicherverkehr); passt ein Wert nicht, ist das Bild Unsupported.
+using Coef = int32_t; // Wert der Wavelet-Ebenen
+
 struct Frame {
     Header h;
     size_t compw = 0; // Breite einer Komponente
     size_t nprec = 0; // Precincts: je 2 Komponentenzeilen
     size_t lowW[MAX_BANDS] = {};
     Layout lay[PACKETS];
-    int16_t *low[COMPS] = {};
-    int16_t *high[COMPS] = {}; // K2: keine
+    Coef *low[COMPS] = {};
+    Coef *high[COMPS] = {}; // K2: keine
 };
 
 // Lage eines Precincts im Strom, vorab gelesen (nraw_decode.cpp), damit Ketten parallel laufen.

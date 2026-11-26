@@ -252,7 +252,7 @@ NrawResult setupFrame(Frame &f)
 // (sonst kostet das Anfassen frischer Seiten mehr als die ganze Entropie); gleichzeitige
 // Aufrufe bekommen eigenen Speicher.
 struct Workspace {
-    int16_t *mem;
+    Coef *mem;
     size_t count;
 };
 
@@ -274,12 +274,12 @@ Workspace *acquire(size_t count)
     }
     freeWorkspace(w);
 
-    size_t bytes = (count * sizeof(int16_t) + ALIGN - 1) / ALIGN * ALIGN;
+    size_t bytes = (count * sizeof(Coef) + ALIGN - 1) / ALIGN * ALIGN;
     void *mem = aligned_alloc(ALIGN, bytes);
     if (!mem) {
         return nullptr;
     }
-    return new Workspace{static_cast<int16_t *>(mem), count};
+    return new Workspace{static_cast<Coef *>(mem), count};
 }
 
 void release(Workspace *w)
@@ -288,7 +288,7 @@ void release(Workspace *w)
 }
 
 // Ebenen im Arbeitsspeicher verteilen: je Komponente K0, K1, K3 tief und hoch, K2 mit doppelter Höhe.
-void assignPlanes(Frame &f, int16_t *mem)
+void assignPlanes(Frame &f, Coef *mem)
 {
     size_t plane = f.nprec * f.compw;
     for (int c : {K0, K1, K3}) {

@@ -1,6 +1,7 @@
 // Prüft den N-RAW-Referenzdecoder bitgenau gegen Mitschnitte von fastticolib. Die Prüfdaten sind
 // privat und nicht im Repo: $NRAW_FIXTURES (Standard ~/.cache/claude/tico-test/fixtures) mit
-// lut.bin (int32 LE), iso800.in/.out, iso3200.in/.out. Läuft nicht in `make test`.
+// lut.bin (int32 LE), iso800.in/.out, iso3200.in/.out, bright.in/.out (helles Motiv: Werte über
+// int16 nach der waagerechten Hebung). Läuft nicht in `make test`.
 // Je Threadzahl: 0 abweichende Pixel, Wand- und CPU-Zeit je Bild (Median).
 #include "../src/nraw_decode.h"
 #include "../src/nraw_pool.h"
@@ -103,7 +104,7 @@ int main()
     }
 
     size_t bad = 0;
-    for (const char *name : {"iso800", "iso3200"}) {
+    for (const char *name : {"iso800", "iso3200", "bright"}) {
         for (unsigned threads : THREAD_COUNTS) {
             size_t n = check(dir, name, lut, threads);
             bad = n == SIZE_MAX || bad == SIZE_MAX ? SIZE_MAX : bad + n;

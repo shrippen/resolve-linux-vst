@@ -101,14 +101,14 @@ NRAW_INLINE long mirror(long i, long len, bool odd)
 
 // ---- Senkrechte Hebung -------------------------------------------------------------------
 
-NRAW_INLINE void evenRow(const int16_t *l, const int16_t *hPrev, const int16_t *h, int32_t *out, size_t n)
+NRAW_INLINE void evenRow(const Coef *l, const Coef *hPrev, const Coef *h, int32_t *out, size_t n)
 {
     for (size_t x = 0; x < n; x++) {
         out[x] = int32_t(l[x]) - ((int32_t(hPrev[x]) + int32_t(h[x]) + 2) >> 2);
     }
 }
 
-NRAW_INLINE void oddRow(const int16_t *h, const int32_t *e0, const int32_t *e1, int32_t *out, size_t n)
+NRAW_INLINE void oddRow(const Coef *h, const int32_t *e0, const int32_t *e1, int32_t *out, size_t n)
 {
     for (size_t x = 0; x < n; x++) {
         out[x] = int32_t(h[x]) + ((e0[x] + e1[x]) >> 1);
@@ -135,8 +135,8 @@ NRAW_INLINE void lift(const Frame &f, Comp c, const Tile &t, const Span &sp, int
 {
     const size_t w = f.compw;
     const long nl = long(f.nprec);
-    const int16_t *lo = f.low[c] + sp.cs;
-    const int16_t *hi = f.high[c] + sp.cs;
+    const Coef *lo = f.low[c] + sp.cs;
+    const Coef *hi = f.high[c] + sp.cs;
     int32_t tmp[WIN_W];
 
     auto out = [&](long yy) { return rowp(win, yy - t.a) + (sp.cs - t.b); };
@@ -159,10 +159,10 @@ NRAW_INLINE void lift(const Frame &f, Comp c, const Tile &t, const Span &sp, int
 
 NRAW_INLINE void loadPlane(const Frame &f, const Tile &t, const Span &sp, int32_t *win)
 {
-    const int16_t *src = f.low[K2] + size_t(sp.cs);
+    const Coef *src = f.low[K2] + size_t(sp.cs);
     for (long yy = sp.yy0; yy < sp.yy1; yy++) {
         int32_t *dst = rowp(win, yy - t.a) + (sp.cs - t.b);
-        const int16_t *row = src + size_t(yy) * f.compw;
+        const Coef *row = src + size_t(yy) * f.compw;
         for (size_t x = 0; x < sp.n; x++) {
             dst[x] = row[x];
         }
