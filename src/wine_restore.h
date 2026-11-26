@@ -1,7 +1,8 @@
 // Wine-DPI zurücksetzen: Auswertung der Datei mit den Vorwerten ("Prefix<Tab>DPI" je Zeile,
 // geschrieben von wine_dpi.cpp), rein gerechnet ohne Wine und Dateisystem. Das Zurücksetzen
 // selbst übergibt der Aufrufer als Funktion; tools/wine-dpi-restore.cpp ruft Wine auf,
-// tests/wine-restore-test.cpp zählt nur. Das Lesen einer Zeile nutzt auch wine_dpi.cpp. Eigene Datei, damit der Test sie ohne Wine baut.
+// tests/wine-restore-test.cpp zählt nur. Das Lesen einer Zeile nutzt auch wine_dpi.cpp. Eigene
+// Datei, damit der Test sie ohne Wine baut.
 #pragma once
 
 #include <cerrno>
