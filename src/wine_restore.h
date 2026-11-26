@@ -4,8 +4,12 @@
 // tests/wine-restore-test.cpp zählt nur. Eigene Datei, damit der Test sie ohne Wine baut.
 #pragma once
 
+#include <cerrno>
+#include <cstdlib>
 #include <functional>
 #include <string>
+
+constexpr int kWineDpiUnset = -1; // LogPixels war nicht gesetzt (Vorwert in der Datei)
 
 enum class RestoreResult {
     Done,   // zurückgesetzt: Zeile entfällt
@@ -15,6 +19,43 @@ enum class RestoreResult {
 
 // Setzt die DPI des Prefix auf den Wert des Textes (-1 = war nicht gesetzt).
 using RestoreFn = std::function<RestoreResult(const std::string &prefix, const std::string &dpiText)>;
+
+// Eine Zeile der Datei: "Prefix<Tab>DPI-Text". Ohne Tab ist der DPI-Text leer.
+struct RestoreLine {
+    std::string prefix;
+    std::string dpiText;
+};
+
+inline RestoreLine splitRestoreLine(const std::string &line)
+{
+    const size_t tab = line.find('\t');
+    if (tab == std::string::npos) {
+        return {line, std::string()};
+    }
+    return {line.substr(0, tab), line.substr(tab + 1)};
+}
+
+// Strict: nur eine ganze Zahl gilt, sonst false (die Zeile bleibt dann für den nächsten Lauf).
+// Lenient: wie atoi, Unlesbares wird 0. Die Bibliothek liest lenient, das Werkzeug strict;
+// beides ist das Verhalten vor dem Zusammenführen und bleibt bewusst verschieden.
+enum class DpiParse { Strict, Lenient };
+
+inline bool parseDpiText(const std::string &text, DpiParse mode, int *dpi)
+{
+    if (mode == DpiParse::Lenient) {
+        *dpi = atoi(text.c_str());
+        return true;
+    }
+
+    char *end = nullptr;
+    errno = 0;
+    const long value = strtol(text.c_str(), &end, 10);
+    if (text.empty() || *end != '\0' || errno != 0) {
+        return false;
+    }
+    *dpi = int(value);
+    return true;
+}
 
 // Geht alle Zeilen durch und liefert die, die stehen bleiben (mit Zeilenende). Eine Zeile ohne
 // Tab hat einen leeren DPI-Text; leerer Prefix: Zeile entfällt. Eine unvollständige letzte
@@ -28,9 +69,7 @@ inline std::string linesToKeep(const std::string &content, const RestoreFn &rese
         const std::string line = content.substr(start, end - start);
         start = end + 1;
 
-        const size_t tab = line.find('\t');
-        const std::string prefix = line.substr(0, tab);
-        const std::string dpi = tab == std::string::npos ? std::string() : line.substr(tab + 1);
+        const auto [prefix, dpi] = splitRestoreLine(line);
         if (prefix.empty()) {
             continue;
         }
