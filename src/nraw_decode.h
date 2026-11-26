@@ -1,5 +1,5 @@
-// Referenzdecoder für Nikon N-RAW (TicoRAW, JPEG-XS-Variante) auf der CPU. Reine Funktion:
-// kennt weder Resolve noch das Log. Bitgenau gegen die Ausgabe von fastticolib geprüft
+// Decoder für Nikon N-RAW (TicoRAW, JPEG-XS-Variante), auf der GPU (nraw_gpu.h) oder der CPU.
+// Kennt weder Resolve noch RED; sein GPU-Teil schreibt ins Log (log.h), Tests bauen log.cpp mit. Bitgenau gegen die Ausgabe von fastticolib geprüft
 // (tests/nraw-test.cpp). Alles, was vom geprüften Aufbau abweicht, ergibt Unsupported.
 #pragma once
 
