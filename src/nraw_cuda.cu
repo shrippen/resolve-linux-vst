@@ -7,7 +7,12 @@
 // Jeder Schritt ist ein eigener Aufruf (Synchronisation über das ganze Bild). Lesezugriffe über
 // den Rand werden gespiegelt wie die Fensterränder der CPU (ganzzahlige Symmetrie bleibt durch
 // die Hebung erhalten, darum genügt das Spiegeln beim Lesen).
+//
+// Stufe B setzt davor die Entropie auf der Karte: codes, gcli, coefs (nraw_cuda_entropy.cuh) füllen
+// die Ebenen, die Stufe A sonst hochlädt.
 #include <stdint.h>
+
+#include "nraw_cuda_entropy.cuh"
 
 namespace {
 

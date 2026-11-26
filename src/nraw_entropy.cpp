@@ -335,6 +335,15 @@ NrawResult packetExtent(const uint8_t *q, size_t avail, size_t &used)
     return used > avail ? NrawResult::Corrupt : NrawResult::Ok;
 }
 
+void gtliTable(const Frame &f, const Precinct *precs, size_t count, uint8_t *out)
+{
+    for (size_t p = 0; p < count; p++) {
+        for (size_t w = 0; w < WGT_COUNT; w++) {
+            out[p * WGT_COUNT + w] = uint8_t(truncation(f.h.gain[w], f.h.prio[w], precs[p].q, precs[p].r));
+        }
+    }
+}
+
 NrawResult decodeChain(const Frame &f, const uint8_t *d, const Precinct *precs, size_t count, size_t row0, int first)
 {
     // Kette 2/6: Paket 2 sieht Paket 6 des vorigen Precincts, Paket 6 sieht Paket 2 des selben.

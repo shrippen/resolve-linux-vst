@@ -23,8 +23,12 @@ enum class NrawResult {
 enum class NrawBackend { Cpu, Gpu };
 
 // Zeiten der GPU-Stufen des letzten Bildes in ms (nur Tests und Messung).
+// kernel = senkrechte Hebung, Star-Tetrix und Kennlinie; codes, gcli, coefs = Stufen der Entropie
+// auf der Karte (nur Stufe B); scan = Vorabsuche der CPU; flags = Bits der eingebauten Prüfung.
 struct NrawGpuTimes {
     float upload, kernel, download, copy;
+    float scan, codes, gcli, coefs;
+    unsigned flags;
 };
 
 // Codestream ab SOC (FF10). Ziel: Wf*Hf Werte (aus dem PIH), Bayer RGGB, uint16.
@@ -33,3 +37,6 @@ NrawResult decodeNraw(const uint8_t *codestream, size_t size, const NrawCurve &c
 
 // Zeiten des letzten GPU-Bildes; false, wenn die GPU nicht läuft.
 bool nrawGpuTimes(NrawGpuTimes *times);
+
+// Nur Tests: Zwischenergebnis des letzten GPU-Bildes (NrawGpuDump in nraw_gpu.h); gibt die Größe zurück.
+size_t nrawGpuPeek(int what, void *dst, size_t bytes);

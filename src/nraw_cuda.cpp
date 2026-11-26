@@ -1,8 +1,12 @@
-// N-RAW auf der GPU, Host-Teil (Kernel: nraw_cuda.cu). Eigene Bibliothek, die die Hauptbibliothek
+// N-RAW auf der GPU, Host-Teil (Kernel: nraw_cuda.cu, nraw_cuda_entropy.cuh). Eigene Bibliothek, die die Hauptbibliothek
 // per dlopen lädt (nraw_gpu.h). Nur die CUDA-Driver-API über libcuda.so.1 (dlopen), kein cudart:
 // Resolve lädt selbst eines.
 //
-//   Hauptbibliothek ─► nrawGpuApi ─► allocHost / bayer ─► libcuda (dlsym) ─► PTX (eingebettet)
+//   Hauptbibliothek ─► nrawGpuApi ─► allocHost / bayer / decode ─► libcuda (dlsym) ─► PTX (eingebettet)
+//
+// Stufe A (bayer): Ebenen hoch, Farbstufen, Bild runter. Stufe B (decode): Codestream und kleine
+// Tabellen hoch, Entropie (codes, gcli, coefs) füllt die Ebenen auf der Karte, dann dieselben
+// Farbstufen, Bild und Prüfwort runter. Ein Stream, eine Synchronisation.
 //
 // Eigener Kontext, nie der primäre: die Threads gehören Resolve. Jeder Aufruf schiebt ihn auf
 // den Kontextstapel des Threads und nimmt ihn am Ende wieder herunter. Kontext und Puffer
@@ -11,6 +15,7 @@
 #include <cuda.h>
 #include <dlfcn.h>
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cstdio>
@@ -37,6 +42,13 @@ constexpr unsigned BLOCK_Y = 8;
 constexpr size_t ERROR_BYTES = 192;
 constexpr int PLANE_SETS = 8;   // Ebenen im Upload (nraw_gpu.h)
 constexpr int MIRROR_ROWS = 2;  // Ebenenzeilen je Precinct
+constexpr unsigned GCLI_BLOCK = 128;
+constexpr unsigned CODES_BLOCK = 256; // wie BLOCK in nraw_cuda_entropy.cuh
+constexpr unsigned SLICE_PRECS = 16;
+constexpr unsigned CHAINS = 7;
+constexpr unsigned SHARED_MAX = 48 * 1024; // ohne Opt-in je Block
+constexpr size_t GROUP_COEFS = 4;
+constexpr size_t STREAM_SLACK = 4;      // Puffer wächst um 1/4 über die Größe
 
 // Treiberfunktionen (versionierte Namen, die cuda.h als Makros einsetzt).
 struct Driver {
@@ -52,6 +64,7 @@ struct Driver {
     CUresult (*hostFree)(void *);
     CUresult (*toDevice)(CUdeviceptr, const void *, size_t, CUstream);
     CUresult (*toHost)(void *, CUdeviceptr, size_t, CUstream);
+    CUresult (*memset32)(CUdeviceptr, unsigned, size_t, CUstream);
     CUresult (*modLoad)(CUmodule *, const void *);
     CUresult (*modFunc)(CUfunction *, CUmodule, const char *);
     CUresult (*launch)(CUfunction, unsigned, unsigned, unsigned, unsigned, unsigned, unsigned, unsigned, CUstream,
@@ -64,9 +77,10 @@ struct Driver {
     CUresult (*errName)(CUresult, const char **);
 };
 
-enum Kernel { K_LIFT, K_STEP1, K_STEP2, K_STEP3, K_STEP4, K_LAST, KERNELS };
-constexpr const char *KERNEL_NAME[KERNELS] = {"lift", "step1", "step2", "step3", "step4", "last"};
-enum Stamp { T_START, T_UPLOADED, T_COMPUTED, T_DOWNLOADED, STAMPS };
+enum Kernel { K_LIFT, K_STEP1, K_STEP2, K_STEP3, K_STEP4, K_LAST, K_CODES, K_GCLI, K_COEFS, KERNELS };
+constexpr const char *KERNEL_NAME[KERNELS] = {"lift", "step1", "step2", "step3", "step4",
+                                              "last", "codes", "gcli", "coefs"};
+enum Stamp { T_START, T_UPLOADED, T_CODES, T_GCLI, T_COEFS, T_COMPUTED, T_DOWNLOADED, STAMPS };
 
 struct State {
     Driver d{};
@@ -86,6 +100,19 @@ struct State {
     size_t bayerBytes = 0;
     std::vector<uint16_t> levels; // Stand auf der Karte
     void *hostBayer = nullptr;    // gepinnt
+
+    // Stufe B
+    CUdeviceptr dStream = 0;      // Codestream
+    CUdeviceptr dTables = 0;      // NrawGpuPrec[nprec], dann gtli[nprec * WGT]
+    CUdeviceptr dCodes = 0;       // Zählcodes je Gruppe und Paket
+    CUdeviceptr dGcli = 0;        // GCLI je Gruppe und Paket
+    CUdeviceptr dFlag = 0;        // Prüfwort
+    size_t streamCap = 0;
+    size_t tablesBytes = 0;
+    size_t codesBytes = 0;
+    void *hostStream = nullptr;   // gepinnt, Quelle des Uploads
+    void *hostTables = nullptr;
+    int *hostFlag = nullptr;
 
     NrawGpuTimes times{};
 };
@@ -128,23 +155,35 @@ bool sym(void *lib, const char *name, T &out)
     return out != nullptr || failText(name);
 }
 
-bool loadDriver(Driver &d)
+// Gerät, Kontext und Speicher.
+bool loadMemory(void *lib, Driver &d)
 {
-    void *lib = dlopen(LIBCUDA, RTLD_NOW | RTLD_LOCAL);
-    if (!lib) {
-        return failText("libcuda.so.1 fehlt");
-    }
     return sym(lib, "cuInit", d.init) && sym(lib, "cuDeviceGetCount", d.deviceCount) &&
            sym(lib, "cuDeviceGet", d.deviceGet) && sym(lib, "cuCtxCreate_v2", d.ctxCreate) &&
            sym(lib, "cuCtxPushCurrent_v2", d.ctxPush) && sym(lib, "cuCtxPopCurrent_v2", d.ctxPop) &&
            sym(lib, "cuMemAlloc_v2", d.memAlloc) && sym(lib, "cuMemFree_v2", d.memFree) &&
            sym(lib, "cuMemAllocHost_v2", d.hostAlloc) && sym(lib, "cuMemFreeHost", d.hostFree) &&
            sym(lib, "cuMemcpyHtoDAsync_v2", d.toDevice) && sym(lib, "cuMemcpyDtoHAsync_v2", d.toHost) &&
-           sym(lib, "cuModuleLoadData", d.modLoad) && sym(lib, "cuModuleGetFunction", d.modFunc) &&
+           sym(lib, "cuMemsetD32Async", d.memset32);
+}
+
+// Modul, Kernel, Stream, Ereignisse.
+bool loadRun(void *lib, Driver &d)
+{
+    return sym(lib, "cuModuleLoadData", d.modLoad) && sym(lib, "cuModuleGetFunction", d.modFunc) &&
            sym(lib, "cuLaunchKernel", d.launch) && sym(lib, "cuStreamCreate", d.streamNew) &&
            sym(lib, "cuStreamSynchronize", d.streamWait) && sym(lib, "cuEventCreate", d.eventNew) &&
            sym(lib, "cuEventRecord", d.eventRecord) && sym(lib, "cuEventElapsedTime", d.eventMs) &&
            sym(lib, "cuGetErrorName", d.errName);
+}
+
+bool loadDriver(Driver &d)
+{
+    void *lib = dlopen(LIBCUDA, RTLD_NOW | RTLD_LOCAL);
+    if (!lib) {
+        return failText("libcuda.so.1 fehlt");
+    }
+    return loadMemory(lib, d) && loadRun(lib, d);
 }
 
 // Kontext, Modul, Stream und Ereignisse; der Kontext ist danach nicht mehr aktuell.
@@ -301,8 +340,15 @@ bool launch(State &s, Kernel k, Grid g, void **args)
     return r == CUDA_SUCCESS || fail("cuLaunchKernel", r);
 }
 
-// Senkrechte Hebung der drei Komponenten, Star-Tetrix, Kennlinie.
-bool runKernels(State &s, const NrawGpuFrame &f)
+// Kernel mit eindimensionalem Block (Entropie), shared = dynamischer Shared Memory in Bytes.
+bool launch1d(State &s, Kernel k, unsigned gx, unsigned gy, unsigned gz, unsigned block, unsigned shared, void **args)
+{
+    CUresult r = s.d.launch(s.fn[k], gx, gy, gz, block, 1, 1, shared, s.stream, args, nullptr);
+    return r == CUDA_SUCCESS || fail("cuLaunchKernel", r);
+}
+
+// Senkrechte Hebung der drei Komponenten, Star-Tetrix, Kennlinie; die Ebenen liegen auf der Karte.
+bool runColor(State &s, const NrawGpuFrame &f)
 {
     int n = int(f.compw);
     int nprec = int(f.nprec);
@@ -342,21 +388,13 @@ float between(State &s, Stamp a, Stamp b)
     return ms;
 }
 
-// Upload, Kernel, Download in einem Stream, eine Synchronisation am Ende.
-bool pipeline(State &s, const NrawGpuFrame &f)
+// Bild (und bei Stufe B das Prüfwort) herunter, warten.
+bool download(State &s, size_t flagBytes)
 {
-    CUresult r;
-    if (!stamp(s, T_START)) {
-        return false;
+    CUresult r = s.d.toHost(s.hostBayer, s.dBayer, s.bayerBytes, s.stream);
+    if (r == CUDA_SUCCESS && flagBytes) {
+        r = s.d.toHost(s.hostFlag, s.dFlag, flagBytes, s.stream);
     }
-    r = s.d.toDevice(s.dPlanes, f.planes, s.planesBytes, s.stream);
-    if (r != CUDA_SUCCESS) {
-        return fail("cuMemcpyHtoDAsync", r);
-    }
-    if (!stamp(s, T_UPLOADED) || !runKernels(s, f) || !stamp(s, T_COMPUTED)) {
-        return false;
-    }
-    r = s.d.toHost(s.hostBayer, s.dBayer, s.bayerBytes, s.stream);
     if (r != CUDA_SUCCESS) {
         return fail("cuMemcpyDtoHAsync", r);
     }
@@ -364,13 +402,176 @@ bool pipeline(State &s, const NrawGpuFrame &f)
         return false;
     }
     r = s.d.streamWait(s.stream);
+    return r == CUDA_SUCCESS || fail("cuStreamSynchronize", r);
+}
+
+// Stufe A: Upload, Farbstufen, Download in einem Stream, eine Synchronisation am Ende.
+bool pipeline(State &s, const NrawGpuFrame &f)
+{
+    if (!stamp(s, T_START)) {
+        return false;
+    }
+    CUresult r = s.d.toDevice(s.dPlanes, f.planes, s.planesBytes, s.stream);
     if (r != CUDA_SUCCESS) {
-        return fail("cuStreamSynchronize", r);
+        return fail("cuMemcpyHtoDAsync", r);
+    }
+    if (!stamp(s, T_UPLOADED) || !runColor(s, f) || !stamp(s, T_COMPUTED) || !download(s, 0)) {
+        return false;
     }
 
+    s.times = NrawGpuTimes{};
     s.times.upload = between(s, T_START, T_UPLOADED);
     s.times.kernel = between(s, T_UPLOADED, T_COMPUTED);
     s.times.download = between(s, T_COMPUTED, T_DOWNLOADED);
+    return true;
+}
+
+// ---- Stufe B -----------------------------------------------------------------------------------
+
+struct Counts {
+    unsigned maxGroups;  // Gruppen des größten Pakets
+    unsigned valsInts;   // Koeffizienten des größten Pakets
+};
+
+Counts countsOf(const NrawGpuLayout &lay)
+{
+    Counts c{0, 0};
+    for (unsigned k = 0; k < NRAW_GPU_KINDS; k++) {
+        unsigned n = 0;
+        for (unsigned b = 0; b < lay.bands[k]; b++) {
+            n += lay.groups[k][b];
+        }
+        c.maxGroups = std::max(c.maxGroups, n);
+    }
+    c.valsInts = c.maxGroups * unsigned(GROUP_COEFS);
+    return c;
+}
+
+// Dynamischer Shared Memory von coefs: Koeffizienten plus zwei Puffer der Hebung.
+size_t coefShared(const NrawGpuStream &f)
+{
+    return (countsOf(f.layout).valsInts + 2 * size_t(f.compw)) * sizeof(int32_t);
+}
+
+// Passt das Bild in die festen Grenzen der Kernel? Sonst macht die CPU es.
+bool fits(const NrawGpuStream &f)
+{
+    bool bandsOk = true;
+    for (unsigned k = 0; k < NRAW_GPU_KINDS; k++) {
+        bandsOk = bandsOk && f.layout.bands[k] >= 1 && f.layout.bands[k] <= NRAW_GPU_BANDS;
+    }
+    return bandsOk && countsOf(f.layout).maxGroups <= NRAW_GPU_GROUP_STRIDE && coefShared(f) <= SHARED_MAX &&
+           f.nprec > 0 && f.size > 0;
+}
+
+bool hostAlloc(void *&p, size_t bytes, const char *what)
+{
+    if (p) {
+        gS.d.hostFree(p);
+        p = nullptr;
+    }
+    CUresult r = gS.d.hostAlloc(&p, bytes);
+    return r == CUDA_SUCCESS || fail(what, r);
+}
+
+// Puffer der Stufe B: Strom wächst nur, Tabellen und Zwischenwerte folgen der Precinct-Zahl.
+bool ensureEntropy(State &s, const NrawGpuStream &f)
+{
+    if (!s.dFlag && (!devAlloc(s.dFlag, sizeof(int), "cuMemAlloc") || !hostAlloc(reinterpret_cast<void *&>(s.hostFlag),
+                                                                                 sizeof(int), "cuMemAllocHost"))) {
+        return false;
+    }
+
+    if (f.size > s.streamCap) {
+        size_t cap = f.size + f.size / STREAM_SLACK;
+        if (!devAlloc(s.dStream, cap, "cuMemAlloc") || !hostAlloc(s.hostStream, cap, "cuMemAllocHost")) {
+            return false;
+        }
+        s.streamCap = cap;
+    }
+
+    size_t tables = size_t(f.nprec) * (sizeof(NrawGpuPrec) + NRAW_GPU_WGT);
+    size_t codes = size_t(f.nprec) * NRAW_GPU_PACKETS * NRAW_GPU_GROUP_STRIDE;
+    if (tables == s.tablesBytes && codes == s.codesBytes) {
+        return true;
+    }
+    s.tablesBytes = 0;
+    s.codesBytes = 0;
+    if (!devAlloc(s.dTables, tables, "cuMemAlloc") || !hostAlloc(s.hostTables, tables, "cuMemAllocHost") ||
+        !devAlloc(s.dCodes, codes, "cuMemAlloc") || !devAlloc(s.dGcli, codes, "cuMemAlloc")) {
+        return false;
+    }
+    s.tablesBytes = tables;
+    s.codesBytes = codes;
+    return true;
+}
+
+// Codestream und Tabellen in die gepinnten Puffer (Host, vor dem ersten Stempel).
+void stageStream(State &s, const NrawGpuStream &f)
+{
+    size_t precBytes = size_t(f.nprec) * sizeof(NrawGpuPrec);
+    memcpy(s.hostStream, f.cs, f.size);
+    memcpy(s.hostTables, f.precs, precBytes);
+    memcpy(static_cast<uint8_t *>(s.hostTables) + precBytes, f.gtli, size_t(f.nprec) * NRAW_GPU_WGT);
+}
+
+// Gepinnte Puffer asynchron hoch; Prüfwort auf 0.
+bool uploadStream(State &s, const NrawGpuStream &f)
+{
+    CUresult r = s.d.toDevice(s.dStream, s.hostStream, f.size, s.stream);
+    if (r == CUDA_SUCCESS) {
+        r = s.d.toDevice(s.dTables, s.hostTables, s.tablesBytes, s.stream);
+    }
+    if (r == CUDA_SUCCESS) {
+        r = s.d.memset32(s.dFlag, 0, 1, s.stream);
+    }
+    return r == CUDA_SUCCESS || fail("cuMemcpyHtoDAsync", r);
+}
+
+// codes, gcli, coefs: Entropie, Dequantisierung und waagerechte Hebung in die Ebenen.
+bool runEntropy(State &s, const NrawGpuStream &f)
+{
+    NrawGpuLayout lay = f.layout;
+    Counts c = countsOf(lay);
+    int nprec = int(f.nprec);
+    int compw = int(f.compw);
+    int valsInts = int(c.valsInts);
+    size_t planeInts = s.planeBytes / sizeof(int32_t);
+    CUdeviceptr gtli = s.dTables + size_t(f.nprec) * sizeof(NrawGpuPrec);
+    unsigned packets = f.nprec * NRAW_GPU_PACKETS;
+    unsigned slices = (f.nprec + SLICE_PRECS - 1) / SLICE_PRECS;
+
+    void *aC[] = {&s.dStream, &s.dTables, &lay, &s.dCodes, &s.dFlag};
+    void *aG[] = {&s.dCodes, &gtli, &lay, &s.dGcli, &s.dFlag, &nprec};
+    void *aF[] = {&s.dStream, &s.dTables, &gtli,    &s.dGcli, &s.dPlanes,
+                  &s.dFlag,   &planeInts, &compw, &valsInts, &lay};
+    unsigned gx = (c.maxGroups + GCLI_BLOCK - 1) / GCLI_BLOCK;
+    return launch1d(s, K_CODES, packets, 1, 1, CODES_BLOCK, 0, aC) && stamp(s, T_CODES) &&
+           launch1d(s, K_GCLI, gx, slices, CHAINS, GCLI_BLOCK, 0, aG) && stamp(s, T_GCLI) &&
+           launch1d(s, K_COEFS, packets, 1, 1, CODES_BLOCK, unsigned(coefShared(f)), aF) && stamp(s, T_COEFS);
+}
+
+// Stufe B: Codestream hoch, Entropie, Farbstufen, Bild und Prüfwort runter.
+bool pipelineB(State &s, const NrawGpuStream &f, const NrawGpuFrame &dims)
+{
+    auto t0 = std::chrono::steady_clock::now();
+    stageStream(s, f);
+    float hostMs = std::chrono::duration<float, std::milli>(std::chrono::steady_clock::now() - t0).count();
+
+    if (!stamp(s, T_START) || !uploadStream(s, f) || !stamp(s, T_UPLOADED) || !runEntropy(s, f) || !runColor(s, dims) || !stamp(s, T_COMPUTED) ||
+        !download(s, sizeof(int))) {
+        return false;
+    }
+
+    s.times = NrawGpuTimes{};
+    s.times.scan = f.scanMs;
+    s.times.upload = hostMs + between(s, T_START, T_UPLOADED);
+    s.times.codes = between(s, T_UPLOADED, T_CODES);
+    s.times.gcli = between(s, T_CODES, T_GCLI);
+    s.times.coefs = between(s, T_GCLI, T_COEFS);
+    s.times.kernel = between(s, T_COEFS, T_COMPUTED);
+    s.times.download = between(s, T_COMPUTED, T_DOWNLOADED);
+    s.times.flags = unsigned(*s.hostFlag);
     return true;
 }
 
@@ -398,6 +599,14 @@ void freeHost(void *p)
     gS.d.hostFree(p);
 }
 
+// Pinned-Bild in den Zielpuffer des Aufrufers.
+void copyResult(State &s, size_t count, uint16_t *dst, NrawGpuCopy copy)
+{
+    auto t0 = std::chrono::steady_clock::now();
+    copy(static_cast<const uint16_t *>(s.hostBayer), dst, count);
+    s.times.copy = std::chrono::duration<float, std::milli>(std::chrono::steady_clock::now() - t0).count();
+}
+
 int bayer(const NrawGpuFrame *f, uint16_t *dst, NrawGpuCopy copy)
 {
     if (!ready()) {
@@ -413,11 +622,50 @@ int bayer(const NrawGpuFrame *f, uint16_t *dst, NrawGpuCopy copy)
     if (!ensureBuffers(s, *f) || !ensureLevels(s, *f) || !pipeline(s, *f)) {
         return NRAW_GPU_FAILED;
     }
-
-    auto t0 = std::chrono::steady_clock::now();
-    copy(static_cast<const uint16_t *>(s.hostBayer), dst, size_t(f->wf) * f->hf);
-    s.times.copy = std::chrono::duration<float, std::milli>(std::chrono::steady_clock::now() - t0).count();
+    copyResult(s, size_t(f->wf) * f->hf, dst, copy);
     return NRAW_GPU_OK;
+}
+
+int decode(const NrawGpuStream *f, uint16_t *dst, NrawGpuCopy copy)
+{
+    if (!ready()) {
+        return NRAW_GPU_FAILED;
+    }
+    std::unique_lock<std::mutex> run(gRun, std::try_to_lock);
+    if (!run.owns_lock() || !fits(*f)) {
+        return NRAW_GPU_BUSY;
+    }
+
+    Current cur;
+    State &s = gS;
+    NrawGpuFrame dims{f->wf, f->hf, f->compw, f->nprec, nullptr, f->levels, f->levelCount};
+    if (!ensureBuffers(s, dims) || !ensureLevels(s, dims) || !ensureEntropy(s, *f) || !pipelineB(s, *f, dims)) {
+        return NRAW_GPU_FAILED;
+    }
+    if (s.times.flags) {
+        return NRAW_GPU_CHECK;
+    }
+    copyResult(s, size_t(f->wf) * f->hf, dst, copy);
+    return NRAW_GPU_OK;
+}
+
+// Test: Zwischenergebnis des letzten Bildes.
+size_t peek(int what, void *dst, size_t bytes)
+{
+    if (!gReady.load() || gDead.load()) {
+        return 0;
+    }
+    std::lock_guard<std::mutex> run(gRun);
+    Current cur;
+    State &s = gS;
+    CUdeviceptr from = what == NRAW_GPU_DUMP_CODES ? s.dCodes : (what == NRAW_GPU_DUMP_GCLI ? s.dGcli : s.dPlanes);
+    size_t have = what == NRAW_GPU_DUMP_PLANES ? s.planesBytes : s.codesBytes;
+    size_t n = std::min(bytes, have);
+    if (!from || n == 0 || s.d.toHost(dst, from, n, s.stream) != CUDA_SUCCESS ||
+        s.d.streamWait(s.stream) != CUDA_SUCCESS) {
+        return 0;
+    }
+    return n;
 }
 
 const char *error()
@@ -430,7 +678,7 @@ void times(NrawGpuTimes *out)
     *out = gS.times;
 }
 
-const NrawGpuApi API = {NRAW_GPU_VERSION, allocHost, freeHost, bayer, error, times};
+const NrawGpuApi API = {NRAW_GPU_VERSION, allocHost, freeHost, bayer, error, times, decode, peek};
 
 } // namespace
 

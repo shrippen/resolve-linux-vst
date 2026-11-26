@@ -30,7 +30,7 @@ endif
 
 all: $(BUILD)/libresolve-linux-vst.so $(BUILD)/vst3-classes $(BUILD)/resolve-check $(BUILD)/wine-dpi-restore $(CUDA_TARGET)
 
-$(BUILD)/nraw_cuda.ptx: src/nraw_cuda.cu
+$(BUILD)/nraw_cuda.ptx: src/nraw_cuda.cu src/nraw_cuda_entropy.cuh src/nraw_gpu.h
 	@mkdir -p $(BUILD)
 	$(NVCC) -ptx -arch=compute_75 -std=c++17 -o $@ $<
 

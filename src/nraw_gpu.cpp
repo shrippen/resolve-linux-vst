@@ -12,6 +12,7 @@
 #include <cstring>
 #include <mutex>
 #include <string>
+#include <vector>
 
 #include "log.h"
 #include "nraw_frame.h"
@@ -24,6 +25,8 @@ namespace {
 
 constexpr const char *CUDA_LIB = "libresolve-linux-vst-nraw-cuda.so";
 constexpr size_t COPY_CHUNK = 1 << 20; // Werte je Kopierauftrag
+// Paket je Paketart (tief, hoch, eins), dessen Layout die Art beschreibt (PACKET_DEF in nraw_frame.h).
+constexpr int LAYOUT_OF_KIND[NRAW_GPU_KINDS] = {0, 4, 2};
 
 std::once_flag gLoadOnce;
 const NrawGpuApi *gApi = nullptr;
@@ -143,7 +146,66 @@ GpuRun gpuBayer(const Frame &f, const LevelTable &levels, uint16_t *bayer)
     }
 }
 
+GpuRun gpuDecode(const Frame &f, const uint8_t *cs, const Precinct *precs, const LevelTable &levels, uint16_t *bayer,
+                 float scanMs)
+{
+    if (!gpuUsable() || f.h.end > UINT32_MAX) {
+        return GpuRun::Failed;
+    }
+    for (size_t p = 0; p < f.nprec; p++) {
+        if (!precs[p].plain) {
+            return GpuRun::Busy;
+        }
+    }
+
+    std::vector<NrawGpuPrec> table(f.nprec);
+    for (size_t p = 0; p < f.nprec; p++) {
+        for (int k = 0; k < PACKETS; k++) {
+            table[p].pkt[k] = uint32_t(precs[p].pkt[k]);
+        }
+        table[p].end = uint32_t(precs[p].end);
+    }
+    std::vector<uint8_t> gtli(f.nprec * WGT_COUNT);
+    gtliTable(f, precs, f.nprec, gtli.data());
+
+    NrawGpuStream s{};
+    s.wf = uint32_t(f.h.wf);
+    s.hf = uint32_t(f.h.hf);
+    s.compw = uint32_t(f.compw);
+    s.nprec = uint32_t(f.nprec);
+    s.cs = cs;
+    s.size = f.h.end;
+    s.precs = table.data();
+    s.gtli = gtli.data();
+    s.levels = levels.values;
+    s.levelCount = uint32_t(levels.maxIdx + 1);
+    s.scanMs = scanMs;
+    for (int kind = 0; kind < NRAW_GPU_KINDS; kind++) {
+        const Layout &lay = f.lay[LAYOUT_OF_KIND[kind]];
+        s.layout.bands[kind] = uint32_t(lay.bands);
+        for (int b = 0; b < lay.bands; b++) {
+            s.layout.groups[kind][b] = uint32_t(lay.groups[b]);
+            s.layout.width[kind][b] = uint32_t(lay.width[b]);
+        }
+    }
+
+    switch (gApi->decode(&s, bayer, copyOut)) {
+    case NRAW_GPU_OK:
+        return GpuRun::Done;
+    case NRAW_GPU_FAILED:
+        kill();
+        return GpuRun::Failed;
+    default:
+        return GpuRun::Busy;
+    }
+}
+
 } // namespace nraw
+
+size_t nrawGpuPeek(int what, void *dst, size_t bytes)
+{
+    return nraw::gpuUsable() ? nraw::gApi->peek(what, dst, bytes) : 0;
+}
 
 bool nrawGpuTimes(NrawGpuTimes *times)
 {

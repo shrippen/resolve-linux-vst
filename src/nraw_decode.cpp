@@ -13,6 +13,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <cstring>
 #include <vector>
 
@@ -56,6 +57,11 @@ constexpr size_t MIN_PRECINCTS = 2; // die Kachelung der Bildstufe braucht minde
 constexpr size_t MIN_WIDTH = 16;
 constexpr size_t PLANE_COUNT = 8;   // Ebenen im Arbeitsspeicher: 3 tief, 3 hoch, K2 doppelt hoch
 constexpr size_t ALIGN = 64;      // Cachezeile
+constexpr size_t PREC_MODES = 5;  // Byte-Nummer der 2-Bit-Felder D je Band im Precinct-Kopf
+constexpr size_t PREC_MODES_FULL = 6; // ganze Bytes mit D = 3 (25 Bänder * 2 Bit = 6 Bytes + 2 Bit)
+constexpr uint8_t MODES_FULL = 0xff;
+constexpr uint8_t MODES_LAST = 0xc0;
+constexpr unsigned PKT_RAW_FLAG = 0x80;
 
 // ---- Kopf --------------------------------------------------------------------------------
 
@@ -164,6 +170,13 @@ NrawResult scanPrecinct(const uint8_t *d, size_t pos, size_t end, Precinct &pr)
     pr.end = pos + used;
     pr.q = d[pos + 3];
     pr.r = d[pos + 4];
+
+    // D = 3 (Signifikanz und vertikale Vorhersage) in allen 25 Bändern; die GPU kennt nur das.
+    for (size_t i = 0; i < PREC_MODES_FULL; i++) {
+        pr.plain = pr.plain && d[pos + PREC_MODES + i] == MODES_FULL;
+    }
+    pr.plain = pr.plain && d[pos + PREC_MODES + PREC_MODES_FULL] == MODES_LAST;
+
     size_t at = pos + PREC_HDR;
     for (int k = 0; k < PACKETS; k++) {
         size_t len = 0;
@@ -172,6 +185,7 @@ NrawResult scanPrecinct(const uint8_t *d, size_t pos, size_t end, Precinct &pr)
         if (r != NrawResult::Ok) {
             return r;
         }
+        pr.plain = pr.plain && !(d[at] & PKT_RAW_FLAG);
         at += len;
     }
     return NrawResult::Ok;
@@ -409,9 +423,17 @@ NrawResult decodeBody(Frame &f, const uint8_t *cs, const std::vector<uint16_t> &
                       NrawBackend backend)
 {
     std::vector<Precinct> precs(f.nprec);
+    auto t0 = std::chrono::steady_clock::now();
     NrawResult r = scanSlices(f, cs, precs);
     if (r != NrawResult::Ok) {
         return r;
+    }
+
+    // Stufe B: die Karte dekodiert das ganze Bild; sonst (oder bei angeschlagener Prüfung) die CPU.
+    LevelTable table{levels.data(), int(levels.size()) - 1};
+    float scanMs = std::chrono::duration<float, std::milli>(std::chrono::steady_clock::now() - t0).count();
+    if (backend == NrawBackend::Gpu && gpuDecode(f, cs, precs.data(), table, bayer, scanMs) == GpuRun::Done) {
+        return NrawResult::Ok;
     }
 
     Workspace *ws = acquire(PLANE_COUNT * f.nprec * f.compw, backend);
@@ -425,7 +447,6 @@ NrawResult decodeBody(Frame &f, const uint8_t *cs, const std::vector<uint16_t> &
     parallelFor(chains.size(), chainTask, &chainJob);
     r = NrawResult(chainJob.failure.load());
     if (r == NrawResult::Ok) {
-        LevelTable table{levels.data(), int(levels.size()) - 1};
         finishFrame(f, *ws, table, bayer, backend);
     }
 

@@ -73,6 +73,7 @@ struct Precinct {
     int q = 0;
     int r = 0;
     size_t pkt[PACKETS] = {}; // Anfang der Pakete
+    bool plain = true;        // Standardaufbau (D = 3 je Band, kein Raw-Modus): die GPU darf es dekodieren
 };
 
 inline uint64_t be(const uint8_t *p, int bytes)
@@ -92,6 +93,9 @@ NrawResult packetExtent(const uint8_t *q, size_t avail, size_t &used);
 // row0 = Zeile des ersten Precincts.
 NrawResult decodeChain(const Frame &f, const uint8_t *d, const Precinct *precs, size_t count, size_t row0, int first);
 
+// Abschneidestufen (GTLI) aller Precincts und WGT-Einträge: out[p * WGT_COUNT + w], p < count.
+void gtliTable(const Frame &f, const Precinct *precs, size_t count, uint8_t *out);
+
 // Kennlinie als fertige Ausgabestufen: values[i] = Ausgabewert zur Tabellenstufe i, i <= maxIdx.
 struct LevelTable {
     const uint16_t *values;
@@ -110,5 +114,10 @@ bool gpuUsable();
 void *gpuAlloc(size_t bytes); // nullptr, wenn die GPU nicht läuft
 void gpuFree(void *p);
 GpuRun gpuBayer(const Frame &f, const LevelTable &levels, uint16_t *bayer);
+
+// Stufe B: das ganze Bild aus dem Codestream auf der Karte (Precincts aus der Vorabsuche, scanMs
+// deren Dauer). Busy auch, wenn die Prüfung der Karte anschlägt (beschädigter Strom): die CPU macht es.
+GpuRun gpuDecode(const Frame &f, const uint8_t *cs, const Precinct *precs, const LevelTable &levels, uint16_t *bayer,
+                 float scanMs);
 
 } // namespace nraw
