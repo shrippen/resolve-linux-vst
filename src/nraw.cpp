@@ -6,9 +6,10 @@
 //                   ▲
 //                   └─ hier: Sprung auf nrawDecode; das Original bleibt über ein Trampolin erreichbar
 //
-// Bisher nur der Messmodus (RESOLVE_LINUX_VST_NRAW_GPU=probe): nrawDecode ruft immer das
-// Original und protokolliert, womit es gerufen wird, welche Daten es verändert, wie oft und wie
-// parallel es läuft und ob der Referenzdecoder (nraw_decode.h) dasselbe Bild liefert.
+// RESOLVE_LINUX_VST_NRAW_GPU=1: der eigene Decoder (nraw_decode.h) dekodiert statt fastticolib,
+// die ersten Bilder und jedes 500. dekodiert zusätzlich RED zum Vergleich; bei einer Abweichung
+// oder jedem Fehler dekodiert RED. =probe: Messmodus, ruft immer das Original und protokolliert,
+// womit es gerufen wird, was es verändert, wie oft und wie parallel es läuft.
 // Fremden Speicher liest der Ersatz nur über process_vm_readv: Ein ungültiger Zeiger kostet
 // eine Messung, keinen Absturz.
 
@@ -37,6 +38,7 @@ namespace {
 
 constexpr const char *kEnvMode = "RESOLVE_LINUX_VST_NRAW_GPU";
 constexpr const char *kModeProbe = "probe";
+constexpr const char *kModeOwn = "1";
 constexpr const char *kLibSuffix = "REDR3D-x64.so";
 
 // Aufbau von ctx (fastticolib, Resolve 21.1.1): ctx+0x28 → Objekt, dort bei +0xd0 die Kennlinie.
@@ -53,6 +55,8 @@ constexpr size_t kMaxDstBytes = size_t(1) << 28; // Obergrenze für den Referenz
 constexpr uint64_t kFirstCalls = 3;    // so viele Aufrufe mit voller Ausgabe
 constexpr uint64_t kReportEvery = 200; // Statistikzeile
 constexpr uint64_t kRefEvery = 500;    // Referenzvergleich, dazu bei Aufruf 1 und 2
+constexpr uint64_t kVerifyFirst = 3;   // eigener Decoder: so viele Prüfbilder am Anfang
+constexpr uint64_t kVerifyEvery = 500; // danach jedes 500. Bild
 
 constexpr uint64_t kNsPerSec = 1000000000ull;
 
@@ -294,9 +298,9 @@ void logStats(uint64_t n)
                (unsigned long long)gStats.varying.load());
 }
 
-// Ersatz: ruft immer das Original und misst dabei.
-extern "C" int nrawDecode(void *ctx, void *handle, void *a3, size_t size, const uint8_t *cs, size_t dstBytes,
-                          uint16_t *dst, long a8, long a9)
+// Messmodus: ruft immer das Original und misst dabei.
+int probeDecode(void *ctx, void *handle, void *a3, size_t size, const uint8_t *cs, size_t dstBytes, uint16_t *dst,
+                long a8, long a9)
 {
     const uint64_t n = ++gStats.calls;
     const bool verbose = n <= kFirstCalls;
@@ -336,13 +340,126 @@ extern "C" int nrawDecode(void *ctx, void *handle, void *a3, size_t size, const 
     return result;
 }
 
-bool probeWanted()
+enum class Mode { Off, Probe, Own };
+
+Mode mode()
 {
-    static const bool wanted = [] {
+    static const Mode m = [] {
         const char *env = getenv(kEnvMode);
-        return isResolveMain() && env && strcmp(env, kModeProbe) == 0;
+        if (!isResolveMain() || !env) {
+            return Mode::Off;
+        }
+        if (strcmp(env, kModeProbe) == 0) {
+            return Mode::Probe;
+        }
+        return strcmp(env, kModeOwn) == 0 ? Mode::Own : Mode::Off;
     }();
-    return wanted;
+    return m;
+}
+
+// Eigener Decoder: Kennlinie je ctx einmal übernehmen (Aufrufe kommen seriell, die Sperre
+// schützt trotzdem), Prüfbilder gegen RED, Statistik.
+struct Own {
+    std::mutex lock;
+    const void *ctx = nullptr;
+    std::vector<int32_t> curve;
+    std::atomic<bool> disabled{false};
+    std::atomic<uint64_t> calls{0};
+    std::atomic<uint64_t> fallbacks{0};
+    std::atomic<uint64_t> wallNs{0};
+    std::atomic<uint64_t> cpuNs{0};
+};
+
+Own gOwn;
+
+// Kennlinie für ctx bereitstellen; false: nicht lesbar, RED soll dekodieren.
+bool ownCurve(const void *ctx, NrawCurve *curve)
+{
+    std::lock_guard<std::mutex> guard(gOwn.lock);
+    if (gOwn.ctx != ctx) {
+        if (!readCurve(ctx, &gOwn.curve)) {
+            return false;
+        }
+        gOwn.ctx = ctx;
+        logMessage("N-RAW: Kennlinie übernommen, FNV-1a=%016llx", (unsigned long long)fnv1a(gOwn.curve));
+    }
+    *curve = NrawCurve{gOwn.curve.data(), gOwn.curve.size()};
+    return true;
+}
+
+// Prüfbild: RED dekodiert in dst, wir in einen eigenen Puffer. Weicht ein Pixel ab, ist der
+// eigene Decoder für den Rest des Prozesses aus.
+int ownVerify(void *ctx, void *handle, void *a3, size_t size, const uint8_t *cs, size_t dstBytes, uint16_t *dst,
+              long a8, long a9, const NrawCurve &curve)
+{
+    int result = gOriginal(ctx, handle, a3, size, cs, dstBytes, dst, a8, a9);
+    if (result != 0) {
+        return result;
+    }
+
+    const size_t count = dstBytes / sizeof(uint16_t);
+    std::vector<uint16_t> own(count);
+    NrawResult r = decodeNraw(cs, size, curve, own.data(), count);
+    if (r != NrawResult::Ok) {
+        logMessage("N-RAW: Prüfbild: eigener Decoder liefert Ergebnis %d, RED dekodiert dieses Bild", int(r));
+        return result;
+    }
+    if (memcmp(own.data(), dst, dstBytes) != 0) {
+        gOwn.disabled = true;
+        logMessage("N-RAW: Prüfbild weicht von RED ab, eigener Decoder für diesen Lauf aus");
+        return result;
+    }
+    logMessage("N-RAW: Prüfbild gleich RED (Aufruf %llu)", (unsigned long long)gOwn.calls.load());
+    return result;
+}
+
+void ownStats(uint64_t n)
+{
+    logMessage("N-RAW: %llu Bilder, davon %llu an RED, eigener Decoder Wand %.1f ms, CPU %.1f ms je Bild",
+               (unsigned long long)n, (unsigned long long)gOwn.fallbacks.load(),
+               double(gOwn.wallNs.load()) / double(n) / 1e6, double(gOwn.cpuNs.load()) / double(n) / 1e6);
+}
+
+// Eigener Decoder statt fastticolib; bei jedem Zweifel dekodiert RED.
+int ownDecode(void *ctx, void *handle, void *a3, size_t size, const uint8_t *cs, size_t dstBytes, uint16_t *dst,
+              long a8, long a9)
+{
+    const uint64_t n = ++gOwn.calls;
+    NrawCurve curve;
+    if (gOwn.disabled || dstBytes == 0 || dstBytes % sizeof(uint16_t) != 0 || !ownCurve(ctx, &curve)) {
+        ++gOwn.fallbacks;
+        return gOriginal(ctx, handle, a3, size, cs, dstBytes, dst, a8, a9);
+    }
+    if (n <= kVerifyFirst || n % kVerifyEvery == 0) {
+        return ownVerify(ctx, handle, a3, size, cs, dstBytes, dst, a8, a9, curve);
+    }
+
+    auto t0 = std::chrono::steady_clock::now();
+    const uint64_t cpu0 = processCpuNs();
+    NrawResult r = decodeNraw(cs, size, curve, dst, dstBytes / sizeof(uint16_t));
+    gOwn.cpuNs += processCpuNs() - cpu0;
+    gOwn.wallNs += uint64_t(
+        std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - t0).count());
+    if (n % kReportEvery == 0) {
+        ownStats(n);
+    }
+    if (r == NrawResult::Ok) {
+        return 0;
+    }
+
+    // dst ist bei einem Fehlschlag unberührt (decodeNraw schreibt erst am Ende).
+    ++gOwn.fallbacks;
+    return gOriginal(ctx, handle, a3, size, cs, dstBytes, dst, a8, a9);
+}
+
+// Ersatz für die Dekodierfunktion: Messmodus oder eigener Decoder.
+extern "C" int nrawDecode(void *ctx, void *handle, void *a3, size_t size, const uint8_t *cs, size_t dstBytes,
+                          uint16_t *dst, long a8, long a9)
+{
+    if (mode() == Mode::Own) {
+        return ownDecode(ctx, handle, a3, size, cs, dstBytes, dst, a8, a9);
+    }
+    return probeDecode(ctx, handle, a3, size, cs, dstBytes, dst, a8, a9);
 }
 
 // Muster suchen, Trampolin bauen, Sprung schreiben. Retry nur, wenn REDR3D noch nicht geladen ist.
@@ -370,7 +487,8 @@ Attach attachNow()
         return Attach::Done;
     }
 
-    logMessage("N-RAW: Dekodierfunktion bei %#lx übernommen (Messmodus)", (unsigned long)sites.decode);
+    logMessage("N-RAW: Dekodierfunktion bei %#lx übernommen (%s)", (unsigned long)sites.decode,
+               mode() == Mode::Own ? "eigener Decoder" : "Messmodus");
     return Attach::Done;
 }
 
@@ -381,7 +499,7 @@ void nrawAttach()
     static std::atomic<bool> done{false};
     static std::mutex lock;
 
-    if (done.load(std::memory_order_acquire) || !probeWanted()) {
+    if (done.load(std::memory_order_acquire) || mode() == Mode::Off) {
         return;
     }
 
