@@ -355,6 +355,50 @@ void testRedirectWanted()
     expect(!redirectWanted(uintptr_t(&replacement), &replacement), "Ersatz liegt schon dort: nicht umleiten");
 }
 
+using AddFn = int (*)(int, int);
+AddFn gOriginal = nullptr;
+
+int replacementAdd(int a, int b)
+{
+    return gOriginal(a, b) + 1000;
+}
+
+// Eigene Funktion `a + b + 100` mit RIP-freiem Anfang; nach dem Überschreiben des Anfangs
+// ruft der Ersatz das Original über das Trampolin.
+void testTrampoline()
+{
+    constexpr size_t kPrologLen = 18;
+    const size_t pageSize = size_t(sysconf(_SC_PAGESIZE));
+    void *mem = mmap(nullptr, pageSize, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    expect(mem != MAP_FAILED, "Trampolin: Testseite angelegt");
+    if (mem == MAP_FAILED) {
+        return;
+    }
+
+    // mov eax, edi; add eax, esi; 14 nop; add eax, 100; ret
+    const uint8_t head[] = {0x89, 0xf8, 0x01, 0xf0};
+    const uint8_t tail[] = {0x83, 0xc0, 0x64, 0xc3};
+    auto *code = static_cast<uint8_t *>(mem);
+    memset(code, 0x90, kPrologLen);
+    memcpy(code, head, sizeof head);
+    memcpy(code + kPrologLen, tail, sizeof tail);
+    mprotect(mem, pageSize, PROT_READ | PROT_EXEC);
+
+    auto original = reinterpret_cast<AddFn>(mem);
+    expect(original(3, 4) == 107, "Trampolin: Funktion vor dem Eingriff");
+
+    uintptr_t addr = reinterpret_cast<uintptr_t>(mem);
+    gOriginal = reinterpret_cast<AddFn>(buildTrampoline(addr, kPrologLen));
+    expect(gOriginal != nullptr, "Trampolin gebaut");
+    if (!gOriginal) {
+        return;
+    }
+    expect(gOriginal(3, 4) == 107, "Trampolin ruft das Original");
+
+    expect(patchJumpIndirect(addr, kPrologLen, reinterpret_cast<void *>(&replacementAdd)), "Sprung auf Ersatz");
+    expect(original(3, 4) == 1107, "Ersatz ruft über das Trampolin das Original");
+}
+
 int main()
 {
     testRedirectWanted();
@@ -366,6 +410,7 @@ int main()
     testJumpErrors();
     testMapInsert();
     testMapCollect();
+    testTrampoline();
     printf("%s\n", failures ? "FEHLGESCHLAGEN" : "alle Tests bestanden");
     return failures ? 1 : 0;
 }

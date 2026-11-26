@@ -4,16 +4,38 @@ override CXXFLAGS += -std=c++17 -fPIC -fvisibility=hidden -fno-exceptions -fno-r
 # VST3-Schnittstellen von Steinberg (MIT), Submodul: git submodule update --init
 VST3     := third_party/vst3_pluginterfaces
 VST3INC   = -I$(BUILD)/include
-LDFLAGS  += -shared -Wl,-z,defs -static-libstdc++ -static-libgcc -Wl,--exclude-libs,ALL -Wl,--version-script=src/exports.map
+LDFLAGS  += -pthread -shared -Wl,-z,defs -static-libstdc++ -static-libgcc -Wl,--exclude-libs,ALL -Wl,--version-script=src/exports.map
 LDLIBS   += -ldl
 
 BUILD ?= build
 
 VST3SRC  := src/vst3.cpp src/vst3_dispatch.cpp src/vst3_host.cpp src/vst3_iids.cpp src/vst3_module.cpp src/vst3_params.cpp
+NRAWSRC  := src/nraw_decode.cpp src/nraw_entropy.cpp src/nraw_color.cpp src/nraw_pool.cpp src/nraw_gpu.cpp
+NRAWHDR  := src/nraw_decode.h src/nraw_frame.h src/nraw_pool.h src/nraw_gpu.h src/nraw_curves.h src/log.h
 VST3HDR  := src/vst3_adapter.h src/vst3_host.h src/vst3_module.h src/vst3_params.h
-SOURCES := src/resolve_linux_vst.cpp src/log.cpp src/plugin_conf.cpp src/scale.cpp src/editor_size.cpp src/scanner.cpp src/wine_dpi.cpp src/process.cpp $(VST3SRC) src/aac.cpp src/nev.cpp src/x11.cpp src/sites.cpp src/patch.cpp $(VST3)/base/funknown.cpp
+SOURCES := src/resolve_linux_vst.cpp src/log.cpp src/plugin_conf.cpp src/scale.cpp src/editor_size.cpp src/scanner.cpp src/wine_dpi.cpp src/process.cpp $(VST3SRC) src/aac.cpp src/nev.cpp src/nraw.cpp src/x11.cpp src/sites.cpp src/patch.cpp $(NRAWSRC) $(VST3)/base/funknown.cpp
 
-all: $(BUILD)/libresolve-linux-vst.so $(BUILD)/vst3-classes $(BUILD)/resolve-check $(BUILD)/wine-dpi-restore
+# N-RAW auf der GPU: eigene Bibliothek, nur mit nvcc zur Bauzeit (Kernel als PTX, compute_75 als
+# Untergrenze: der Treiber übersetzt für die jeweilige Karte). Ohne nvcc entfällt sie, die
+# Hauptbibliothek hängt nicht von CUDA ab.
+NVCC      ?= /opt/cuda/bin/nvcc
+CUDA_INC  ?= $(abspath $(dir $(NVCC))/../include)
+CUDA_LIB  := $(BUILD)/libresolve-linux-vst-nraw-cuda.so
+ifneq ($(wildcard $(NVCC)),)
+CUDA_TARGET := $(CUDA_LIB)
+else
+CUDA_TARGET :=
+$(info nvcc nicht gefunden ($(NVCC)): ohne N-RAW-GPU-Bibliothek)
+endif
+
+all: $(BUILD)/libresolve-linux-vst.so $(BUILD)/vst3-classes $(BUILD)/resolve-check $(BUILD)/wine-dpi-restore $(CUDA_TARGET)
+
+$(BUILD)/nraw_cuda.ptx: src/nraw_cuda.cu src/nraw_cuda_entropy.cuh src/nraw_gpu.h
+	@mkdir -p $(BUILD)
+	$(NVCC) -ptx -arch=compute_75 -std=c++17 -o $@ $<
+
+$(CUDA_LIB): src/nraw_cuda.cpp src/nraw_gpu.h $(BUILD)/nraw_cuda.ptx
+	$(CXX) $(CXXFLAGS) -I$(CUDA_INC) -DNRAW_PTX_PATH='"$(abspath $(BUILD)/nraw_cuda.ptx)"' -pthread -shared -Wl,-z,defs -static-libstdc++ -static-libgcc -Wl,--exclude-libs,ALL -o $@ src/nraw_cuda.cpp -ldl
 
 # Die Header binden sich als "pluginterfaces/..." ein: Verweis unter build/include.
 $(BUILD)/include/pluginterfaces:
@@ -21,7 +43,7 @@ $(BUILD)/include/pluginterfaces:
 	@mkdir -p $(BUILD)/include
 	ln -sfn $(abspath $(VST3)) $@
 
-$(BUILD)/libresolve-linux-vst.so: $(SOURCES) src/vst2.h src/log.h src/sites.h src/patch.h src/editor_size.h src/scale.h src/plugin_conf.h src/process.h src/wine_dpi.h src/wine_base.h $(VST3HDR) src/exports.map | $(BUILD)/include/pluginterfaces
+$(BUILD)/libresolve-linux-vst.so: $(SOURCES) src/vst2.h src/log.h src/sites.h src/patch.h src/nraw.h $(NRAWHDR) src/editor_size.h src/scale.h src/plugin_conf.h src/process.h src/wine_dpi.h src/wine_base.h $(VST3HDR) src/exports.map | $(BUILD)/include/pluginterfaces
 	$(CXX) $(CXXFLAGS) $(VST3INC) $(LDFLAGS) -o $@ $(SOURCES) $(LDLIBS)
 
 $(BUILD)/vst3-classes: tools/vst3-classes.cpp $(VST3SRC) src/log.cpp src/vst2.h src/log.h $(VST3HDR) | $(BUILD)/include/pluginterfaces
@@ -74,7 +96,24 @@ $(BUILD)/wine-restore-test: tests/wine-restore-test.cpp src/wine_restore.h
 	@mkdir -p $(BUILD)
 	$(CXX) $(filter-out -fPIC,$(CXXFLAGS)) -o $@ tests/wine-restore-test.cpp
 
-test: $(BUILD)/process-test $(BUILD)/sites-test $(BUILD)/patch-test $(BUILD)/wine-base-test $(BUILD)/plugin-conf-test $(BUILD)/vst3-params-test $(BUILD)/wine-restore-test
+# Test des N-RAW-Decoders mit künstlichen Puffern (ohne Prüfdaten).
+$(BUILD)/nraw-curves-test: tests/nraw-curves-test.cpp src/nraw_curves.h
+	@mkdir -p $(BUILD)
+	$(CXX) $(filter-out -fPIC,$(CXXFLAGS)) -Isrc -o $@ tests/nraw-curves-test.cpp
+
+$(BUILD)/nraw-guard-test: tests/nraw-guard-test.cpp $(NRAWSRC) $(NRAWHDR)
+	@mkdir -p $(BUILD)
+	$(CXX) $(filter-out -fPIC,$(CXXFLAGS)) -pthread -o $@ tests/nraw-guard-test.cpp $(NRAWSRC) src/log.cpp $(LDLIBS)
+
+# Bitgenauer Test gegen fastticolib-Mitschnitte (private Prüfdaten, nicht in `make test`).
+$(BUILD)/nraw-test: tests/nraw-test.cpp $(NRAWSRC) $(NRAWHDR) $(CUDA_TARGET)
+	@mkdir -p $(BUILD)
+	$(CXX) $(filter-out -fPIC,$(CXXFLAGS)) -pthread -o $@ tests/nraw-test.cpp $(NRAWSRC) src/log.cpp $(LDLIBS)
+
+nraw-test: $(BUILD)/nraw-test
+	$(BUILD)/nraw-test
+
+test: $(BUILD)/process-test $(BUILD)/sites-test $(BUILD)/patch-test $(BUILD)/wine-base-test $(BUILD)/plugin-conf-test $(BUILD)/vst3-params-test $(BUILD)/wine-restore-test $(BUILD)/nraw-guard-test $(BUILD)/nraw-curves-test
 	$(BUILD)/process-test
 	@mkdir -p $(BUILD)/process-names
 	for name in resolve VstScanner editor-test; do cp $(BUILD)/process-test $(BUILD)/process-names/$$name && $(BUILD)/process-names/$$name || exit 1; done
@@ -84,6 +123,8 @@ test: $(BUILD)/process-test $(BUILD)/sites-test $(BUILD)/patch-test $(BUILD)/win
 	$(BUILD)/plugin-conf-test
 	$(BUILD)/vst3-params-test
 	$(BUILD)/wine-restore-test
+	$(BUILD)/nraw-guard-test
+	$(BUILD)/nraw-curves-test
 	tests/launcher-test.sh
 	tests/scripts-test.sh
 
@@ -93,13 +134,13 @@ plugin-test: all editor-test
 
 # clean lässt den AAC-Decoder (FFmpeg-Build dauert) stehen, distclean nimmt alles.
 clean:
-	rm -f $(BUILD)/process-test $(BUILD)/libresolve-linux-vst.so $(BUILD)/vst3-classes $(BUILD)/resolve-check $(BUILD)/sites-test $(BUILD)/patch-test $(BUILD)/wine-base-test $(BUILD)/plugin-conf-test $(BUILD)/vst3-params-test $(BUILD)/wine-restore-test $(BUILD)/wine-dpi-restore $(BUILD)/editor-test
+	rm -f $(BUILD)/process-test $(BUILD)/libresolve-linux-vst.so $(BUILD)/vst3-classes $(BUILD)/resolve-check $(BUILD)/sites-test $(BUILD)/patch-test $(BUILD)/wine-base-test $(BUILD)/plugin-conf-test $(BUILD)/vst3-params-test $(BUILD)/wine-restore-test $(BUILD)/nraw-guard-test $(BUILD)/nraw-curves-test $(BUILD)/nraw-test $(BUILD)/wine-dpi-restore $(CUDA_LIB) $(BUILD)/nraw_cuda.ptx $(BUILD)/editor-test
 	rm -rf $(BUILD)/dist $(BUILD)/process-names
 
 distclean:
 	rm -rf $(BUILD)
 
-.PHONY: all test plugin-test clean distclean
+.PHONY: all test nraw-test plugin-test clean distclean
 
 PREFIX ?= $(HOME)/.local
 
@@ -108,6 +149,7 @@ install: all
 	install -Dm755 $(BUILD)/vst3-classes $(PREFIX)/lib/resolve-linux-vst/vst3-classes
 	install -Dm755 $(BUILD)/resolve-check $(PREFIX)/lib/resolve-linux-vst/resolve-check
 	install -Dm755 $(BUILD)/wine-dpi-restore $(PREFIX)/lib/resolve-linux-vst/wine-dpi-restore
+	if [ -f $(CUDA_LIB) ]; then install -Dm755 $(CUDA_LIB) $(PREFIX)/lib/resolve-linux-vst/libresolve-linux-vst-nraw-cuda.so; fi
 	if [ -f $(AAC_LIB) ]; then install -Dm755 $(AAC_LIB) $(PREFIX)/lib/resolve-linux-vst/ffmpeg-aac/libavcodec.so.60; fi
 	install -Dm755 resolve-linux-vst $(PREFIX)/bin/resolve-linux-vst
 	install -Dm644 resolve-linux-vst.desktop $(PREFIX)/share/applications/resolve-linux-vst.desktop

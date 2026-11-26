@@ -3,8 +3,13 @@
 #pragma once
 
 #include <cstdio>
+#include <string>
 
 void setLogFile(FILE *file);
+
+// $XDG_STATE_HOME/resolve-linux-vst (Standard ~/.local/state/resolve-linux-vst), wird angelegt;
+// leer ohne XDG_STATE_HOME und HOME.
+std::string stateDir();
 
 // Öffnet die Datei nach RESOLVE_LINUX_VST_LOG ("-" = stderr), sonst ~/.local/state/resolve-linux-vst/resolve-linux-vst.log.
 void openLog();

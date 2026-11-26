@@ -19,6 +19,10 @@ struct CodeImage {
 // Code von Resolve im eigenen Prozess (Executable ohne PIE).
 bool runningImage(CodeImage *image);
 
+// Code einer geladenen Bibliothek (PIE/.so), deren Pfad auf `suffix` endet (z. B. "/REDR3D-x64.so"):
+// Laufzeitadresse = Ladebasis + p_vaddr des ausführbaren Segments. false, wenn nicht geladen.
+bool loadedImage(const char *suffix, CodeImage *image);
+
 // Eine ELF-Datei, gelesen über mmap.
 class ElfFile {
 public:
@@ -55,6 +59,16 @@ struct AacSites {
 
 // Sucht alle Stellen; bei Fehlschlag steht in `error`, welches Muster nicht passte.
 bool findAacSites(const CodeImage &code, AacSites *sites, std::string *error);
+
+// N-RAW (nraw.cpp): die Dekodierfunktion von fastticolib in REDR3D-x64.so.
+struct NrawSites {
+    uintptr_t decode = 0; // Anfang; die ersten kNrawPrologLen Byte sind frei von RIP-Bezug
+};
+
+constexpr size_t kNrawPrologLen = 17; // sub rsp,0x60; pxor xmm0,xmm0; mov rax,fs:0x28
+
+// Sucht die Stelle; bei Fehlschlag steht in `error`, welches Muster nicht passte.
+bool findNrawSites(const CodeImage &code, NrawSites *sites, std::string *error);
 
 // Fundstellen einer Konstante (4 Byte, Little Endian) im Code, als Hilfe zum Wiederfinden von
 // Hand (objdump -d --start-address=…). Höchstens `max` Adressen, Rückgabe die Anzahl.

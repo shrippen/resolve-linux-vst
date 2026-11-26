@@ -159,6 +159,48 @@ bool runningImage(CodeImage *image)
     return image->data != nullptr;
 }
 
+namespace {
+
+struct LoadedQuery {
+    const char *suffix;
+    CodeImage *image;
+};
+
+bool endsWith(const char *text, const char *suffix)
+{
+    size_t n = strlen(text);
+    size_t m = strlen(suffix);
+    return n >= m && strcmp(text + n - m, suffix) == 0;
+}
+
+} // namespace
+
+bool loadedImage(const char *suffix, CodeImage *image)
+{
+    *image = {};
+    LoadedQuery query{suffix, image};
+    dl_iterate_phdr(
+        [](dl_phdr_info *info, size_t, void *data) -> int {
+            auto *q = static_cast<LoadedQuery *>(data);
+            if (!info->dlpi_name || !endsWith(info->dlpi_name, q->suffix)) {
+                return 0;
+            }
+            for (int i = 0; i < info->dlpi_phnum; ++i) {
+                const ElfW(Phdr) &ph = info->dlpi_phdr[i];
+                if (ph.p_type != PT_LOAD || !(ph.p_flags & PF_X)) {
+                    continue;
+                }
+                q->image->addr = info->dlpi_addr + ph.p_vaddr;
+                q->image->data = reinterpret_cast<const uint8_t *>(q->image->addr);
+                q->image->size = ph.p_filesz;
+                return 1;
+            }
+            return 0;
+        },
+        &query);
+    return image->data != nullptr;
+}
+
 ElfFile::ElfFile(const char *path)
 {
     int fd = open(path, O_RDONLY | O_CLOEXEC);
@@ -336,6 +378,24 @@ bool findAacSites(const CodeImage &code, AacSites *s, std::string *error)
     if (!findOne(code, "41 8b 7d 20 e8", lea, s->codecAt, &hit))
         return fail(error, "codec table: mov edi, [r13+0x20] before avcodec_find_decoder not found");
     s->codecMap = endNode - 8;
+    return true;
+}
+
+// Die Muster stammen aus REDR3D-x64.so von Resolve 21.1.1 (Adresse 0x237170). Eine Funktion
+// ohne Symbol: fastticolib dekodiert einen Frame. Die ersten 17 Byte (kNrawPrologLen) haben
+// keinen RIP-Bezug und lassen sich in ein Trampolin kopieren; der Rest legt fest, dass es die
+// Funktion mit den Stack-Argumenten 7 bis 9 ist.
+bool findNrawSites(const CodeImage &code, NrawSites *s, std::string *error)
+{
+    *s = {};
+    uintptr_t hit;
+    if (!findOne(code,
+                 "48 83 ec 60 66 0f ef c0 64 48 8b 04 25 28 00 00 00 48 89 44 24 50 31 c0 48 8b 44 24 68 4c 89 4c 24 "
+                 "08 0f 11 44 24 10 48 c7 44 24 20 00 00 00 00",
+                 code.addr, code.addr + code.size, &hit)) {
+        return fail(error, "fastticolib decode function: prologue not found or not unique");
+    }
+    s->decode = hit;
     return true;
 }
 

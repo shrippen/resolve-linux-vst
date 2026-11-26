@@ -102,8 +102,34 @@ void testScannerSymbols()
     expect(listed(kSymMaskTable) && listed(kSymMapTable), "Kategorie-Tabellen in der Liste");
 }
 
+// REDR3D-x64.so: der Anfang der Dekodierfunktion von fastticolib.
+void testNrawSites()
+{
+    const uint8_t prolog[] = {0x48, 0x83, 0xec, 0x60, 0x66, 0x0f, 0xef, 0xc0, 0x64, 0x48, 0x8b, 0x04, 0x25, 0x28, 0x00,
+                              0x00, 0x00, 0x48, 0x89, 0x44, 0x24, 0x50, 0x31, 0xc0, 0x48, 0x8b, 0x44, 0x24, 0x68, 0x4c,
+                              0x89, 0x4c, 0x24, 0x08, 0x0f, 0x11, 0x44, 0x24, 0x10, 0x48, 0xc7, 0x44, 0x24, 0x20, 0x00,
+                              0x00, 0x00, 0x00};
+    constexpr uintptr_t kDecode = 0x401234;
+    Code code;
+    memcpy(&code.bytes[kDecode - kBase], prolog, sizeof prolog);
+
+    NrawSites s;
+    std::string error;
+    expect(findNrawSites(code.image(), &s, &error), ("N-RAW: Stelle gefunden " + error).c_str());
+    expect(s.decode == kDecode, "N-RAW: Anfang der Dekodierfunktion");
+
+    Code twice = code;
+    memcpy(&twice.bytes[0x2000], prolog, sizeof prolog);
+    expect(!findNrawSites(twice.image(), &s, &error), "N-RAW: doppelte Stelle abgelehnt");
+
+    Code changed = code;
+    changed.bytes[kDecode - kBase + 30] ^= 1;
+    expect(!findNrawSites(changed.image(), &s, &error) && !error.empty(), "N-RAW: verändertes Muster abgelehnt");
+}
+
 int main()
 {
+    testNrawSites();
     testScannerSymbols();
     const Code code = buildCode();
     AacSites s;

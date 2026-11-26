@@ -194,6 +194,14 @@ called `.R3D`. resolve-linux-vst shows every `X.NEV` to Resolve as `X.R3D` (read
 next to it wins). Resolve then knows these clips under the `.R3D` name: started without
 resolve-linux-vst, they are offline.
 
+N-RAW is heavy for the CPU: the RED decoder unpacks every frame on all cores. With
+`RESOLVE_LINUX_VST_NRAW_DECODE=1` resolve-linux-vst decodes the frames itself, on an NVIDIA GPU
+when `libresolve-linux-vst-nraw-cuda.so` was built (needs `nvcc` at build time), otherwise on the
+CPU. The result is identical to RED's, bit for bit; RED's colour processing and the Camera RAW
+settings stay as they are. The first frames and every 500th are decoded by RED as well and
+compared; on any difference or error RED takes over again. Measured on a Ryzen 9 3900X with an
+RTX 3090, 4.1K N-RAW to ProRes 422 UHD: 45-55 fps instead of 35-40. Off by default.
+
 ## Configuration
 
 | Variable | Meaning |
@@ -209,6 +217,8 @@ resolve-linux-vst, they are offline.
 | `RESOLVE_LINUX_VST_FIX_FRAME=0` | Do not resize yabridge's embedding window |
 | `RESOLVE_LINUX_VST_AAC` | `0` = no AAC decoder, or the path of another `libavcodec.so.60` (FFmpeg 6.x) |
 | `RESOLVE_LINUX_VST_NEV=0` | Do not show `.nev` as `.R3D` |
+| `RESOLVE_LINUX_VST_NRAW_DECODE=1` | Decode N-RAW frames ourselves (GPU, else CPU) instead of the RED decoder; `probe` only measures |
+| `RESOLVE_LINUX_VST_NRAW_THREADS` | Threads of the N-RAW decoder (default 12, `1` = none) |
 | `RESOLVE_LINUX_VST_DEEPBIND=1` | Load plug-ins with `RTLD_DEEPBIND` (symbol clashes with Resolve) |
 
 ## After a Resolve update
@@ -225,6 +235,8 @@ $ resolve-linux-vst check
   ok       AAC track switch 0x5deaecf (alac 0x5deaedd, FFmpeg 0x5deaf15, discard 0x5deaf36)
   ok       AAC decoder open 0x5ddfdeb (extradata 0x5ddfe03, other 0x5ddff24)
   ok       AAC codec table 0x297ed7f0 (contents are checked at startup)
+/opt/resolve/libs/REDR3D-x64.so
+  ok       N-RAW decode function 0x237170
 ```
 
 A missing hook switches off only its feature; Resolve itself keeps working, and the log says what

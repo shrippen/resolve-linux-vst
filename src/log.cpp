@@ -11,7 +11,8 @@ namespace {
 
 FILE *gLog = nullptr;
 
-// $XDG_STATE_HOME/resolve-linux-vst (Standard ~/.local/state/resolve-linux-vst), wird angelegt.
+} // namespace
+
 // Dieselbe Regel steht in resolve-linux-vst.
 std::string stateDir()
 {
@@ -26,8 +27,6 @@ std::string stateDir()
     mkdir((base + "/resolve-linux-vst").c_str(), 0755);
     return base + "/resolve-linux-vst";
 }
-
-} // namespace
 
 void openLog()
 {
