@@ -102,4 +102,13 @@ struct LevelTable {
 size_t tileCount(const Frame &f);
 void decodeTile(const Frame &f, size_t index, const LevelTable &levels, uint16_t *bayer);
 
+// GPU-Anbindung (nraw_gpu.cpp): Ebenen im gepinnten Speicher der CUDA-Bibliothek, Stufen nach der
+// Entropie auf der Karte. Die Ebenen liegen ab f.low[K0] in der Reihenfolge von nraw_gpu.h.
+enum class GpuRun { Done, Busy, Failed }; // Busy: Karte besetzt, die CPU macht das Bild
+
+bool gpuUsable();
+void *gpuAlloc(size_t bytes); // nullptr, wenn die GPU nicht läuft
+void gpuFree(void *p);
+GpuRun gpuBayer(const Frame &f, const LevelTable &levels, uint16_t *bayer);
+
 } // namespace nraw

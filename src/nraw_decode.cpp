@@ -251,9 +251,12 @@ NrawResult setupFrame(Frame &f)
 // Arbeitsspeicher der Wavelet-Ebenen. Die letzte Fassung bleibt für das nächste Bild liegen
 // (sonst kostet das Anfassen frischer Seiten mehr als die ganze Entropie); gleichzeitige
 // Aufrufe bekommen eigenen Speicher.
+enum class Memory { Plain, Pinned };
+
 struct Workspace {
     Coef *mem;
     size_t count;
+    Memory kind;
 };
 
 std::atomic<Workspace *> gSpare{nullptr};
@@ -261,25 +264,39 @@ std::atomic<Workspace *> gSpare{nullptr};
 void freeWorkspace(Workspace *w)
 {
     if (w) {
-        free(w->mem);
+        if (w->kind == Memory::Pinned) {
+            gpuFree(w->mem);
+        } else {
+            free(w->mem);
+        }
         delete w;
     }
 }
 
-Workspace *acquire(size_t count)
+// Mit Gpu bekommt der Speicher die CUDA-Bibliothek (gepinnt, spart eine Kopie beim Upload),
+// sonst, auch bei einem Fehler dort, der normale.
+Workspace *acquire(size_t count, NrawBackend backend)
 {
     Workspace *w = gSpare.exchange(nullptr);
-    if (w && w->count == count) {
+    bool wantPinned = backend == NrawBackend::Gpu && gpuUsable();
+    bool fits = w && w->count == count && (w->kind == Memory::Pinned || !wantPinned);
+    if (fits) {
         return w;
     }
     freeWorkspace(w);
 
     size_t bytes = (count * sizeof(Coef) + ALIGN - 1) / ALIGN * ALIGN;
+    if (wantPinned) {
+        void *pinned = gpuAlloc(bytes);
+        if (pinned) {
+            return new Workspace{static_cast<Coef *>(pinned), count, Memory::Pinned};
+        }
+    }
     void *mem = aligned_alloc(ALIGN, bytes);
     if (!mem) {
         return nullptr;
     }
-    return new Workspace{static_cast<Coef *>(mem), count};
+    return new Workspace{static_cast<Coef *>(mem), count, Memory::Plain};
 }
 
 void release(Workspace *w)
@@ -378,7 +395,18 @@ std::vector<uint16_t> levelsOf(const NrawCurve &curve)
     return levels;
 }
 
-NrawResult decodeBody(Frame &f, const uint8_t *cs, const std::vector<uint16_t> &levels, uint16_t *bayer)
+// Kacheln auf der CPU; die GPU nimmt dem Aufrufer das Bild ab, wenn sie kann.
+void finishFrame(const Frame &f, const Workspace &ws, const LevelTable &table, uint16_t *bayer, NrawBackend backend)
+{
+    if (backend == NrawBackend::Gpu && ws.kind == Memory::Pinned && gpuBayer(f, table, bayer) == GpuRun::Done) {
+        return;
+    }
+    TileJob tileJob{&f, &table, bayer};
+    parallelFor(tileCount(f), tileTask, &tileJob);
+}
+
+NrawResult decodeBody(Frame &f, const uint8_t *cs, const std::vector<uint16_t> &levels, uint16_t *bayer,
+                      NrawBackend backend)
 {
     std::vector<Precinct> precs(f.nprec);
     NrawResult r = scanSlices(f, cs, precs);
@@ -386,7 +414,7 @@ NrawResult decodeBody(Frame &f, const uint8_t *cs, const std::vector<uint16_t> &
         return r;
     }
 
-    Workspace *ws = acquire(PLANE_COUNT * f.nprec * f.compw);
+    Workspace *ws = acquire(PLANE_COUNT * f.nprec * f.compw, backend);
     if (!ws) {
         return NrawResult::Unsupported;
     }
@@ -398,8 +426,7 @@ NrawResult decodeBody(Frame &f, const uint8_t *cs, const std::vector<uint16_t> &
     r = NrawResult(chainJob.failure.load());
     if (r == NrawResult::Ok) {
         LevelTable table{levels.data(), int(levels.size()) - 1};
-        TileJob tileJob{&f, &table, bayer};
-        parallelFor(tileCount(f), tileTask, &tileJob);
+        finishFrame(f, *ws, table, bayer, backend);
     }
 
     release(ws);
@@ -408,7 +435,8 @@ NrawResult decodeBody(Frame &f, const uint8_t *cs, const std::vector<uint16_t> &
 
 } // namespace
 
-NrawResult decodeNraw(const uint8_t *cs, size_t size, const NrawCurve &curve, uint16_t *bayer, size_t bayerCount)
+NrawResult decodeNraw(const uint8_t *cs, size_t size, const NrawCurve &curve, uint16_t *bayer, size_t bayerCount,
+                      NrawBackend backend)
 {
     Frame f;
     NrawResult r = parseHeader(cs, size, f.h);
@@ -422,5 +450,5 @@ NrawResult decodeNraw(const uint8_t *cs, size_t size, const NrawCurve &curve, ui
     if (r != NrawResult::Ok) {
         return r;
     }
-    return decodeBody(f, cs, levelsOf(curve), bayer);
+    return decodeBody(f, cs, levelsOf(curve), bayer, backend);
 }
