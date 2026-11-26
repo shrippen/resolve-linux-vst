@@ -6,6 +6,8 @@
 #include <cstddef>
 #include <cstdint>
 
+#include "nraw_gpu.h"
+
 // Kennlinie (Tabelle Stufe -> Wert), zur Laufzeit von fastticolib übernommen, nie mitgeliefert.
 struct NrawCurve {
     const int32_t *values;
@@ -22,14 +24,6 @@ enum class NrawResult {
 // (nraw_gpu.h) geladen ist und lebt, sonst auf der CPU. Cpu erzwingt die CPU.
 enum class NrawBackend { Cpu, Gpu };
 
-// Zeiten der GPU-Stufen des letzten Bildes in ms (nur Tests und Messung).
-// kernel = senkrechte Hebung, Star-Tetrix und Kennlinie; codes, gcli, coefs = Stufen der Entropie
-// auf der Karte (nur Stufe B); scan = Vorabsuche der CPU; flags = Bits der eingebauten Prüfung.
-struct NrawGpuTimes {
-    float upload, kernel, download, copy;
-    float scan, codes, gcli, coefs;
-    unsigned flags;
-};
 
 // Codestream ab SOC (FF10). Ziel: Wf*Hf Werte (aus dem PIH), Bayer RGGB, uint16.
 NrawResult decodeNraw(const uint8_t *codestream, size_t size, const NrawCurve &curve, uint16_t *bayer,

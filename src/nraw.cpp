@@ -395,7 +395,7 @@ bool ownCurve(const void *ctx, NrawCurve *curve)
 }
 
 // Abweichendes Prüfbild für die Fehlersuche ablegen: Codestream, Bild von RED und unser Bild in
-// ~/.local/state/resolve-linux-vst/nraw-mismatch.{in,red,own}, dazu Zahl und Lage der Pixel ins Log.
+// stateDir()/nraw-mismatch.{in,red,own}, dazu Zahl und Lage der Pixel ins Log.
 bool writeFile(const std::string &path, const void *data, size_t len)
 {
     FILE *f = fopen(path.c_str(), "wb");
@@ -421,11 +421,11 @@ void dumpMismatch(const uint8_t *cs, size_t size, const uint16_t *red, const uin
     }
     logMessage("N-RAW: %zu von %zu Pixeln verschieden, erster Index %zu, letzter %zu", different, count, first, last);
 
-    const char *home = getenv("HOME");
-    if (!home) {
+    const std::string dir = stateDir();
+    if (dir.empty()) {
         return;
     }
-    const std::string base = std::string(home) + "/.local/state/resolve-linux-vst/nraw-mismatch";
+    const std::string base = dir + "/nraw-mismatch";
     const bool ok = writeFile(base + ".in", cs, size) && writeFile(base + ".red", red, count * sizeof(uint16_t)) &&
                     writeFile(base + ".own", own, count * sizeof(uint16_t));
     if (!ok) {

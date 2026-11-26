@@ -28,7 +28,7 @@ Nikon N-RAW clips. A launcher script starts Resolve with a library loaded into i
 | `src/nev.cpp` | N-RAW names: shows Resolve every `.NEV` file as `.R3D`; attaches N-RAW decoding when the first `.NEV` opens. |
 | `src/nraw.cpp`, `src/nraw.h`, `src/nraw_curves.h` | N-RAW decoding: takes over the frame decoder (fastticolib) inside the RED SDK, lets our decoder fill the frame, compares check frames with RED and hands every doubtful frame back to RED (`RESOLVE_LINUX_VST_NRAW_DECODE=1`); `nraw_curves.h` keeps the tone curves read from RED, pure, so `tests/` can run it. |
 | `src/nraw_decode.*`, `src/nraw_entropy.cpp`, `src/nraw_color.cpp`, `src/nraw_frame.h`, `src/nraw_pool.*` | The N-RAW decoder: one TicoRAW frame into the Bayer frame fastticolib would produce, bit for bit, on its own thread pool; knows neither Resolve nor RED, so `tests/` can run it. |
-| `src/nraw_gpu.*` | Loads the CUDA library next to the main library and hands it a frame; without it, the decoder stays on the CPU. |
+| `src/nraw_gpu.*` | N-RAW decoder, its GPU part: loads the CUDA library next to the main library and hands it a frame with the tables the decoder computed; without it, the decoder stays on the CPU. `nraw_gpu.h` is the only interface to the CUDA library. |
 | `src/nraw_cuda.cpp`, `src/nraw_cuda.cu` | `libresolve-linux-vst-nraw-cuda.so`: the decoder's GPU stages, CUDA driver API through `dlopen`, own context; built only where `nvcc` exists. |
 | `src/x11.cpp` | Drops window sizes of 0 that would make a plug-in abort Resolve. |
 | `src/log.cpp`, `src/log.h` | The log: one function that writes a line with time and process; opens the log file when the loader asks, otherwise the caller sets the file. |
@@ -54,8 +54,8 @@ Nikon N-RAW clips. A launcher script starts Resolve with a library loaded into i
         │        (via vst2.h)         │      names ─► decoding
         ▼                             │                 │
    plugins.conf, editor size,         │          N-RAW decoder       the features' own parts
-   Wine DPI                           │                 │
-        │                             │        GPU loader ─► CUDA library (own .so)
+   Wine DPI                           │       (GPU loader inside)
+        │                             │                 ├─► CUDA library (own .so)
         ▼                             │                 │
    scale (Resolve's scale factor)     │                 │            below editor size, Wine DPI
         └──────────────┬──────────────┴─────────────────┘
@@ -75,8 +75,9 @@ Nikon N-RAW clips. A launcher script starts Resolve with a library loaded into i
   its own start-up hook. No feature starts another; the VST3 adapter, which the loader
   calls, is the same exception.
 - N-RAW is one feature in two files: names (`nev.cpp`) start decoding (`nraw.cpp`). Below
-  decoding sits the N-RAW decoder, which knows neither Resolve nor RED, and below that the
-  GPU loader; only it opens the CUDA library, and the main library never needs CUDA.
+  decoding sits the N-RAW decoder, which knows neither Resolve nor RED; its GPU loader is part
+  of it. Only the loader opens the CUDA library, through `nraw_gpu.h` alone; the CUDA library
+  knows nothing of the decoder, and the main library never needs CUDA.
 - The loader file only loads plug-ins. What it needs besides lives in files of their own
   below it: the settings per plug-in (`plugins.conf`), the editor size, the Wine DPI. Editor size
   and Wine DPI both use Resolve's scale factor, which lives one level below them (`scale`). The

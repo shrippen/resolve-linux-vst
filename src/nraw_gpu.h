@@ -11,7 +11,14 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "nraw_decode.h"
+// Zeiten der GPU-Stufen des letzten Bildes in ms (nur Tests und Messung).
+// kernel = senkrechte Hebung, Star-Tetrix und Kennlinie; codes, gcli, coefs = Stufen der Entropie
+// auf der Karte (nur Stufe B); scan = Vorabsuche der CPU; flags = Bits der eingebauten Prüfung.
+struct NrawGpuTimes {
+    float upload, kernel, download, copy;
+    float scan, codes, gcli, coefs;
+    unsigned flags;
+};
 
 #ifdef __cplusplus
 extern "C" {
