@@ -1,5 +1,5 @@
 // Prüft den N-RAW-Referenzdecoder bitgenau gegen Mitschnitte von fastticolib. Die Prüfdaten sind
-// privat und nicht im Repo: $NRAW_FIXTURES (Standard ~/.cache/claude/tico-test/fixtures) mit
+// privat und nicht im Repo: $NRAW_FIXTURES (Standard ~/.local/share/resolve-linux-vst-fixtures) mit
 // lut.bin (int32 LE), iso800.in/.out, iso3200.in/.out, bright.in/.out (helles Motiv: Werte über
 // int16 nach der waagerechten Hebung), clip.in/.out (ausgebrannte Lichter, Ausgabe von RED). Läuft nicht in `make test`.
 // Je Threadzahl und Variante (CPU, GPU): 0 abweichende Pixel, Wandzeit je Bild (min/Median/max),
@@ -479,7 +479,7 @@ int main()
 {
     setLogFile(stderr);
     const char *env = getenv("NRAW_FIXTURES");
-    std::string dir = env ? env : std::string(getenv("HOME")) + "/.cache/claude/tico-test/fixtures";
+    std::string dir = env ? env : std::string(getenv("HOME")) + "/.local/share/resolve-linux-vst-fixtures";
 
     std::vector<uint8_t> raw;
     if (!load(dir + "/lut.bin", raw)) {
