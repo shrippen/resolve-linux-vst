@@ -11,9 +11,9 @@ BUILD ?= build
 
 VST3SRC  := src/vst3.cpp src/vst3_dispatch.cpp src/vst3_host.cpp src/vst3_iids.cpp src/vst3_module.cpp src/vst3_params.cpp
 NRAWSRC  := src/nraw_decode.cpp src/nraw_entropy.cpp src/nraw_color.cpp src/nraw_pool.cpp src/nraw_gpu.cpp
-NRAWHDR  := src/nraw_decode.h src/nraw_frame.h src/nraw_pool.h src/nraw_gpu.h src/nraw_curves.h src/nraw_decision.h src/log.h
+NRAWHDR  := src/nraw_decode.h src/nraw_frame.h src/nraw_pool.h src/nraw_gpu.h src/nraw_curves.h src/nraw_decision.h src/nraw_probe.h src/nraw_watch.h src/log.h
 VST3HDR  := src/vst3_adapter.h src/vst3_host.h src/vst3_module.h src/vst3_params.h
-SOURCES := src/resolve_linux_vst.cpp src/log.cpp src/plugin_conf.cpp src/scale.cpp src/editor_size.cpp src/scanner.cpp src/wine_dpi.cpp src/wine_reg.cpp src/process.cpp $(VST3SRC) src/aac.cpp src/nev.cpp src/nraw.cpp src/x11.cpp src/sites.cpp src/patch.cpp $(NRAWSRC) $(VST3)/base/funknown.cpp
+SOURCES := src/resolve_linux_vst.cpp src/log.cpp src/plugin_conf.cpp src/scale.cpp src/editor_size.cpp src/scanner.cpp src/wine_dpi.cpp src/wine_reg.cpp src/process.cpp $(VST3SRC) src/aac.cpp src/nev.cpp src/nraw.cpp src/nraw_probe.cpp src/nraw_watch.cpp src/x11.cpp src/sites.cpp src/patch.cpp $(NRAWSRC) $(VST3)/base/funknown.cpp
 
 # N-RAW auf der GPU: eigene Bibliothek, nur mit nvcc zur Bauzeit (Kernel als PTX, compute_75 als
 # Untergrenze: der Treiber übersetzt für die jeweilige Karte). Ohne nvcc entfällt sie, die
