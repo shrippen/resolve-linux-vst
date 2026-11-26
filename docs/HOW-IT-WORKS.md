@@ -17,7 +17,8 @@ resolve / VstScanner ──► libresolve-linux-vst.so
                            ├─ avcodec_find_decoder, …         AAC decoder (aac.cpp)
                            ├─ avformat_write_header           AAC render fix (aac.cpp)
                            ├─ in-memory hooks in resolve      AAC in MP4/MOV (aac.cpp, sites.cpp)
-                           └─ open, stat, readdir, …          N-RAW as R3D (nev.cpp)
+                           ├─ open, stat, readdir, …          N-RAW as R3D (nev.cpp)
+                           └─ fastticolib decode in REDR3D    N-RAW decoding (nraw.cpp)
 ```
 
 ## The missing VST loader
@@ -220,6 +221,31 @@ decoder reads `.nev` files when they end in `.R3D`. Instead of renaming, the lib
   `X.NEV` does, the access goes to `X.NEV`, read-only.
 
 A real `X.R3D` next to it wins; case is kept (`a.nev` ↔ `a.r3d`). Only in the `resolve` process.
+
+### Decoding N-RAW ourselves
+
+N-RAW frames are TicoRAW (intoPIX), a JPEG XS variant. Inside `REDR3D-x64.so` the RED SDK calls a
+statically linked fastticolib function that turns one frame's codestream into a 16-bit Bayer
+frame (4140×2330 for 4.1K); RED's colour processing and the GPU debayer follow. With
+`RESOLVE_LINUX_VST_NRAW_DECODE=1`, the first time a `.NEV` opens, `nraw.cpp` finds that function
+by a byte pattern (`sites.cpp`), writes a jump to its own function and keeps the original
+reachable through a trampoline (`patch.cpp`).
+
+Our decoder (`nraw_decode.cpp` and friends) reproduces fastticolib bit for bit:
+
+```
+codestream ─► packets (entropy, vertical gcli prediction, uniform dequantisation)
+           ─► 5/3 wavelet (5 horizontal levels, 1 vertical) on four components
+           ─► inverse Star-Tetrix (CFA colour transform, e1 = e2 = 0)
+           ─► tone curve (table taken from fastticolib at run time) ─► Bayer RGGB, 14 bit
+```
+
+The tone curve is never shipped: it is read from the decoder context fastticolib already built.
+On the GPU (`libresolve-linux-vst-nraw-cuda.so`, driver API through `dlopen`, own context) a
+frame takes about 5 ms and 11 ms of CPU time; RED needs about 11 ms on all cores. Without the
+library, `libcuda` or a card, the same decoder runs on the CPU. Frames 1 to 3 and every 500th
+are decoded by RED too and compared; a difference switches our decoder off for the run and
+saves the frame under `~/.local/state/resolve-linux-vst/nraw-mismatch.*`.
 
 ## Finding the hooks again
 

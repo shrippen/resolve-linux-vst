@@ -25,15 +25,19 @@ Nikon N-RAW clips. A launcher script starts Resolve with a library loaded into i
 | `src/process.cpp`, `src/process.h` | Which program the library runs in (read once); the program names; two questions: is it `resolve` (AAC, N-RAW), and does it load plug-ins like Resolve (`resolve`, `VstScanner`, `editor-test`: Wine DPI, number format). |
 | `src/vst3*.cpp`, `src/vst3*.h` | The VST3 adapter: shows a VST3 plug-in to Resolve as a VST2 plug-in. `vst3.cpp` builds it and runs audio, `vst3_dispatch.cpp` answers Resolve's commands (editor, state, speakers), `vst3_host.cpp` the host objects and event loop a plug-in asks for, `vst3_module.cpp` opens a bundle and lists its classes, `vst3_params.cpp` maps a VST3 parameter to VST2 properties, `vst3_iids.cpp` defines the interface IDs once. |
 | `src/aac.cpp` | AAC: gives Resolve an AAC decoder from a second, small FFmpeg library. |
-| `src/nev.cpp` | N-RAW: shows Resolve every `.NEV` file as `.R3D`. |
+| `src/nev.cpp` | N-RAW names: shows Resolve every `.NEV` file as `.R3D`; attaches N-RAW decoding when the first `.NEV` opens. |
+| `src/nraw.cpp`, `src/nraw.h` | N-RAW decoding: takes over the frame decoder (fastticolib) inside the RED SDK, lets our decoder fill the frame, compares check frames with RED and hands every doubtful frame back to RED (`RESOLVE_LINUX_VST_NRAW_DECODE=1`). |
+| `src/nraw_decode.*`, `src/nraw_entropy.cpp`, `src/nraw_color.cpp`, `src/nraw_frame.h`, `src/nraw_pool.*` | The N-RAW decoder: one TicoRAW frame into the Bayer frame fastticolib would produce, bit for bit, on its own thread pool; knows neither Resolve nor RED, so `tests/` can run it. |
+| `src/nraw_gpu.*` | Loads the CUDA library next to the main library and hands it a frame; without it, the decoder stays on the CPU. |
+| `src/nraw_cuda.cpp`, `src/nraw_cuda.cu` | `libresolve-linux-vst-nraw-cuda.so`: the decoder's GPU stages, CUDA driver API through `dlopen`, own context; built only where `nvcc` exists. |
 | `src/x11.cpp` | Drops window sizes of 0 that would make a plug-in abort Resolve. |
 | `src/log.cpp`, `src/log.h` | The log: one function that writes a line with time and process; opens the log file when the loader asks, otherwise the caller sets the file. |
-| `src/patch.cpp`, `src/patch.h` | Writes a jump into Resolve's code, redirects the scanner's functions by name (found through `sites`), and reads and inserts into the C++ tables (`std::map`) the scanner and AAC use; no feature. |
-| `src/sites.cpp`, `src/sites.h` | Finds the places in Resolve's code by byte patterns and holds the names of the functions the library redirects in VstScanner. Knows Resolve's binary, no feature. |
+| `src/patch.cpp`, `src/patch.h` | Writes a jump into Resolve's code (with a trampoline to the original where needed), redirects the scanner's functions by name (found through `sites`), and reads and inserts into the C++ tables (`std::map`) the scanner and AAC use; no feature. |
+| `src/sites.cpp`, `src/sites.h` | Finds the places in Resolve's code and in its RED SDK library by byte patterns and holds the names of the functions the library redirects in VstScanner. Knows Resolve's binaries, no feature. |
 | `src/exports.map` | The list of functions the library replaces in Resolve. What is not listed here has no effect. |
 | `src/vst2.h` | The VST2 interface, shared by loader and adapter: structures, command numbers, the adapter's entry points. |
 | `tools/*.cpp` | Programs built from `src/`: `resolve-check` (do the patterns still match?), `vst3-classes` (list the plug-ins of a bundle), `wine-dpi-restore` (set the Wine DPI back from the file of previous values, with the Wine rules of `src/wine_dpi.cpp`), `editor-test` (open a plug-in window without Resolve). Also the patch the AAC decoder's FFmpeg is built with. |
-| `tests/` | Tests that run without Resolve (`make test`: pattern search, program name, writing a jump, the C++ map, Wine DPI decisions, the file of previous values, `plugins.conf`, VST3 parameter properties, launcher cleanup, executable scripts) and the local plug-in test `wine-dpi.sh` (`make plugin-test`). |
+| `tests/` | Tests that run without Resolve (`make test`: pattern search, program name, writing a jump, the C++ map, Wine DPI decisions, the file of previous values, `plugins.conf`, VST3 parameter properties, launcher cleanup, executable scripts, N-RAW decoder on broken input) and two local tests: plug-ins with `wine-dpi.sh` (`make plugin-test`), the N-RAW decoder bit for bit against frames captured from RED (`make nraw-test`, private frames outside the repository). |
 | `install.sh`, `start.sh`, `Makefile` | Install, start from the source folder, build, release tarball (`make dist`). |
 | `third_party/vst3_pluginterfaces` | The VST3 interface headers (submodule), unchanged. |
 | `docs/`, `scripts/`, `tools/structure-check.py` | Landing page and internals; release notes; the structure check (synced copy). |
@@ -47,14 +51,14 @@ Nikon N-RAW clips. A launcher script starts Resolve with a library loaded into i
         ┌───────────────┬─────────────┬───────┴─────┬─────────────┐
         ▼               ▼             ▼             ▼             ▼
    VST2 loader ─► VST3 adapter       AAC          N-RAW          X11        features
-        │        (via vst2.h)         │
-        ▼                             │
-   plugins.conf, editor size,         │                          the loader's own parts
-   Wine DPI                           │
-        │                             │
-        ▼                             │
-   scale (Resolve's scale factor)     │                          below editor size, Wine DPI
-        └──────────────┬──────────────┘
+        │        (via vst2.h)         │      names ─► decoding
+        ▼                             │                 │
+   plugins.conf, editor size,         │          N-RAW decoder       the features' own parts
+   Wine DPI                           │                 │
+        │                             │        GPU loader ─► CUDA library (own .so)
+        ▼                             │                 │
+   scale (Resolve's scale factor)     │                 │            below editor size, Wine DPI
+        └──────────────┬──────────────┴─────────────────┘
                        ▼
        shared: sites (find places), writing into Resolve's code,
                log, "which program is this?"                              below all
@@ -70,6 +74,9 @@ Nikon N-RAW clips. A launcher script starts Resolve with a library loaded into i
 - Each feature starts itself, through the functions it replaces (`src/exports.map`) or
   its own start-up hook. No feature starts another; the VST3 adapter, which the loader
   calls, is the same exception.
+- N-RAW is one feature in two files: names (`nev.cpp`) start decoding (`nraw.cpp`). Below
+  decoding sits the N-RAW decoder, which knows neither Resolve nor RED, and below that the
+  GPU loader; only it opens the CUDA library, and the main library never needs CUDA.
 - The loader file only loads plug-ins. What it needs besides lives in files of their own
   below it: the settings per plug-in (`plugins.conf`), the editor size, the Wine DPI. Editor size
   and Wine DPI both use Resolve's scale factor, which lives one level below them (`scale`). The
@@ -98,6 +105,7 @@ Nikon N-RAW clips. A launcher script starts Resolve with a library loaded into i
 | A new place to find in Resolve, a pattern or a function name after a Resolve update | `src/sites.cpp`, `src/sites.h`, `tests/sites-test.cpp`, `tools/resolve-check.cpp` (it reads the function names from `sites.h`) |
 | A new VST2 command Resolve sends | `src/vst2.h` (the number), then loader or adapter |
 | Something only VST3 plug-ins need | `src/vst3*.cpp` only |
+| A change to N-RAW decoding (format, GPU) | `src/nraw_*`, `src/nraw_cuda.*`, `tests/nraw-test.cpp`, `tests/nraw-guard-test.cpp` |
 | A new launcher command | `resolve-linux-vst`, README |
 | A new setting per plug-in (`plugins.conf`) | `src/plugin_conf.cpp` (built-in defaults there too), README |
 | Logic that can run without Resolve | Its own function, with a test in `tests/` and a line in `make test` |
@@ -106,5 +114,5 @@ Nikon N-RAW clips. A launcher script starts Resolve with a library loaded into i
 ## Known deviations
 
 - No automatic tests for loading plug-ins, the editor size, the VST3
-  adapter and its saved state, AAC, N-RAW and the launcher's categories; only the plug-in test
+  adapter and its saved state, AAC, N-RAW names, the N-RAW hook and the launcher's categories; only the plug-in test
   checks the Wine DPI with real plug-ins (`AUDIT.md`, finding 4).
