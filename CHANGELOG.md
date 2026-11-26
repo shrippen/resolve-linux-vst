@@ -3,6 +3,38 @@
 The release notes of resolve-linux-vst, newest first. Each section is the text of the release on
 Gitea and GitHub and of its entry in `#changes` on the landing page (`docs/index.html`).
 
+## [2.0.0] — 2026-11-26
+
+### English
+
+Nikon N-RAW clips play and export faster: resolve-linux-vst now decodes the frames itself, on an NVIDIA graphics card, instead of leaving them to the RED decoder on the CPU. The picture is identical to RED's, bit for bit.
+
+#### New
+- Own N-RAW decoder, on by default. On an NVIDIA card (Turing or newer, driver 525 or newer) a frame takes about 5 ms and little CPU time; RED needs about 11 ms on all cores. Without a card it runs on the CPU. Export of 4.1K N-RAW to ProRes 422 UHD on a Ryzen 9 3900X with an RTX 3090: 45 to 55 instead of 35 to 40 frames per second.
+- RED's colour processing and the Camera RAW settings stay as they are: only the step that unpacks a frame is replaced.
+- Safety net: the first frames and every 500th are also decoded by RED and compared. On any difference, error or unknown format RED decodes again, and the log says why.
+
+#### Note
+- `RESOLVE_LINUX_VST_NRAW_DECODE=0` leaves N-RAW decoding to RED, as in 1.x.
+- Tested with one camera format (4.1K, 25p). Other formats are checked against RED in the same way.
+
+All changes: https://github.com/shrippen/resolve-linux-vst/compare/v1.1.1...v2.0.0
+
+### Deutsch
+
+Nikon-N-RAW-Clips laufen und exportieren schneller: resolve-linux-vst dekodiert die Bilder jetzt selbst, auf einer NVIDIA-Grafikkarte, statt sie dem RED-Decoder auf der CPU zu überlassen. Das Bild ist mit dem von RED identisch, Bit für Bit.
+
+#### Neu
+- Eigener N-RAW-Decoder, standardmäßig an. Auf einer NVIDIA-Karte (ab Turing, Treiber ab 525) braucht ein Bild etwa 5 ms und wenig CPU-Zeit; RED braucht etwa 11 ms auf allen Kernen. Ohne Karte läuft er auf der CPU. Export von 4.1K-N-RAW nach ProRes 422 UHD auf einem Ryzen 9 3900X mit RTX 3090: 45 bis 55 statt 35 bis 40 Bilder je Sekunde.
+- REDs Farbverarbeitung und die Camera-RAW-Einstellungen bleiben, wie sie sind: ersetzt wird nur der Schritt, der ein Bild auspackt.
+- Sicherheitsnetz: Die ersten Bilder und jedes 500. dekodiert zusätzlich RED zum Vergleich. Bei jeder Abweichung, jedem Fehler und jedem unbekannten Format dekodiert wieder RED, und das Log nennt den Grund.
+
+#### Hinweis
+- `RESOLVE_LINUX_VST_NRAW_DECODE=0` überlässt das Dekodieren RED, wie in 1.x.
+- Getestet mit einem Kameraformat (4.1K, 25p). Andere Formate werden genauso gegen RED geprüft.
+
+Alle Änderungen: https://github.com/shrippen/resolve-linux-vst/compare/v1.1.1...v2.0.0
+
 ## [1.1.1] — 2026-11-16
 
 ### English

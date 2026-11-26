@@ -226,8 +226,8 @@ A real `X.R3D` next to it wins; case is kept (`a.nev` ↔ `a.r3d`). Only in the 
 
 N-RAW frames are TicoRAW (intoPIX), a JPEG XS variant. Inside `REDR3D-x64.so` the RED SDK calls a
 statically linked fastticolib function that turns one frame's codestream into a 16-bit Bayer
-frame (4140×2330 for 4.1K); RED's colour processing and the GPU debayer follow. With
-`RESOLVE_LINUX_VST_NRAW_DECODE=1`, the first time a `.NEV` opens, `nraw.cpp` finds that function
+frame (4140×2330 for 4.1K); RED's colour processing and the GPU debayer follow. Unless
+`RESOLVE_LINUX_VST_NRAW_DECODE=0`, the first time a `.NEV` opens, `nraw.cpp` finds that function
 by a byte pattern (`sites.cpp`), writes a jump to its own function and keeps the original
 reachable through a trampoline (`patch.cpp`).
 

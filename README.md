@@ -57,7 +57,7 @@ Requirements: Linux on x86_64, DaVinci Resolve in `/opt/resolve` (otherwise set 
 Windows plug-ins, [Carla](https://kx.studio/Applications:Carla) for LV2 and CLAP,
 [FDK-AAC encoder plug-in](https://github.com/hexitnz/Resolve-Linux-Studio-AAC-FDK-Encoder-plugin) for AAC renders.
 
-Options: `install.sh --version 1.1.1`, `--prefix DIR`, `--uninstall`.
+Options: `install.sh --version 2.0.0`, `--prefix DIR`, `--uninstall`.
 
 <details>
 <summary>Build from source</summary>
@@ -194,13 +194,13 @@ called `.R3D`. resolve-linux-vst shows every `X.NEV` to Resolve as `X.R3D` (read
 next to it wins). Resolve then knows these clips under the `.R3D` name: started without
 resolve-linux-vst, they are offline.
 
-N-RAW is heavy for the CPU: the RED decoder unpacks every frame on all cores. With
-`RESOLVE_LINUX_VST_NRAW_DECODE=1` resolve-linux-vst decodes the frames itself, on an NVIDIA GPU
-when `libresolve-linux-vst-nraw-cuda.so` was built (needs `nvcc` at build time), otherwise on the
+N-RAW is heavy for the CPU: the RED decoder unpacks every frame on all cores. resolve-linux-vst
+decodes the frames itself instead, on an NVIDIA GPU (Turing or newer, driver 525 or newer), otherwise on the
 CPU. The result is identical to RED's, bit for bit; RED's colour processing and the Camera RAW
 settings stay as they are. The first frames and every 500th are decoded by RED as well and
 compared; on any difference or error RED takes over again. Measured on a Ryzen 9 3900X with an
-RTX 3090, 4.1K N-RAW to ProRes 422 UHD: 45-55 fps instead of 35-40. Off by default.
+RTX 3090, 4.1K N-RAW to ProRes 422 UHD: 45-55 fps instead of 35-40.
+`RESOLVE_LINUX_VST_NRAW_DECODE=0` leaves decoding to RED.
 
 ## Configuration
 
@@ -217,7 +217,7 @@ RTX 3090, 4.1K N-RAW to ProRes 422 UHD: 45-55 fps instead of 35-40. Off by defau
 | `RESOLVE_LINUX_VST_FIX_FRAME=0` | Do not resize yabridge's embedding window |
 | `RESOLVE_LINUX_VST_AAC` | `0` = no AAC decoder, or the path of another `libavcodec.so.60` (FFmpeg 6.x) |
 | `RESOLVE_LINUX_VST_NEV=0` | Do not show `.nev` as `.R3D` |
-| `RESOLVE_LINUX_VST_NRAW_DECODE=1` | Decode N-RAW frames ourselves (GPU, else CPU) instead of the RED decoder; `probe` only measures |
+| `RESOLVE_LINUX_VST_NRAW_DECODE=0` | Let the RED decoder decode N-RAW frames instead of resolve-linux-vst's own decoder; `probe` only measures |
 | `RESOLVE_LINUX_VST_NRAW_THREADS` | Threads of the N-RAW decoder (default 12, `1` = none) |
 | `RESOLVE_LINUX_VST_DEEPBIND=1` | Load plug-ins with `RTLD_DEEPBIND` (symbol clashes with Resolve) |
 

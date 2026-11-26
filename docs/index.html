@@ -112,8 +112,8 @@
   <div class="feat" data-tier="red">
     <span class="feat-tag">N-RAW</span>
     <h3 lang="en">Nikon N-RAW</h3><h3 lang="de">Nikon N-RAW</h3>
-    <p lang="en">Resolve's RED decoder reads N-RAW once the file is called <code>.R3D</code>. resolve-linux-vst shows every <code>.nev</code> that way, read-only, without renaming anything on disk.</p>
-    <p lang="de">Resolves RED-Decoder liest N-RAW, sobald die Datei <code>.R3D</code> heißt. resolve-linux-vst zeigt jede <code>.nev</code> so, nur lesend, ohne auf der Platte etwas umzubenennen.</p>
+    <p lang="en">Resolve's RED decoder reads N-RAW once the file is called <code>.R3D</code>. resolve-linux-vst shows every <code>.nev</code> that way, read-only, without renaming anything on disk, and decodes the frames itself on an NVIDIA card: same picture as RED, much less CPU.</p>
+    <p lang="de">Resolves RED-Decoder liest N-RAW, sobald die Datei <code>.R3D</code> heißt. resolve-linux-vst zeigt jede <code>.nev</code> so, nur lesend, ohne auf der Platte etwas umzubenennen, und dekodiert die Bilder selbst auf einer NVIDIA-Karte: gleiches Bild wie RED, viel weniger CPU.</p>
   </div>
   <div class="feat" data-tier="yellow">
     <span class="feat-tag"><span lang="en">Updates</span><span lang="de">Updates</span></span>
@@ -195,6 +195,29 @@
 <section class="section" id="changes">
   <h2 lang="en">Changes</h2><h2 lang="de">Änderungen</h2>
   <ol class="changelog">
+    <li class="release" id="v2.0.0">
+      <div class="release-head"><b class="release-version">2.0.0</b><time datetime="2026-11-26"><span lang="en">26 Nov 2026</span><span lang="de">26. Nov. 2026</span></time></div>
+      <div class="release-body">
+        <p class="release-lead"><span lang="en">Nikon N-RAW clips play and export faster: resolve-linux-vst now decodes the frames itself, on an NVIDIA graphics card, instead of leaving them to the RED decoder on the CPU. The picture is identical to RED's, bit for bit.</span><span lang="de">Nikon-N-RAW-Clips laufen und exportieren schneller: resolve-linux-vst dekodiert die Bilder jetzt selbst, auf einer NVIDIA-Grafikkarte, statt sie dem RED-Decoder auf der CPU zu überlassen. Das Bild ist mit dem von RED identisch, Bit für Bit.</span></p>
+        <div class="flow">
+          <div class="flow-node"><b><span lang="en">N-RAW frame</span><span lang="de">N-RAW-Bild</span></b><span><span lang="en">TicoRAW codestream</span><span lang="de">TicoRAW-Codestream</span></span></div>
+          <span class="flow-arrow" aria-hidden="true"></span>
+          <div class="flow-node"><b><span lang="en">Before: RED on the CPU</span><span lang="de">Vorher: RED auf der CPU</span></b><span><span lang="en">11 ms on all cores</span><span lang="de">11 ms auf allen Kernen</span></span></div>
+          <span class="flow-arrow" aria-hidden="true"></span>
+          <div class="flow-node done"><b><span lang="en">Now: own decoder on the GPU</span><span lang="de">Jetzt: eigener Decoder auf der GPU</span></b><span><span lang="en">5 ms, same picture; export 45–55 instead of 35–40 fps</span><span lang="de">5 ms, gleiches Bild; Export 45–55 statt 35–40 fps</span></span></div>
+        </div>
+        <div class="release-group" data-kind="new"><h3><span lang="en">New</span><span lang="de">Neu</span></h3><ul>
+          <li><span lang="en">Own N-RAW decoder, on by default. On an NVIDIA card (Turing or newer, driver 525 or newer) a frame takes about 5 ms and little CPU time; RED needs about 11 ms on all cores. Without a card it runs on the CPU. Export of 4.1K N-RAW to ProRes 422 UHD on a Ryzen 9 3900X with an RTX 3090: 45 to 55 instead of 35 to 40 frames per second.</span><span lang="de">Eigener N-RAW-Decoder, standardmäßig an. Auf einer NVIDIA-Karte (ab Turing, Treiber ab 525) braucht ein Bild etwa 5 ms und wenig CPU-Zeit; RED braucht etwa 11 ms auf allen Kernen. Ohne Karte läuft er auf der CPU. Export von 4.1K-N-RAW nach ProRes 422 UHD auf einem Ryzen 9 3900X mit RTX 3090: 45 bis 55 statt 35 bis 40 Bilder je Sekunde.</span></li>
+          <li><span lang="en">RED's colour processing and the Camera RAW settings stay as they are: only the step that unpacks a frame is replaced.</span><span lang="de">REDs Farbverarbeitung und die Camera-RAW-Einstellungen bleiben, wie sie sind: ersetzt wird nur der Schritt, der ein Bild auspackt.</span></li>
+          <li><span lang="en">Safety net: the first frames and every 500th are also decoded by RED and compared. On any difference, error or unknown format RED decodes again, and the log says why.</span><span lang="de">Sicherheitsnetz: Die ersten Bilder und jedes 500. dekodiert zusätzlich RED zum Vergleich. Bei jeder Abweichung, jedem Fehler und jedem unbekannten Format dekodiert wieder RED, und das Log nennt den Grund.</span></li>
+        </ul></div>
+        <div class="release-group" data-kind="note"><h3><span lang="en">Note</span><span lang="de">Hinweis</span></h3><ul>
+          <li><span lang="en"><code>RESOLVE_LINUX_VST_NRAW_DECODE=0</code> leaves N-RAW decoding to RED, as in 1.x.</span><span lang="de"><code>RESOLVE_LINUX_VST_NRAW_DECODE=0</code> überlässt das Dekodieren RED, wie in 1.x.</span></li>
+          <li><span lang="en">Tested with one camera format (4.1K, 25p). Other formats are checked against RED in the same way.</span><span lang="de">Getestet mit einem Kameraformat (4.1K, 25p). Andere Formate werden genauso gegen RED geprüft.</span></li>
+        </ul></div>
+        <a class="release-notes" href="https://github.com/shrippen/resolve-linux-vst/compare/v1.1.1...v2.0.0"><span lang="en">All changes since 1.1.1 →</span><span lang="de">Alle Änderungen seit 1.1.1 →</span></a>
+      </div>
+    </li>
     <li class="release" id="v1.1.1">
       <div class="release-head"><b class="release-version">1.1.1</b><time datetime="2026-11-16"><span lang="en">16 Nov 2026</span><span lang="de">16. Nov. 2026</span></time></div>
       <div class="release-body">
@@ -243,6 +266,8 @@
         <a class="release-notes" href="https://github.com/shrippen/resolve-linux-vst/compare/v1.0.2...v1.1.0"><span lang="en">All changes since 1.0.2 →</span><span lang="de">Alle Änderungen seit 1.0.2 →</span></a>
       </div>
     </li>
+  </ol>
+  <details class="changelog-more"><summary><span lang="en">Older releases</span><span lang="de">Ältere Versionen</span></summary><ol class="changelog">
     <li class="release" id="v1.0.2">
       <div class="release-head"><b class="release-version">1.0.2</b><time datetime="2026-10-27"><span lang="en">27 Oct 2026</span><span lang="de">27. Okt. 2026</span></time></div>
       <div class="release-body">
@@ -253,8 +278,6 @@
         <a class="release-notes" href="https://github.com/shrippen/resolve-linux-vst/compare/v1.0.1...v1.0.2"><span lang="en">All changes since 1.0.1 →</span><span lang="de">Alle Änderungen seit 1.0.1 →</span></a>
       </div>
     </li>
-  </ol>
-  <details class="changelog-more"><summary><span lang="en">Older releases</span><span lang="de">Ältere Versionen</span></summary><ol class="changelog">
     <li class="release" id="v1.0.1">
       <div class="release-head"><b class="release-version">1.0.1</b><time datetime="2026-10-27"><span lang="en">27 Oct 2026</span><span lang="de">27. Okt. 2026</span></time></div>
       <div class="release-body">
@@ -300,7 +323,7 @@
         <a href="https://github.com/shrippen/resolve-linux-vst">GitHub</a><a href="https://github.com/shrippen/resolve-linux-vst/issues">Issues</a><a href="https://github.com/shrippen/resolve-linux-vst/releases">Releases</a><a href="https://github.com/shrippen/resolve-linux-vst/blob/main/docs/HOW-IT-WORKS.md">How it works</a></div>
     </nav>
   </div>
-  <div class="foot-meta"><p>MIT · shrippen · v1.1.1 · <span lang="en">not affiliated with Blackmagic Design</span><span lang="de">kein Projekt von Blackmagic Design</span></p></div>
+  <div class="foot-meta"><p>MIT · shrippen · v2.0.0 · <span lang="en">not affiliated with Blackmagic Design</span><span lang="de">kein Projekt von Blackmagic Design</span></p></div>
 </footer>
 
 </body>
