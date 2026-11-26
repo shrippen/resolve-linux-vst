@@ -33,7 +33,7 @@ resolve-linux-vst fills those gaps at run time:
 | **HiDPI** | Plug-in editors get the right size and scale on scaled displays, including Wine plug-ins. |
 | **AAC import** | MP4, MOV and M4A clips with AAC audio play with sound. |
 | **AAC render** | MP4/MOV renders with an AAC encoder plug-in such as [FDK-AAC](https://github.com/hexitnz/Resolve-Linux-Studio-AAC-FDK-Encoder-plugin) get a correct AAC-LC description, so browsers play them. |
-| **N-RAW** | Nikon `.nev` clips open through Resolve's own RED decoder. |
+| **N-RAW** | Nikon `.nev` clips open through Resolve's own RED decoder; resolve-linux-vst decodes their frames itself, on an NVIDIA GPU, bit-exact to RED and much lighter on the CPU. |
 
 Tested with DaVinci Resolve Studio 21.1.1 and 21.2 on Arch Linux.
 
@@ -62,7 +62,9 @@ Options: `install.sh --version 2.0.0`, `--prefix DIR`, `--uninstall`.
 <details>
 <summary>Build from source</summary>
 
-Needs `g++` (C++17), `make`, `curl` and `nasm` or `yasm` (for the AAC decoder).
+Needs `g++` (C++17), `make`, `curl` and `nasm` or `yasm` (for the AAC decoder). For the N-RAW GPU
+library also `nvcc` (CUDA 12 or newer; default `/opt/cuda/bin/nvcc`, else `make NVCC=…`); without it
+the N-RAW decoder runs on the CPU only.
 
 ```sh
 git clone --recursive https://github.com/shrippen/resolve-linux-vst.git
