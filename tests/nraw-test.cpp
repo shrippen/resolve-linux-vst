@@ -1,0 +1,79 @@
+// Prüft den N-RAW-Referenzdecoder bitgenau gegen Mitschnitte von fastticolib. Die Prüfdaten sind
+// privat und nicht im Repo: $NRAW_FIXTURES (Standard ~/.cache/claude/tico-test/fixtures) mit
+// lut.bin (int32 LE), iso800.in/.out, iso3200.in/.out. Läuft nicht in `make test`.
+#include "../src/nraw_decode.h"
+
+#include <chrono>
+#include <cstdio>
+#include <cstdlib>
+#include <string>
+#include <vector>
+
+namespace {
+
+constexpr size_t OUT_WIDTH = 4140;
+constexpr size_t OUT_HEIGHT = 2330;
+
+bool load(const std::string &path, std::vector<uint8_t> &data)
+{
+    FILE *f = fopen(path.c_str(), "rb");
+    if (!f) {
+        printf("FEHLER  kann %s nicht lesen\n", path.c_str());
+        return false;
+    }
+    uint8_t buf[1 << 16];
+    size_t n;
+    while ((n = fread(buf, 1, sizeof buf, f)) > 0) {
+        data.insert(data.end(), buf, buf + n);
+    }
+    fclose(f);
+    return true;
+}
+
+// Gibt die Zahl abweichender Pixel zurück, oder SIZE_MAX bei einem Fehler.
+size_t check(const std::string &dir, const char *name, const std::vector<int32_t> &lut)
+{
+    std::vector<uint8_t> in;
+    std::vector<uint8_t> ref;
+    if (!load(dir + "/" + name + ".in", in) || !load(dir + "/" + name + ".out", ref)) {
+        return SIZE_MAX;
+    }
+
+    std::vector<uint16_t> out(OUT_WIDTH * OUT_HEIGHT, 0);
+    auto t0 = std::chrono::steady_clock::now();
+    NrawResult r = decodeNraw(in.data(), in.size(), NrawCurve{lut.data(), lut.size()}, out.data(), out.size());
+    double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+    if (r != NrawResult::Ok || ref.size() != out.size() * 2) {
+        printf("FEHLER  %s: Ergebnis %d\n", name, int(r));
+        return SIZE_MAX;
+    }
+
+    size_t bad = 0;
+    for (size_t i = 0; i < out.size(); i++) {
+        uint16_t want = ref[2 * i] | (ref[2 * i + 1] << 8);
+        bad += out[i] != want;
+    }
+    printf("%-8s abweichende Pixel %zu von %zu, %.0f ms\n", name, bad, out.size(), ms);
+    return bad;
+}
+
+} // namespace
+
+int main()
+{
+    const char *env = getenv("NRAW_FIXTURES");
+    std::string dir = env ? env : std::string(getenv("HOME")) + "/.cache/claude/tico-test/fixtures";
+
+    std::vector<uint8_t> raw;
+    if (!load(dir + "/lut.bin", raw)) {
+        return 1;
+    }
+    std::vector<int32_t> lut(raw.size() / 4);
+    for (size_t i = 0; i < lut.size(); i++) {
+        lut[i] = int32_t(raw[4 * i] | (raw[4 * i + 1] << 8) | (raw[4 * i + 2] << 16) | (uint32_t(raw[4 * i + 3]) << 24));
+    }
+
+    size_t bad = check(dir, "iso800", lut);
+    bad = bad == SIZE_MAX ? bad : bad + check(dir, "iso3200", lut);
+    return bad == 0 ? 0 : 1;
+}
