@@ -11,7 +11,7 @@ BUILD ?= build
 
 VST3SRC  := src/vst3.cpp src/vst3_dispatch.cpp src/vst3_host.cpp src/vst3_iids.cpp src/vst3_module.cpp src/vst3_params.cpp
 NRAWSRC  := src/nraw_decode.cpp src/nraw_entropy.cpp src/nraw_color.cpp src/nraw_pool.cpp src/nraw_gpu.cpp
-NRAWHDR  := src/nraw_decode.h src/nraw_frame.h src/nraw_pool.h src/nraw_gpu.h src/nraw_curves.h src/log.h
+NRAWHDR  := src/nraw_decode.h src/nraw_frame.h src/nraw_pool.h src/nraw_gpu.h src/nraw_curves.h src/nraw_decision.h src/log.h
 VST3HDR  := src/vst3_adapter.h src/vst3_host.h src/vst3_module.h src/vst3_params.h
 SOURCES := src/resolve_linux_vst.cpp src/log.cpp src/plugin_conf.cpp src/scale.cpp src/editor_size.cpp src/scanner.cpp src/wine_dpi.cpp src/wine_reg.cpp src/process.cpp $(VST3SRC) src/aac.cpp src/nev.cpp src/nraw.cpp src/x11.cpp src/sites.cpp src/patch.cpp $(NRAWSRC) $(VST3)/base/funknown.cpp
 
@@ -101,6 +101,10 @@ $(BUILD)/nraw-curves-test: tests/nraw-curves-test.cpp src/nraw_curves.h
 	@mkdir -p $(BUILD)
 	$(CXX) $(filter-out -fPIC,$(CXXFLAGS)) -Isrc -o $@ tests/nraw-curves-test.cpp
 
+$(BUILD)/nraw-decision-test: tests/nraw-decision-test.cpp src/nraw_decision.h
+	@mkdir -p $(BUILD)
+	$(CXX) $(filter-out -fPIC,$(CXXFLAGS)) -Isrc -o $@ tests/nraw-decision-test.cpp
+
 $(BUILD)/nraw-guard-test: tests/nraw-guard-test.cpp $(NRAWSRC) $(NRAWHDR)
 	@mkdir -p $(BUILD)
 	$(CXX) $(filter-out -fPIC,$(CXXFLAGS)) -pthread -o $@ tests/nraw-guard-test.cpp $(NRAWSRC) src/log.cpp $(LDLIBS)
@@ -113,7 +117,7 @@ $(BUILD)/nraw-test: tests/nraw-test.cpp $(NRAWSRC) $(NRAWHDR) $(CUDA_TARGET)
 nraw-test: $(BUILD)/nraw-test
 	$(BUILD)/nraw-test
 
-test: $(BUILD)/process-test $(BUILD)/sites-test $(BUILD)/patch-test $(BUILD)/wine-base-test $(BUILD)/plugin-conf-test $(BUILD)/vst3-params-test $(BUILD)/wine-restore-test $(BUILD)/nraw-guard-test $(BUILD)/nraw-curves-test
+test: $(BUILD)/process-test $(BUILD)/sites-test $(BUILD)/patch-test $(BUILD)/wine-base-test $(BUILD)/plugin-conf-test $(BUILD)/vst3-params-test $(BUILD)/wine-restore-test $(BUILD)/nraw-guard-test $(BUILD)/nraw-curves-test $(BUILD)/nraw-decision-test
 	$(BUILD)/process-test
 	@mkdir -p $(BUILD)/process-names
 	for name in resolve VstScanner editor-test; do cp $(BUILD)/process-test $(BUILD)/process-names/$$name && $(BUILD)/process-names/$$name || exit 1; done
@@ -125,6 +129,7 @@ test: $(BUILD)/process-test $(BUILD)/sites-test $(BUILD)/patch-test $(BUILD)/win
 	$(BUILD)/wine-restore-test
 	$(BUILD)/nraw-guard-test
 	$(BUILD)/nraw-curves-test
+	$(BUILD)/nraw-decision-test
 	tests/launcher-test.sh
 	tests/scripts-test.sh
 
@@ -134,7 +139,7 @@ plugin-test: all editor-test
 
 # clean lässt den AAC-Decoder (FFmpeg-Build dauert) stehen, distclean nimmt alles.
 clean:
-	rm -f $(BUILD)/process-test $(BUILD)/libresolve-linux-vst.so $(BUILD)/vst3-classes $(BUILD)/resolve-check $(BUILD)/sites-test $(BUILD)/patch-test $(BUILD)/wine-base-test $(BUILD)/plugin-conf-test $(BUILD)/vst3-params-test $(BUILD)/wine-restore-test $(BUILD)/nraw-guard-test $(BUILD)/nraw-curves-test $(BUILD)/nraw-test $(BUILD)/wine-dpi-restore $(CUDA_LIB) $(BUILD)/nraw_cuda.ptx $(BUILD)/editor-test
+	rm -f $(BUILD)/process-test $(BUILD)/libresolve-linux-vst.so $(BUILD)/vst3-classes $(BUILD)/resolve-check $(BUILD)/sites-test $(BUILD)/patch-test $(BUILD)/wine-base-test $(BUILD)/plugin-conf-test $(BUILD)/vst3-params-test $(BUILD)/wine-restore-test $(BUILD)/nraw-guard-test $(BUILD)/nraw-curves-test $(BUILD)/nraw-decision-test $(BUILD)/nraw-test $(BUILD)/wine-dpi-restore $(CUDA_LIB) $(BUILD)/nraw_cuda.ptx $(BUILD)/editor-test
 	rm -rf $(BUILD)/dist $(BUILD)/process-names
 
 distclean:

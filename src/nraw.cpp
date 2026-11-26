@@ -32,6 +32,7 @@
 
 #include "log.h"
 #include "nraw_curves.h"
+#include "nraw_decision.h"
 #include "nraw_decode.h"
 #include "patch.h"
 #include "process.h"
@@ -58,8 +59,6 @@ constexpr size_t kMaxDstBytes = size_t(1) << 28; // Obergrenze für den Referenz
 constexpr uint64_t kFirstCalls = 3;    // so viele Aufrufe mit voller Ausgabe
 constexpr uint64_t kReportEvery = 200; // Statistikzeile
 constexpr uint64_t kRefEvery = 500;    // Referenzvergleich, dazu bei Aufruf 1 und 2
-constexpr uint64_t kVerifyFirst = 3;   // eigener Decoder: so viele Prüfbilder am Anfang
-constexpr uint64_t kVerifyEvery = 500; // danach jedes 500. Bild
 
 constexpr uint64_t kNsPerSec = 1000000000ull;
 
@@ -490,12 +489,11 @@ int ownDecode(void *ctx, void *handle, void *a3, size_t size, const uint8_t *cs,
     const uint64_t n = ++gOwn.calls;
     noteArgs(a3, a8, a9);
     NrawCurve curve;
-    if (gOwn.disabled || a8 != 0 || a9 != 0 || dstBytes == 0 || dstBytes % sizeof(uint16_t) != 0 ||
-        !ownCurve(ctx, &curve)) {
+    if (nrawToRed(gOwn.disabled, a8, a9, dstBytes) || !ownCurve(ctx, &curve)) {
         ++gOwn.fallbacks;
         return gOriginal(ctx, handle, a3, size, cs, dstBytes, dst, a8, a9);
     }
-    if (n <= kVerifyFirst || n % kVerifyEvery == 0) {
+    if (nrawVerifyDue(n)) {
         return ownVerify(ctx, handle, a3, size, cs, dstBytes, dst, a8, a9, curve);
     }
 
