@@ -1,5 +1,5 @@
-// N-RAW auf der GPU (nraw.cpp): hängt sich in die Dekodierfunktion von fastticolib in Resolves
-// RED-Bibliothek (REDR3D-x64.so).
+// N-RAW dekodieren (nraw.cpp): hängt sich in die Dekodierfunktion von fastticolib in Resolves
+// RED-Bibliothek (REDR3D-x64.so); dekodiert wird auf der GPU oder der CPU (nraw_decode.h).
 #pragma once
 
 // Versucht, die Dekodierfunktion zu übernehmen. Vom NEV-Teil (nev.cpp) bei jedem auf eine
