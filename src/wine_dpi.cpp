@@ -139,18 +139,18 @@ constexpr const char *kDpiValue = "LogPixels";
 
 // Aktueller Wert über `wine reg query`, nicht aus user.reg: wineserver schreibt die Datei
 // verzögert, direkt nach einem Zurücksetzen stünde dort noch der alte Wert.
-// -1 = nicht gesetzt, -2 = Abfrage nicht möglich.
+// kWineDpiUnset = nicht gesetzt, kWineQueryFailed = Abfrage nicht möglich.
 int queryWineDpi(const std::string &prefix)
 {
     std::string out;
     int status = runWine(prefix, {"reg", "query", kDpiKey, "/v", kDpiValue}, &out);
     if (status < 0)
-        return -2;
+        return kWineQueryFailed;
     unsigned value;
     size_t pos = out.find("REG_DWORD");
     if (pos != std::string::npos && sscanf(out.c_str() + pos, "REG_DWORD %x", &value) == 1)
         return int(value);
-    return -1;
+    return kWineDpiUnset;
 }
 
 // Schreibt die DPI des Prefix über `wine reg add`.
@@ -177,8 +177,6 @@ WineSetting pluginWineSetting(const Names &names)
                           editorScale());
 }
 
-constexpr int kNoRestoreEntry = -2;
-
 // Datei der Vorwerte; Ort bestimmt der Starter (leer: nicht gestartet über resolve-linux-vst).
 std::string restoreFile()
 {
@@ -186,7 +184,7 @@ std::string restoreFile()
     return path ? path : "";
 }
 
-// Gemerkter Vorwert eines Prefix (Wert vor Resolve, -1 = war nicht gesetzt), sonst
+// Gemerkter Vorwert eines Prefix (Wert vor Resolve, kWineDpiUnset = war nicht gesetzt), sonst
 // kNoRestoreEntry.
 int rememberedWineDpi(const std::string &prefix)
 {
@@ -198,16 +196,17 @@ int rememberedWineDpi(const std::string &prefix)
     int value = kNoRestoreEntry;
     char line[4096];
     while (value == kNoRestoreEntry && fgets(line, sizeof line, f)) {
-        if (strncmp(line, prefix.c_str(), prefix.size()) == 0 && line[prefix.size()] == '\t') {
-            value = atoi(line + prefix.size() + 1);
+        const RestoreLine entry = splitRestoreLine(line);
+        if (entry.hasTab && entry.prefix == prefix) {
+            parseDpiText(entry.dpiText, DpiParse::Lenient, &value);
         }
     }
     fclose(f);
     return value;
 }
 
-// Merkt sich den Vorwert (Zeile "Prefix<Tab>DPI", -1 = war nicht gesetzt). Steht der Prefix
-// schon drin, bleibt der ältere Eintrag: Er ist der Wert vor Resolve.
+// Merkt sich den Vorwert (Zeile "Prefix<Tab>DPI", kWineDpiUnset = war nicht gesetzt). Steht der
+// Prefix schon drin, bleibt der ältere Eintrag: Er ist der Wert vor Resolve.
 bool rememberWineDpi(const std::string &prefix, int previous)
 {
     if (rememberedWineDpi(prefix) != kNoRestoreEntry) {
@@ -300,7 +299,7 @@ WinePrefixState *prefixState(std::vector<WinePrefixState> &known, const std::str
 
     // Aus der Registry, nicht k->dpi: Ein anderer Prozess (VstScanner) kann sie geändert haben.
     const int current = queryWineDpi(prefix);
-    if (current == -2) {
+    if (current == kWineQueryFailed) {
         return nullptr;
     }
     const int before = rememberedWineDpi(prefix);

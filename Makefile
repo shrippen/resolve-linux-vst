@@ -43,7 +43,7 @@ $(BUILD)/include/pluginterfaces:
 	@mkdir -p $(BUILD)/include
 	ln -sfn $(abspath $(VST3)) $@
 
-$(BUILD)/libresolve-linux-vst.so: $(SOURCES) src/vst2.h src/log.h src/sites.h src/patch.h src/nraw.h $(NRAWHDR) src/editor_size.h src/scale.h src/plugin_conf.h src/process.h src/wine_dpi.h src/wine_base.h $(VST3HDR) src/exports.map | $(BUILD)/include/pluginterfaces
+$(BUILD)/libresolve-linux-vst.so: $(SOURCES) src/vst2.h src/log.h src/sites.h src/patch.h src/nraw.h $(NRAWHDR) src/editor_size.h src/scale.h src/plugin_conf.h src/process.h src/wine_dpi.h src/wine_base.h src/wine_restore.h $(VST3HDR) src/exports.map | $(BUILD)/include/pluginterfaces
 	$(CXX) $(CXXFLAGS) $(VST3INC) $(LDFLAGS) -o $@ $(SOURCES) $(LDLIBS)
 
 $(BUILD)/vst3-classes: tools/vst3-classes.cpp $(VST3SRC) src/log.cpp src/vst2.h src/log.h $(VST3HDR) | $(BUILD)/include/pluginterfaces

@@ -16,6 +16,30 @@ void expect(bool ok, const char *what)
     failures += !ok;
 }
 
+void testSplit()
+{
+    const RestoreLine split = splitRestoreLine("/a b\t144");
+    expect(split.prefix == "/a b" && split.dpiText == "144", "Zeile: Prefix und Text");
+    expect(splitRestoreLine("/a").dpiText.empty() && splitRestoreLine("/a").prefix == "/a", "Zeile ohne Tab");
+    expect(!splitRestoreLine("/a").hasTab && splitRestoreLine("/a\t").hasTab, "Tab erkannt, auch ohne Text");
+    expect(splitRestoreLine("/a\t1\t2").dpiText == "1\t2", "nur der erste Tab trennt");
+}
+
+void testParse()
+{
+    int dpi = 0;
+    expect(parseDpiText("192", DpiParse::Strict, &dpi) && dpi == 192, "strikt: Zahl");
+    expect(parseDpiText("-1", DpiParse::Strict, &dpi) && dpi == kWineDpiUnset, "strikt: -1");
+    expect(!parseDpiText("", DpiParse::Strict, &dpi), "strikt: leer scheitert");
+    expect(!parseDpiText("abc", DpiParse::Strict, &dpi), "strikt: Text scheitert");
+    expect(!parseDpiText("12abc", DpiParse::Strict, &dpi), "strikt: Rest scheitert");
+    expect(parseDpiText("192", DpiParse::Lenient, &dpi) && dpi == 192, "locker: Zahl");
+    expect(parseDpiText("-1\n", DpiParse::Lenient, &dpi) && dpi == kWineDpiUnset, "locker: -1 mit Zeilenende");
+    expect(parseDpiText("abc", DpiParse::Lenient, &dpi) && dpi == 0, "locker: Text wird 0");
+    expect(parseDpiText("", DpiParse::Lenient, &dpi) && dpi == 0, "locker: leer wird 0");
+    expect(parseDpiText("12abc", DpiParse::Lenient, &dpi) && dpi == 12, "locker: Zahl vorn zählt");
+}
+
 } // namespace
 
 int main()
@@ -45,6 +69,9 @@ int main()
     seen.clear();
     linesToKeep("/a\n", fake);
     expect(seen.size() == 1 && seen[0] == "/a=", "Zeile ohne Tab: leerer Wert");
+
+    testSplit();
+    testParse();
 
     printf("%s\n", failures ? "FEHLGESCHLAGEN" : "alles ok");
     return failures ? 1 : 0;
