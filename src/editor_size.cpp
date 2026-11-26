@@ -12,6 +12,7 @@
 #include <string>
 #include <type_traits>
 
+#include "editor_rect.h"
 #include "log.h"
 #include "plugin_conf.h"
 #include "scale.h"
@@ -202,11 +203,6 @@ void fixFrame(Instance *in)
         free(event);
 }
 
-short scaled(short v, double s)
-{
-    return static_cast<short>(lround(v / s));
-}
-
 // Editorgröße abfragen: Größe des Plugins in Bildschirmpixeln, durch den Skalierungsfaktor
 // geteilt an Resolve.
 long editGetRect(Instance *in, AEffect *effect, int opcode, int index, long value, void *ptr, float opt)
@@ -216,23 +212,21 @@ long editGetRect(Instance *in, AEffect *effect, int opcode, int index, long valu
     if (rect && *rect) {
         const ERect reported = **rect;
         // In Bildschirmpixeln (bei wine-zoom größer als gemeldet).
-        ERect r = {0, 0, short(lround((reported.bottom - reported.top) * in->zoom)),
-                   short(lround((reported.right - reported.left) * in->zoom))};
+        ERect r = editorScreenRect(reported, in->zoom);
         const int w = r.right, h = r.bottom;
         bool replaced = false;
         if (!in->window.load()) {
             in->targetW.store(w);
             in->targetH.store(h);
-        } else if (frameFixEnabled() && in->targetW.load() > w && in->targetH.load() > h) {
+        } else if (frameFixEnabled() && editorBelowTarget(w, h, in->targetW.load(), in->targetH.load())) {
             // Nach dem Öffnen kleiner als vorher, ohne audioMasterSizeWindow: JUCE unter Wine
             // meldet dann seine Grundgröße, gezeichnet wird aber in der Zielgröße.
-            r = {0, 0, short(in->targetH.load()), short(in->targetW.load())};
+            r = editorTargetRect(in->targetW.load(), in->targetH.load());
             replaced = true;
         }
         if (in->scale != 1.0 || in->zoom != 1.0 || replaced) {
             // Eigene Kopie: Das ERect gehört dem Plugin.
-            in->rect = {scaled(r.top, in->scale), scaled(r.left, in->scale),
-                        scaled(r.bottom, in->scale), scaled(r.right, in->scale)};
+            in->rect = editorToResolveRect(r, in->scale);
             *rect = &in->rect;
         }
         logMessage("Editorgröße: Plugin %p meldet %dx%d%s, an Resolve %dx%d", static_cast<void *>(effect),
@@ -287,16 +281,17 @@ long editorCallback(AEffect *effect, int opcode, int index, long value, void *pt
     if (opcode == audioMasterSizeWindow && effect) {
         Instance *in = findInstance(effect);
         if (in) {
-            in->targetW.store(int(lround(index * in->zoom)));
-            in->targetH.store(int(lround(value * in->zoom)));
+            in->targetW.store(editorZoomed(index, in->zoom));
+            in->targetH.store(editorZoomed(value, in->zoom));
             in->fixUntilMs.store(nowMs() + 5000);
         }
         if (in && (in->scale != 1.0 || in->zoom != 1.0)) {
-            const double f = in->zoom / in->scale;
+            const long toW = editorToResolve(index, in->zoom, in->scale);
+            const long toH = editorToResolve(value, in->zoom, in->scale);
             logMessage("Plugin %p will %dx%d, an Resolve %ldx%ld", static_cast<void *>(effect), index, int(value),
-                 lround(index * f), lround(value * f));
-            index = static_cast<int>(lround(index * f));
-            value = lround(value * f);
+                 toW, toH);
+            index = static_cast<int>(toW);
+            value = toH;
         }
         long result = gHostCallback.load(std::memory_order_relaxed)(effect, opcode, index, value, ptr, opt);
         logMessage("  audioMasterSizeWindow: Resolve antwortet %ld", result);
