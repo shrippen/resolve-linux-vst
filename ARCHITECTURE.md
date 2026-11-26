@@ -75,7 +75,8 @@ Nikon N-RAW clips. A launcher script starts Resolve with a library loaded into i
 - Each feature starts itself, through the functions it replaces (`src/exports.map`) or
   its own start-up hook. No feature starts another; the VST3 adapter, which the loader
   calls, is the same exception.
-- N-RAW is one feature in two files: names (`nev.cpp`) start decoding (`nraw.cpp`). Below
+- N-RAW is one feature in two parts: names (`nev.cpp`) start decoding (`nraw.cpp`, with its
+  probe mode and the parts both modes share in files beside it). Below
   decoding sits the N-RAW decoder, which knows neither Resolve nor RED; its GPU loader is part
   of it. Only the loader opens the CUDA library, through `nraw_gpu.h` alone; the CUDA library
   knows nothing of the decoder, and the main library never needs CUDA.

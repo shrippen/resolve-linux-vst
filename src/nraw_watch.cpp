@@ -126,6 +126,7 @@ void ArgWatch::observe(uint64_t n, void *a3, long a8, long a9)
     if (n == 1) {
         memcpy(first_, now, sizeof now);
         haveFirst_.store(true, std::memory_order_release);
+        logMessage("N-RAW: erster Aufruf a3=%#lx a8=%ld a9=%ld", now[0], a8, a9);
         return;
     }
     if (!haveFirst_.load(std::memory_order_acquire)) {
