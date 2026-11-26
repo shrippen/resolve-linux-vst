@@ -40,14 +40,14 @@ constexpr const char *LIBCUDA = "libcuda.so.1";
 constexpr unsigned BLOCK_X = 32;
 constexpr unsigned BLOCK_Y = 8;
 constexpr size_t ERROR_BYTES = 192;
-constexpr int PLANE_SETS = 8;   // Ebenen im Upload (nraw_gpu.h)
+constexpr int PLANE_SETS = NRAW_GPU_PLANE_SETS;
 constexpr int MIRROR_ROWS = 2;  // Ebenenzeilen je Precinct
 constexpr unsigned GCLI_BLOCK = 128;
 constexpr unsigned CODES_BLOCK = 256; // wie BLOCK in nraw_cuda_entropy.cuh
-constexpr unsigned SLICE_PRECS = 16;
-constexpr unsigned CHAINS = 7;
+constexpr unsigned SLICE_PRECS = NRAW_GPU_SLICE_PRECS;
+constexpr unsigned CHAINS = NRAW_GPU_CHAINS;
 constexpr unsigned SHARED_MAX = 48 * 1024; // ohne Opt-in je Block
-constexpr size_t GROUP_COEFS = 4;
+constexpr size_t GROUP_COEFS = NRAW_GPU_GROUP;
 constexpr size_t STREAM_SLACK = 4;      // Puffer wächst um 1/4 über die Größe
 
 // Treiberfunktionen (versionierte Namen, die cuda.h als Makros einsetzt).

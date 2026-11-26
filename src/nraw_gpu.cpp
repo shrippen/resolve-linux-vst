@@ -27,6 +27,10 @@ constexpr const char *CUDA_LIB = "libresolve-linux-vst-nraw-cuda.so";
 constexpr size_t COPY_CHUNK = 1 << 20; // Werte je Kopierauftrag
 // Paket je Paketart (tief, hoch, eins), dessen Layout die Art beschreibt (PACKET_DEF in nraw_frame.h).
 constexpr int LAYOUT_OF_KIND[NRAW_GPU_KINDS] = {0, 4, 2};
+static_assert(PACKET_DEF[LAYOUT_OF_KIND[NRAW_GPU_LOW]].kind == Kind::Low &&
+                  PACKET_DEF[LAYOUT_OF_KIND[NRAW_GPU_HIGH]].kind == Kind::High &&
+                  PACKET_DEF[LAYOUT_OF_KIND[NRAW_GPU_ONE]].kind == Kind::One,
+              "LAYOUT_OF_KIND passt zur Pakettabelle");
 
 std::once_flag gLoadOnce;
 const NrawGpuApi *gApi = nullptr;

@@ -49,17 +49,18 @@ constexpr size_t PIH_FIXED = 16; // ab hier Nc, Ng, Ss, Bw, Fq|Br, Fslc|Ppoc|Cpi
 constexpr uint8_t PIH_EXPECT[] = {4, 4, 8, 18, 0x44, 0x10, 0x51, 0x14};
 constexpr uint8_t DEPTH = 14; // Bittiefe der Ausgabe (CDT)
 constexpr uint8_t CDT_EXPECT[CDT_PAYLOAD] = {DEPTH, 0x11, 0x51, DEPTH, 0x11, 0x51, DEPTH, 0x11, 0x00, DEPTH, 0x11, 0x51};
-constexpr size_t HSL_EXPECT = 16; // Precincts je Slice
+constexpr size_t HSL_EXPECT = NRAW_GPU_SLICE_PRECS; // Precincts je Slice
 constexpr int CURVE_ROUND = 2; // 4 Stufen der Tabelle je Ausgabestufe
 constexpr int CURVE_SHIFT = 2;
 constexpr int OUT_MAX = (1 << DEPTH) - 1; // fastticolib begrenzt ausgebrannte Lichter auf 16383
 constexpr int LEVELS = 5;         // horizontale Wavelet-Stufen
 constexpr size_t MIN_PRECINCTS = 2; // die Kachelung der Bildstufe braucht mindestens 4 Ebenenzeilen
 constexpr size_t MIN_WIDTH = 16;
-constexpr size_t PLANE_COUNT = 8;   // Ebenen im Arbeitsspeicher: 3 tief, 3 hoch, K2 doppelt hoch
+constexpr size_t PLANE_COUNT = NRAW_GPU_PLANE_SETS;   // Ebenen im Arbeitsspeicher: 3 tief, 3 hoch, K2 doppelt hoch
 constexpr size_t ALIGN = 64;      // Cachezeile
 constexpr size_t PREC_MODES = 5;  // Byte-Nummer der 2-Bit-Felder D je Band im Precinct-Kopf
-constexpr size_t PREC_MODES_FULL = 6; // ganze Bytes mit D = 3 (25 Bänder * 2 Bit = 6 Bytes + 2 Bit)
+constexpr size_t PREC_MODES_FULL = NRAW_GPU_WGT * 2 / 8; // ganze Bytes mit D = 3 (25 Bänder * 2 Bit = 6 Bytes + 2 Bit)
+static_assert(NRAW_GPU_WGT * 2 % 8 == 2, "MODES_LAST gilt für 2 Bit im letzten Byte");
 constexpr uint8_t MODES_FULL = 0xff;
 constexpr uint8_t MODES_LAST = 0xc0;
 constexpr unsigned PKT_RAW_FLAG = 0x80;
@@ -364,9 +365,10 @@ void chainTask(size_t i, void *ctx)
 // Unabhängige Ketten je Slice: Paket 0, 1, 3, 4, 5, 7 einzeln, 2 und 6 zusammen. Größte zuerst.
 std::vector<Chain> planChains(const Frame &f, const std::vector<Precinct> &precs)
 {
-    constexpr int FIRSTS[] = {0, 1, 2, 3, 4, 5, 7};
-    constexpr int PAIR_FIRST = 2;
-    constexpr int PAIR_SECOND = 6;
+    constexpr int FIRSTS[] = NRAW_GPU_CHAIN_FIRST;
+    constexpr int PAIR_FIRST = NRAW_GPU_PACKET_K2A;
+    constexpr int PAIR_SECOND = NRAW_GPU_PACKET_K2B;
+    static_assert(sizeof FIRSTS / sizeof *FIRSTS == NRAW_GPU_CHAINS, "eine erste Paketnummer je Kette");
     size_t nslices = (f.nprec + HSL_EXPECT - 1) / HSL_EXPECT;
 
     std::vector<Chain> chains;
