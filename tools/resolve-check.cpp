@@ -98,7 +98,7 @@ void checkNraw(const std::string &path)
     printf("%s\n", path.c_str());
     ElfFile elf(path.c_str());
     if (!elf.ok()) {
-        printf("        not installed, N-RAW GPU decoding not checked\n");
+        printf("        not installed, N-RAW decoding not checked\n");
         return;
     }
     CodeImage code;

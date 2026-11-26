@@ -97,6 +97,10 @@ $(BUILD)/wine-restore-test: tests/wine-restore-test.cpp src/wine_restore.h
 	$(CXX) $(filter-out -fPIC,$(CXXFLAGS)) -o $@ tests/wine-restore-test.cpp
 
 # Test des N-RAW-Decoders mit künstlichen Puffern (ohne Prüfdaten).
+$(BUILD)/nraw-curves-test: tests/nraw-curves-test.cpp src/nraw_curves.h
+	@mkdir -p $(BUILD)
+	$(CXX) $(filter-out -fPIC,$(CXXFLAGS)) -Isrc -o $@ tests/nraw-curves-test.cpp
+
 $(BUILD)/nraw-guard-test: tests/nraw-guard-test.cpp $(NRAWSRC) $(NRAWHDR)
 	@mkdir -p $(BUILD)
 	$(CXX) $(filter-out -fPIC,$(CXXFLAGS)) -pthread -o $@ tests/nraw-guard-test.cpp $(NRAWSRC) src/log.cpp $(LDLIBS)
@@ -109,7 +113,7 @@ $(BUILD)/nraw-test: tests/nraw-test.cpp $(NRAWSRC) $(NRAWHDR) $(CUDA_TARGET)
 nraw-test: $(BUILD)/nraw-test
 	$(BUILD)/nraw-test
 
-test: $(BUILD)/process-test $(BUILD)/sites-test $(BUILD)/patch-test $(BUILD)/wine-base-test $(BUILD)/plugin-conf-test $(BUILD)/vst3-params-test $(BUILD)/wine-restore-test $(BUILD)/nraw-guard-test
+test: $(BUILD)/process-test $(BUILD)/sites-test $(BUILD)/patch-test $(BUILD)/wine-base-test $(BUILD)/plugin-conf-test $(BUILD)/vst3-params-test $(BUILD)/wine-restore-test $(BUILD)/nraw-guard-test $(BUILD)/nraw-curves-test
 	$(BUILD)/process-test
 	@mkdir -p $(BUILD)/process-names
 	for name in resolve VstScanner editor-test; do cp $(BUILD)/process-test $(BUILD)/process-names/$$name && $(BUILD)/process-names/$$name || exit 1; done
@@ -120,6 +124,7 @@ test: $(BUILD)/process-test $(BUILD)/sites-test $(BUILD)/patch-test $(BUILD)/win
 	$(BUILD)/vst3-params-test
 	$(BUILD)/wine-restore-test
 	$(BUILD)/nraw-guard-test
+	$(BUILD)/nraw-curves-test
 	tests/launcher-test.sh
 	tests/scripts-test.sh
 
@@ -129,7 +134,7 @@ plugin-test: all editor-test
 
 # clean lässt den AAC-Decoder (FFmpeg-Build dauert) stehen, distclean nimmt alles.
 clean:
-	rm -f $(BUILD)/process-test $(BUILD)/libresolve-linux-vst.so $(BUILD)/vst3-classes $(BUILD)/resolve-check $(BUILD)/sites-test $(BUILD)/patch-test $(BUILD)/wine-base-test $(BUILD)/plugin-conf-test $(BUILD)/vst3-params-test $(BUILD)/wine-restore-test $(BUILD)/nraw-guard-test $(BUILD)/nraw-test $(BUILD)/wine-dpi-restore $(CUDA_LIB) $(BUILD)/nraw_cuda.ptx $(BUILD)/editor-test
+	rm -f $(BUILD)/process-test $(BUILD)/libresolve-linux-vst.so $(BUILD)/vst3-classes $(BUILD)/resolve-check $(BUILD)/sites-test $(BUILD)/patch-test $(BUILD)/wine-base-test $(BUILD)/plugin-conf-test $(BUILD)/vst3-params-test $(BUILD)/wine-restore-test $(BUILD)/nraw-guard-test $(BUILD)/nraw-curves-test $(BUILD)/nraw-test $(BUILD)/wine-dpi-restore $(CUDA_LIB) $(BUILD)/nraw_cuda.ptx $(BUILD)/editor-test
 	rm -rf $(BUILD)/dist $(BUILD)/process-names
 
 distclean:

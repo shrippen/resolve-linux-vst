@@ -235,6 +235,8 @@ $ resolve-linux-vst check
   ok       AAC track switch 0x5deaecf (alac 0x5deaedd, FFmpeg 0x5deaf15, discard 0x5deaf36)
   ok       AAC decoder open 0x5ddfdeb (extradata 0x5ddfe03, other 0x5ddff24)
   ok       AAC codec table 0x297ed7f0 (contents are checked at startup)
+/opt/resolve/libs/REDR3D-x64.so
+  ok       N-RAW decode function 0x237170
 ```
 
 A missing hook switches off only its feature; Resolve itself keeps working, and the log says what

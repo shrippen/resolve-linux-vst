@@ -31,6 +31,7 @@
 #include <vector>
 
 #include "log.h"
+#include "nraw_curves.h"
 #include "nraw_decode.h"
 #include "patch.h"
 #include "process.h"
@@ -364,7 +365,8 @@ Mode mode()
 struct Own {
     std::mutex lock;
     const void *ctx = nullptr;
-    std::vector<int32_t> curve;
+    NrawCurves curves;
+    const NrawCurveValues *curve = nullptr;
     std::atomic<bool> disabled{false};
     std::atomic<uint64_t> calls{0};
     std::atomic<uint64_t> fallbacks{0};
@@ -379,26 +381,29 @@ bool ownCurve(const void *ctx, NrawCurve *curve)
 {
     std::lock_guard<std::mutex> guard(gOwn.lock);
     if (gOwn.ctx != ctx) {
-        if (!readCurve(ctx, &gOwn.curve)) {
+        // Erst lesen, dann ablegen: ein halb gelesener Puffer ersetzt nie die alte Kennlinie.
+        NrawCurveValues values;
+        if (!readCurve(ctx, &values)) {
             return false;
         }
+        logMessage("N-RAW: Kennlinie übernommen, FNV-1a=%016llx", (unsigned long long)fnv1a(values));
+        gOwn.curve = gOwn.curves.keep(std::move(values));
         gOwn.ctx = ctx;
-        logMessage("N-RAW: Kennlinie übernommen, FNV-1a=%016llx", (unsigned long long)fnv1a(gOwn.curve));
     }
-    *curve = NrawCurve{gOwn.curve.data(), gOwn.curve.size()};
+    *curve = NrawCurve{gOwn.curve->data(), gOwn.curve->size()};
     return true;
 }
 
 // Abweichendes Prüfbild für die Fehlersuche ablegen: Codestream, Bild von RED und unser Bild in
 // ~/.local/state/resolve-linux-vst/nraw-mismatch.{in,red,own}, dazu Zahl und Lage der Pixel ins Log.
-void writeFile(const std::string &path, const void *data, size_t len)
+bool writeFile(const std::string &path, const void *data, size_t len)
 {
     FILE *f = fopen(path.c_str(), "wb");
     if (!f) {
-        return;
+        return false;
     }
-    fwrite(data, 1, len, f);
-    fclose(f);
+    const bool ok = fwrite(data, 1, len, f) == len;
+    return fclose(f) == 0 && ok;
 }
 
 void dumpMismatch(const uint8_t *cs, size_t size, const uint16_t *red, const uint16_t *own, size_t count)
@@ -421,9 +426,12 @@ void dumpMismatch(const uint8_t *cs, size_t size, const uint16_t *red, const uin
         return;
     }
     const std::string base = std::string(home) + "/.local/state/resolve-linux-vst/nraw-mismatch";
-    writeFile(base + ".in", cs, size);
-    writeFile(base + ".red", red, count * sizeof(uint16_t));
-    writeFile(base + ".own", own, count * sizeof(uint16_t));
+    const bool ok = writeFile(base + ".in", cs, size) && writeFile(base + ".red", red, count * sizeof(uint16_t)) &&
+                    writeFile(base + ".own", own, count * sizeof(uint16_t));
+    if (!ok) {
+        logMessage("N-RAW: Prüfbild nicht ablegbar unter %s.*", base.c_str());
+        return;
+    }
     logMessage("N-RAW: Prüfbild abgelegt unter %s.{in,red,own}", base.c_str());
 }
 

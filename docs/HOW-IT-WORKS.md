@@ -245,7 +245,8 @@ On the GPU (`libresolve-linux-vst-nraw-cuda.so`, driver API through `dlopen`, ow
 frame takes about 5 ms and 11 ms of CPU time; RED needs about 11 ms on all cores. Without the
 library, `libcuda` or a card, the same decoder runs on the CPU. Frames 1 to 3 and every 500th
 are decoded by RED too and compared; a difference switches our decoder off for the run and
-saves the frame under `~/.local/state/resolve-linux-vst/nraw-mismatch.*`.
+saves the frame under `~/.local/state/resolve-linux-vst/nraw-mismatch.*`. The tone curves are
+kept per decoder context until Resolve exits, as another thread may still decode with one.
 
 ## Finding the hooks again
 
@@ -255,6 +256,7 @@ saves the frame under `~/.local/state/resolve-linux-vst/nraw-mismatch.*`.
 | the same and `AudioPluginHost::GetPluginCategoryMaskIn/Out` in `VstScanner` | the executable's symbol table | as above, or the scanner ships stripped |
 | AAC track switch, decoder open, codec table in `resolve` (stripped) | byte patterns in `src/sites.cpp` | the compiler generates that code differently |
 | `avcodec_find_decoder`, `av_parser_init`, `avformat_write_header` | dynamic symbols, versions `LIBAVCODEC_60` / `LIBAVFORMAT_60` | Resolve ships another FFmpeg major version or stops calling them itself |
+| fastticolib decode function in `REDR3D-x64.so` (N-RAW decoding) | byte pattern in `src/sites.cpp` (its 48 first bytes) | Resolve ships another RED SDK; the log then says `N-RAW: Muster … passt nicht` and RED decodes as before |
 
 `resolve-linux-vst check` (`build/resolve-check`) checks all of them without starting Resolve. At start
 the library runs the same pattern search (about 50 ms over Resolve's 160 MB of code) and logs the
@@ -273,6 +275,12 @@ Look there with `objdump -d -M intel --start-address=… --stop-address=… /opt
 adapt the patterns in `findAacSites` and, if registers changed, the replacement stubs
 `resolveVstSwitch` and `resolveVstCodec` in `src/aac.cpp`. The comments there and in `sites.cpp`
 quote the instructions of 21.1.1. `make test` checks the search against synthetic code.
+
+The **N-RAW decode function** is the C wrapper fastticolib's decoder is called through
+(`0x237170` in RED SDK 9.2.2), called from the RED reader's "decode frame". Its first 17 bytes
+must be free of RIP-relative operands, as the trampoline copies them. With a new SDK, find it
+again from the call in that reader, check its arguments with `RESOLVE_LINUX_VST_NRAW_DECODE=probe`
+and run `make nraw-test` on frames captured from the new version before enabling it.
 
 ## Testing without Resolve
 
