@@ -13,7 +13,7 @@ VST3SRC  := src/vst3.cpp src/vst3_dispatch.cpp src/vst3_host.cpp src/vst3_iids.c
 NRAWSRC  := src/nraw_decode.cpp src/nraw_entropy.cpp src/nraw_color.cpp src/nraw_pool.cpp src/nraw_gpu.cpp
 NRAWHDR  := src/nraw_decode.h src/nraw_frame.h src/nraw_pool.h src/nraw_gpu.h src/nraw_curves.h src/log.h
 VST3HDR  := src/vst3_adapter.h src/vst3_host.h src/vst3_module.h src/vst3_params.h
-SOURCES := src/resolve_linux_vst.cpp src/log.cpp src/plugin_conf.cpp src/scale.cpp src/editor_size.cpp src/scanner.cpp src/wine_dpi.cpp src/process.cpp $(VST3SRC) src/aac.cpp src/nev.cpp src/nraw.cpp src/x11.cpp src/sites.cpp src/patch.cpp $(NRAWSRC) $(VST3)/base/funknown.cpp
+SOURCES := src/resolve_linux_vst.cpp src/log.cpp src/plugin_conf.cpp src/scale.cpp src/editor_size.cpp src/scanner.cpp src/wine_dpi.cpp src/wine_reg.cpp src/process.cpp $(VST3SRC) src/aac.cpp src/nev.cpp src/nraw.cpp src/x11.cpp src/sites.cpp src/patch.cpp $(NRAWSRC) $(VST3)/base/funknown.cpp
 
 # N-RAW auf der GPU: eigene Bibliothek, nur mit nvcc zur Bauzeit (Kernel als PTX, compute_75 als
 # Untergrenze: der Treiber übersetzt für die jeweilige Karte). Ohne nvcc entfällt sie, die
@@ -43,16 +43,16 @@ $(BUILD)/include/pluginterfaces:
 	@mkdir -p $(BUILD)/include
 	ln -sfn $(abspath $(VST3)) $@
 
-$(BUILD)/libresolve-linux-vst.so: $(SOURCES) src/vst2.h src/log.h src/sites.h src/patch.h src/nraw.h $(NRAWHDR) src/editor_size.h src/scale.h src/plugin_conf.h src/process.h src/wine_dpi.h src/wine_base.h src/wine_restore.h $(VST3HDR) src/exports.map | $(BUILD)/include/pluginterfaces
+$(BUILD)/libresolve-linux-vst.so: $(SOURCES) src/vst2.h src/log.h src/sites.h src/patch.h src/nraw.h $(NRAWHDR) src/editor_size.h src/scale.h src/plugin_conf.h src/process.h src/wine_dpi.h src/wine_base.h src/wine_reg.h src/wine_restore.h $(VST3HDR) src/exports.map | $(BUILD)/include/pluginterfaces
 	$(CXX) $(CXXFLAGS) $(VST3INC) $(LDFLAGS) -o $@ $(SOURCES) $(LDLIBS)
 
 $(BUILD)/vst3-classes: tools/vst3-classes.cpp $(VST3SRC) src/log.cpp src/vst2.h src/log.h $(VST3HDR) | $(BUILD)/include/pluginterfaces
 	$(CXX) $(filter-out -fPIC,$(CXXFLAGS)) $(VST3INC) -o $@ tools/vst3-classes.cpp $(VST3SRC) src/log.cpp $(VST3)/base/funknown.cpp $(LDLIBS)
 
-# Setzt die Wine-DPI nach Resolve zurück (vom Starter aufgerufen). Dieselbe Wine-Logik wie die
-# Bibliothek (src/wine_dpi.cpp), ohne sie selbst zu laden.
-WINE_RESTORE_SRC := tools/wine-dpi-restore.cpp src/wine_dpi.cpp src/plugin_conf.cpp src/scale.cpp src/log.cpp src/process.cpp
-$(BUILD)/wine-dpi-restore: $(WINE_RESTORE_SRC) src/wine_dpi.h src/wine_restore.h src/wine_base.h src/plugin_conf.h src/scale.h src/log.h src/process.h
+# Setzt die Wine-DPI nach Resolve zurück (vom Starter aufgerufen). Derselbe Wine-Aufruf wie die
+# Bibliothek (src/wine_reg.cpp), ohne die Entscheidung in Resolve (src/wine_dpi.cpp).
+WINE_RESTORE_SRC := tools/wine-dpi-restore.cpp src/wine_reg.cpp src/log.cpp
+$(BUILD)/wine-dpi-restore: $(WINE_RESTORE_SRC) src/wine_reg.h src/wine_restore.h src/log.h
 	@mkdir -p $(BUILD)
 	$(CXX) $(filter-out -fPIC,$(CXXFLAGS)) -o $@ $(WINE_RESTORE_SRC) $(LDLIBS)
 

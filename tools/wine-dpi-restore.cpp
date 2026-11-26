@@ -1,13 +1,14 @@
 // wine-dpi-restore: setzt die Wine-DPI der Prefixe zurück, die libresolve-linux-vst.so während
 // Resolve geändert hat (aufgerufen von resolve-linux-vst nach dem Ende von Resolve und bei
-// `resolve-linux-vst restore`). Wine-Befehl und Registry-Schlüssel kommen aus src/wine_dpi.cpp.
+// `resolve-linux-vst restore`). Wine-Befehl und Registry-Schlüssel kommen aus src/wine_reg.cpp; dessen Log geht auf stderr.
 //
 //   build/wine-dpi-restore <Datei mit den Vorwerten>
 //
 // Zeilen, die zurückgesetzt wurden oder deren Prefix es nicht mehr gibt, entfallen; die Datei
 // verschwindet, wenn nichts bleibt. Gescheiterte Zeilen bleiben für den nächsten Lauf.
 // Exit-Code 1, wenn Zeilen geblieben sind.
-#include "../src/wine_dpi.h"
+#include "../src/log.h"
+#include "../src/wine_reg.h"
 #include "../src/wine_restore.h"
 
 #include <sys/stat.h>
@@ -47,6 +48,8 @@ RestoreResult resetOne(const std::string &prefix, const std::string &dpiText)
 
 int main(int argc, char **argv)
 {
+    setLogFile(stderr);
+
     if (argc != 2) {
         fprintf(stderr, "usage: %s <wine-dpi-restore file>\n", argv[0]);
         return 2;
