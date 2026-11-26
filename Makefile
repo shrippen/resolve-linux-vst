@@ -43,7 +43,7 @@ $(BUILD)/include/pluginterfaces:
 	@mkdir -p $(BUILD)/include
 	ln -sfn $(abspath $(VST3)) $@
 
-$(BUILD)/libresolve-linux-vst.so: $(SOURCES) src/vst2.h src/log.h src/sites.h src/patch.h src/nraw.h $(NRAWHDR) src/editor_size.h src/editor_rect.h src/editor_frame.h src/scale.h src/plugin_conf.h src/process.h src/wine_dpi.h src/wine_base.h src/wine_reg.h src/wine_restore.h src/nev_names.h $(VST3HDR) src/exports.map | $(BUILD)/include/pluginterfaces
+$(BUILD)/libresolve-linux-vst.so: $(SOURCES) src/vst2.h src/log.h src/sites.h src/patch.h src/nraw.h $(NRAWHDR) src/editor_size.h src/editor_rect.h src/editor_frame.h src/scale.h src/plugin_conf.h src/process.h src/wine_dpi.h src/wine_base.h src/wine_reg.h src/wine_restore.h src/nev_names.h src/aac_config.h $(VST3HDR) src/exports.map | $(BUILD)/include/pluginterfaces
 	$(CXX) $(CXXFLAGS) $(VST3INC) $(LDFLAGS) -o $@ $(SOURCES) $(LDLIBS)
 
 $(BUILD)/vst3-classes: tools/vst3-classes.cpp $(VST3SRC) src/log.cpp src/vst2.h src/log.h $(VST3HDR) | $(BUILD)/include/pluginterfaces
@@ -80,6 +80,11 @@ $(BUILD)/wine-base-test: tests/wine-base-test.cpp src/wine_base.h
 $(BUILD)/editor-size-test: tests/editor-size-test.cpp src/editor_rect.h src/vst2.h
 	@mkdir -p $(BUILD)
 	$(CXX) $(filter-out -fPIC,$(CXXFLAGS)) -o $@ tests/editor-size-test.cpp
+
+# Test der AAC-Angaben (AudioSpecificConfig bilden und lesen, rein gerechnet).
+$(BUILD)/aac-test: tests/aac-test.cpp src/aac_config.h
+	@mkdir -p $(BUILD)
+	$(CXX) $(filter-out -fPIC,$(CXXFLAGS)) -o $@ tests/aac-test.cpp
 
 # Test der N-RAW-Namen X.R3D <-> X.NEV (rein gerechnet).
 $(BUILD)/nev-test: tests/nev-test.cpp src/nev_names.h
@@ -127,7 +132,7 @@ $(BUILD)/nraw-test: tests/nraw-test.cpp $(NRAWSRC) $(NRAWHDR) $(CUDA_TARGET)
 nraw-test: $(BUILD)/nraw-test
 	$(BUILD)/nraw-test
 
-test: $(BUILD)/process-test $(BUILD)/sites-test $(BUILD)/patch-test $(BUILD)/wine-base-test $(BUILD)/editor-size-test $(BUILD)/plugin-conf-test $(BUILD)/vst3-params-test $(BUILD)/wine-restore-test $(BUILD)/nraw-guard-test $(BUILD)/nraw-curves-test $(BUILD)/nraw-decision-test $(BUILD)/nev-test
+test: $(BUILD)/process-test $(BUILD)/sites-test $(BUILD)/patch-test $(BUILD)/wine-base-test $(BUILD)/editor-size-test $(BUILD)/plugin-conf-test $(BUILD)/vst3-params-test $(BUILD)/wine-restore-test $(BUILD)/nraw-guard-test $(BUILD)/nraw-curves-test $(BUILD)/nraw-decision-test $(BUILD)/nev-test $(BUILD)/aac-test
 	$(BUILD)/process-test
 	@mkdir -p $(BUILD)/process-names
 	for name in resolve VstScanner editor-test; do cp $(BUILD)/process-test $(BUILD)/process-names/$$name && $(BUILD)/process-names/$$name || exit 1; done
@@ -142,6 +147,7 @@ test: $(BUILD)/process-test $(BUILD)/sites-test $(BUILD)/patch-test $(BUILD)/win
 	$(BUILD)/nraw-curves-test
 	$(BUILD)/nraw-decision-test
 	$(BUILD)/nev-test
+	$(BUILD)/aac-test
 	tests/launcher-test.sh
 	tests/scripts-test.sh
 
@@ -151,7 +157,7 @@ plugin-test: all editor-test
 
 # clean lässt den AAC-Decoder (FFmpeg-Build dauert) stehen, distclean nimmt alles.
 clean:
-	rm -f $(BUILD)/process-test $(BUILD)/libresolve-linux-vst.so $(BUILD)/vst3-classes $(BUILD)/resolve-check $(BUILD)/sites-test $(BUILD)/patch-test $(BUILD)/wine-base-test $(BUILD)/editor-size-test $(BUILD)/plugin-conf-test $(BUILD)/vst3-params-test $(BUILD)/wine-restore-test $(BUILD)/nraw-guard-test $(BUILD)/nraw-curves-test $(BUILD)/nraw-decision-test $(BUILD)/nraw-test $(BUILD)/wine-dpi-restore $(CUDA_LIB) $(BUILD)/nraw_cuda.ptx $(BUILD)/editor-test $(BUILD)/nev-test
+	rm -f $(BUILD)/process-test $(BUILD)/libresolve-linux-vst.so $(BUILD)/vst3-classes $(BUILD)/resolve-check $(BUILD)/sites-test $(BUILD)/patch-test $(BUILD)/wine-base-test $(BUILD)/editor-size-test $(BUILD)/plugin-conf-test $(BUILD)/vst3-params-test $(BUILD)/wine-restore-test $(BUILD)/nraw-guard-test $(BUILD)/nraw-curves-test $(BUILD)/nraw-decision-test $(BUILD)/nraw-test $(BUILD)/wine-dpi-restore $(CUDA_LIB) $(BUILD)/nraw_cuda.ptx $(BUILD)/editor-test $(BUILD)/nev-test $(BUILD)/aac-test
 	rm -rf $(BUILD)/dist $(BUILD)/process-names
 
 distclean:
