@@ -9,7 +9,9 @@
 #include <functional>
 #include <string>
 
-constexpr int kWineDpiUnset = -1; // LogPixels war nicht gesetzt (Vorwert in der Datei)
+constexpr int kWineDpiUnset = -1;    // LogPixels war nicht gesetzt (Vorwert in der Datei)
+constexpr int kNoRestoreEntry = -2;  // kein Eintrag für das Prefix in der Datei
+constexpr int kWineQueryFailed = -2; // `wine reg query` war nicht möglich
 
 enum class RestoreResult {
     Done,   // zurückgesetzt: Zeile entfällt
@@ -24,15 +26,16 @@ using RestoreFn = std::function<RestoreResult(const std::string &prefix, const s
 struct RestoreLine {
     std::string prefix;
     std::string dpiText;
+    bool hasTab;
 };
 
 inline RestoreLine splitRestoreLine(const std::string &line)
 {
     const size_t tab = line.find('\t');
     if (tab == std::string::npos) {
-        return {line, std::string()};
+        return {line, std::string(), false};
     }
-    return {line.substr(0, tab), line.substr(tab + 1)};
+    return {line.substr(0, tab), line.substr(tab + 1), true};
 }
 
 // Strict: nur eine ganze Zahl gilt, sonst false (die Zeile bleibt dann für den nächsten Lauf).
@@ -69,7 +72,7 @@ inline std::string linesToKeep(const std::string &content, const RestoreFn &rese
         const std::string line = content.substr(start, end - start);
         start = end + 1;
 
-        const auto [prefix, dpi] = splitRestoreLine(line);
+        const auto [prefix, dpi, hasTab] = splitRestoreLine(line);
         if (prefix.empty()) {
             continue;
         }

@@ -12,9 +12,7 @@
 
 #include <sys/stat.h>
 
-#include <cerrno>
 #include <cstdio>
-#include <cstdlib>
 #include <fstream>
 #include <sstream>
 #include <string>
@@ -29,19 +27,6 @@ bool isDirectory(const std::string &path)
     return stat(path.c_str(), &st) == 0 && S_ISDIR(st.st_mode);
 }
 
-// Wert aus dem Text der Datei; false, wenn er keine ganze Zahl ist.
-bool parseDpi(const std::string &text, int *dpi)
-{
-    char *end = nullptr;
-    errno = 0;
-    const long value = strtol(text.c_str(), &end, 10);
-    if (text.empty() || *end != '\0' || errno != 0) {
-        return false;
-    }
-    *dpi = int(value);
-    return true;
-}
-
 RestoreResult resetOne(const std::string &prefix, const std::string &dpiText)
 {
     if (!isDirectory(prefix)) {
@@ -49,7 +34,7 @@ RestoreResult resetOne(const std::string &prefix, const std::string &dpiText)
     }
 
     int dpi = 0;
-    if (parseDpi(dpiText, &dpi) && restoreWineDpi(prefix, dpi)) {
+    if (parseDpiText(dpiText, DpiParse::Strict, &dpi) && restoreWineDpi(prefix, dpi)) {
         const std::string shown = dpi == kWineDpiUnset ? "default" : dpiText;
         fprintf(stderr, "%sWine DPI in %s back to %s\n", kMsgPrefix, prefix.c_str(), shown.c_str());
         return RestoreResult::Done;
