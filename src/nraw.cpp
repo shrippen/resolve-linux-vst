@@ -69,6 +69,7 @@ struct Own {
     NrawCurves curves;
     const NrawCurveValues *curve = nullptr;
     std::atomic<bool> disabled{false};
+    std::atomic<bool> otherModeLogged{false};
     std::atomic<uint64_t> calls{0};
     std::atomic<uint64_t> fallbacks{0};
     std::atomic<uint64_t> wallNs{0};
@@ -107,10 +108,7 @@ int ownVerify(void *ctx, void *handle, void *a3, size_t size, const uint8_t *cs,
     }
 
     const uint64_t n = gOwn.calls.load();
-    if (compareWithRed(n, cs, size, curve, dst, dstBytes / sizeof(uint16_t)) == Compare::Different) {
-        gOwn.disabled = true;
-        logMessage("N-RAW: Prüfbild weicht von RED ab, eigener Decoder für diesen Lauf aus");
-    }
+    compareWithRed(n, cs, size, curve, dst, dstBytes / sizeof(uint16_t), &gOwn.disabled);
     return result;
 }
 
@@ -127,6 +125,9 @@ int ownDecode(void *ctx, void *handle, void *a3, size_t size, const uint8_t *cs,
 {
     const uint64_t n = ++gOwn.calls;
     gOwn.args.observe(n, a3, a8, a9);
+    if ((a8 != 0 || a9 != 0) && !gOwn.otherModeLogged.exchange(true)) {
+        logMessage("N-RAW: a8=%ld a9=%ld (nicht 0), solche Bilder dekodiert RED", a8, a9);
+    }
     NrawCurve curve;
     if (nrawToRed(gOwn.disabled, a8, a9, dstBytes) || !ownCurve(ctx, &curve)) {
         ++gOwn.fallbacks;

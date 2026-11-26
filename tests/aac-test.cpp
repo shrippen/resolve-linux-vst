@@ -68,6 +68,12 @@ int main()
     memcpy(esds + 12, kEs, sizeof kEs);
     expect(reads(esds, sizeof esds, 0x40), "esds-Atom");
 
+    // Flags 0xe0: streamDependence (2 Byte), URL (Länge 1, "x"), OCRstream (2 Byte) vor dem
+    // DecoderConfigDescriptor; ES-Länge 0x16 + 6.
+    uint8_t flagged[sizeof kEs + 6] = {0x03, 0x1c, 0x00, 0x00, 0xe0, 0xaa, 0xbb, 0x01, 'x', 0xcc, 0xdd};
+    memcpy(flagged + 11, kEs + 5, sizeof kEs - 5);
+    expect(reads(flagged, sizeof flagged, 0x40), "ES_Descriptor mit allen drei Flags");
+
     expect(reads(kAsc, sizeof kAsc, 0), "nackte Config (2 Byte)");
     expect(!reads(kAsc, 1, 0), "ein Byte reicht nicht");
 

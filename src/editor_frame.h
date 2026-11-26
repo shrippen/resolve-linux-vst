@@ -1,5 +1,5 @@
 // Editorgröße: Zugriff auf das Fenstersystem (xcb) für den Rahmen eines Editors; Hintergrund in
-// editor_size.cpp. Vom Lader (editor_size.cpp) genutzt.
+// editor_size.cpp. Von der Editorgröße (editor_size.cpp) genutzt.
 #pragma once
 
 #include <cstdint>
