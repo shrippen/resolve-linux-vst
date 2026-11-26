@@ -17,6 +17,7 @@ Nikon N-RAW clips. A launcher script starts Resolve with a library loaded into i
 | `src/resolve_linux_vst.cpp` | The VST2 loader: loads a plug-in for Resolve. |
 | `src/plugin_conf.cpp`, `src/plugin_conf.h` | Settings per plug-in: reads `plugins.conf` and the built-in defaults. |
 | `src/editor_size.cpp`, `src/editor_size.h` | Editor size: sits between Resolve and a plug-in's editor, scales its window sizes, fixes yabridge's frame, sends the content scale. |
+| `src/editor_frame.cpp`, `src/editor_frame.h` | Editor size: talks to the window system (xcb, loaded at run time) and sets the sub-windows of an editor window to a size; one function out. |
 | `src/editor_rect.h` | Editor size: the rounding and scaling of window sizes, pure, so `tests/` can run it. |
 | `src/scale.cpp`, `src/scale.h` | Resolve's scale factor (Qt, per window, or `RESOLVE_LINUX_VST_EDITOR_SCALE`); below editor size and Wine DPI, which both use it. |
 | `src/scanner.cpp` | Scanner and number format: the categories Resolve's scanner reads and `LC_NUMERIC` at start; a feature of its own. |
