@@ -31,6 +31,7 @@
 #include <cstring>
 
 #include "log.h"
+#include "nraw.h"
 #include "process.h"
 
 #define EXPORT extern "C" __attribute__((visibility("default"), used))
@@ -146,8 +147,10 @@ int openWith(OpenFunction f, const char *path, int flags, mode_t mode)
 {
     char buf[PATH_MAX];
     const char *mapped = readOnly(flags) ? mapPath(path, buf) : path;
-    if (mapped != path)
+    if (mapped != path) {
         logOnce("öffne", mapped);
+        nrawAttach();
+    }
     return f(mapped, flags, mode);
 }
 

@@ -593,23 +593,47 @@ struct Lattice {
 
 enum class Step { Diag0, Diag3, Cross0, Cross3, Last };
 
+// Ein Schritt an einer Klasse, deren Lage im 2x2-Block (y0, x0) ist. Die Nachbarn gehören zu
+// anderen Klassen, die Reihenfolge innerhalb des Schritts ist darum gleichgültig.
+void tetrixClass(const Lattice &L, Step step, int y0, int x0)
+{
+    for (int y = y0; y < L.h; y += 2) {
+        for (int x = x0; x < L.w; x += 2) {
+            switch (step) {
+            case Step::Diag0:
+                L.ref(y, x) -= L.diag(y, x) >> 3;
+                break;
+            case Step::Diag3:
+                L.ref(y, x) += L.diag(y, x) >> 2;
+                break;
+            case Step::Cross0:
+            case Step::Cross3:
+                L.ref(y, x) -= L.cross(y, x) >> 3;
+                break;
+            case Step::Last:
+                L.ref(y, x) += L.cross(y, x) >> 2;
+                break;
+            }
+        }
+    }
+}
+
 void tetrixStep(const Lattice &L, Step step)
 {
     // Klassen im 2x2-Block: 0 = (0,1), 3 = (1,0), 1 = (1,1), 2 = (0,0); Schritt 5 trifft 1 und 2.
-    for (int y = 0; y < L.h; y++) {
-        for (int x = 0; x < L.w; x++) {
-            bool class0 = (y & 1) == 0 && (x & 1) == 1;
-            bool class3 = (y & 1) == 1 && (x & 1) == 0;
-            if (step == Step::Diag0 && class0) {
-                L.ref(y, x) -= L.diag(y, x) >> 3;
-            } else if (step == Step::Diag3 && class3) {
-                L.ref(y, x) += L.diag(y, x) >> 2;
-            } else if ((step == Step::Cross0 && class0) || (step == Step::Cross3 && class3)) {
-                L.ref(y, x) -= L.cross(y, x) >> 3;
-            } else if (step == Step::Last && !class0 && !class3) {
-                L.ref(y, x) += L.cross(y, x) >> 2;
-            }
-        }
+    switch (step) {
+    case Step::Diag0:
+    case Step::Cross0:
+        tetrixClass(L, step, 0, 1);
+        return;
+    case Step::Diag3:
+    case Step::Cross3:
+        tetrixClass(L, step, 1, 0);
+        return;
+    case Step::Last:
+        tetrixClass(L, step, 0, 0);
+        tetrixClass(L, step, 1, 1);
+        return;
     }
 }
 

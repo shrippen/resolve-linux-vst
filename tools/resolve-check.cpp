@@ -91,6 +91,30 @@ void checkResolve(const std::string &path)
     printf("        search: %.0f ms\n", ms);
 }
 
+// Die Dekodierfunktion von fastticolib in REDR3D-x64.so (nraw.cpp); fehlt die Datei, ist das
+// kein Fehler.
+void checkNraw(const std::string &path)
+{
+    printf("%s\n", path.c_str());
+    ElfFile elf(path.c_str());
+    if (!elf.ok()) {
+        printf("        not installed, N-RAW GPU decoding not checked\n");
+        return;
+    }
+    CodeImage code;
+    if (!elf.code(&code)) {
+        report(false, "N-RAW: no code segment");
+        return;
+    }
+    NrawSites s;
+    std::string error;
+    if (!findNrawSites(code, &s, &error)) {
+        report(false, "N-RAW: %s", error.c_str());
+        return;
+    }
+    report(true, "N-RAW decode function %#lx (offset in the library)", static_cast<unsigned long>(s.decode));
+}
+
 } // namespace
 
 int main(int argc, char **argv)
@@ -130,6 +154,7 @@ int main(int argc, char **argv)
     }
 
     checkResolve(dir + "/bin/resolve");
+    checkNraw(dir + "/libs/REDR3D-x64.so");
 
     if (failures)
         printf("\n%d hook(s) missing; see the README, \"After a Resolve update\".\n", failures);

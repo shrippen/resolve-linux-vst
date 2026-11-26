@@ -189,6 +189,27 @@ bool patchJumpIndirect(uintptr_t addr, size_t len, void *dest)
     return writeJump(addr, code, len);
 }
 
+void *buildTrampoline(uintptr_t addr, size_t len)
+{
+    const size_t size = len + kJumpIndirectLen;
+    void *mem = mmap(nullptr, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    if (mem == MAP_FAILED) {
+        logMessage("Trampolin: mmap: %s", strerror(errno));
+        return nullptr;
+    }
+
+    auto *code = static_cast<uint8_t *>(mem);
+    memcpy(code, reinterpret_cast<const void *>(addr), len);
+    buildJumpIndirect(reinterpret_cast<void *>(addr + len), code + len, kJumpIndirectLen);
+
+    if (mprotect(mem, size, PROT_READ | PROT_EXEC) != 0) {
+        logMessage("Trampolin: mprotect: %s", strerror(errno));
+        munmap(mem, size);
+        return nullptr;
+    }
+    return mem;
+}
+
 bool redirectWanted(uintptr_t addr, const void *replacement)
 {
     if (!addr || !replacement) {

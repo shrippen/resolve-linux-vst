@@ -33,6 +33,12 @@ bool patchJumpRax(uintptr_t target, void *dest);
 // patchJumpRax, dazu eine Länge außerhalb von 14 bis 32.
 bool patchJumpIndirect(uintptr_t addr, size_t len, void *dest);
 
+// Kopiert `len` Byte ab `addr` in eigenen ausführbaren Speicher und hängt einen Sprung auf
+// addr+len an: Aufrufbar wie das Original, auch wenn dessen Anfang überschrieben ist. Die Bytes
+// dürfen keinen RIP-Bezug und keine Sprünge haben (Aufrufer prüft das). nullptr bei Fehler
+// (Grund im Protokoll). Der Speicher wird nie freigegeben.
+void *buildTrampoline(uintptr_t addr, size_t len);
+
 // Eine Funktion in Resolves Programmdatei (Symbolname, siehe sites.h) und ihr Ersatz.
 struct Redirect {
     const char *name;
