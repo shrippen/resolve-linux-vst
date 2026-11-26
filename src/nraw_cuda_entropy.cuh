@@ -18,22 +18,22 @@ namespace {
 
 constexpr int BLOCK = 256;
 constexpr int WARP = 32;
-constexpr int SLICE_PRECS = 16;
+constexpr int SLICE_PRECS = NRAW_GPU_SLICE_PRECS;
 constexpr int PACKETS = NRAW_GPU_PACKETS;
 constexpr int GSTRIDE = NRAW_GPU_GROUP_STRIDE;
 constexpr int WGT = NRAW_GPU_WGT;
-constexpr int PKT_HDR = 7;
-constexpr int SIG_BYTES = 9;
+constexpr int PKT_HDR = NRAW_GPU_PKT_HDR;
+constexpr int SIG_BYTES = NRAW_GPU_SIG_BYTES;
 constexpr int PKT_FIXED = PKT_HDR + SIG_BYTES;
-constexpr int SIG_RUN = 8;
+constexpr int SIG_RUN = NRAW_GPU_SIG_RUN;
 constexpr int MAX_RUNS = 72;      // Bits im Signifikanzteil
-constexpr int GROUP = 4;
-constexpr int MAX_GCLI = 18;
+constexpr int GROUP = NRAW_GPU_GROUP;
+constexpr int MAX_GCLI = NRAW_GPU_MAX_GCLI;
 constexpr int GCLI_CLAMP = MAX_GCLI + 1;
 constexpr int MAX_CODE = 254;     // größere Codes sind ohnehin Müll (GCLI wird begrenzt)
-constexpr int FQ_SHIFT = 4;
+constexpr int FQ_SHIFT = NRAW_GPU_FQ_SHIFT;
 constexpr int KINDS = NRAW_GPU_KINDS;
-constexpr int CHAINS = 7;
+constexpr int CHAINS = NRAW_GPU_CHAINS;
 constexpr unsigned RAW_FLAG = 0x80;
 
 // Bits des Prüfworts.
@@ -47,17 +47,17 @@ enum Flag : int {
     F_SGN_REST = 64,
 };
 
-// Paketart, Abschneide-Eintrag, Ebene und Zeilenfaktor je Paketnummer (nraw_frame.h PACKET_DEF).
-__constant__ unsigned char KIND_OF[PACKETS] = {NRAW_GPU_LOW, NRAW_GPU_LOW, NRAW_GPU_ONE, NRAW_GPU_LOW,
-                                               NRAW_GPU_HIGH, NRAW_GPU_HIGH, NRAW_GPU_ONE, NRAW_GPU_HIGH};
-__constant__ unsigned char WGT_OF[PACKETS] = {0, 6, 12, 13, 19, 21, 12, 23};
-// Ebenensatz im Puffer: K0 tief 0, K0 hoch 1, K1 tief 2, K1 hoch 3, K3 tief 4, K3 hoch 5, K2 6.
-__constant__ unsigned char SET_OF[PACKETS] = {0, 2, 6, 4, 1, 3, 6, 5};
-// Erste Pakete der sieben Ketten (2 = die Pakete 2 und 6 zusammen).
-__constant__ unsigned char CHAIN_FIRST[CHAINS] = {0, 1, 2, 3, 4, 5, 7};
+// Paketart, Abschneide-Eintrag, Ebenensatz und Ketten je Paketnummer (Tabellen in nraw_gpu.h).
+__constant__ unsigned char KIND_OF[] = NRAW_GPU_PACKET_KIND;
+__constant__ unsigned char WGT_OF[] = NRAW_GPU_PACKET_WGT;
+__constant__ unsigned char SET_OF[] = NRAW_GPU_PACKET_SET;
+__constant__ unsigned char CHAIN_FIRST[] = NRAW_GPU_CHAIN_FIRST;
 
-constexpr int PACKET_K2A = 2;
-constexpr int PACKET_K2B = 6;
+static_assert(sizeof KIND_OF == PACKETS && sizeof WGT_OF == PACKETS && sizeof SET_OF == PACKETS && sizeof CHAIN_FIRST == CHAINS,
+              "Tabellen in nraw_gpu.h: ein Eintrag je Paket und Kette");
+
+constexpr int PACKET_K2A = NRAW_GPU_PACKET_K2A;
+constexpr int PACKET_K2B = NRAW_GPU_PACKET_K2B;
 
 // Band und Platz in der Gruppenfolge des Pakets.
 struct Spot {

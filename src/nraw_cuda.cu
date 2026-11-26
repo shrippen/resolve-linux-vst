@@ -16,7 +16,7 @@
 
 namespace {
 
-constexpr int CURVE_OFFSET = 32768; // Mitte des Wavelet-Wertebereichs
+constexpr int CURVE_OFFSET = NRAW_GPU_CURVE_OFFSET;
 
 // Ebene der Star-Tetrix: Klasse im 2x2-Block (Zeile, Spalte): R(0,0) P(0,1) Q(1,0) S(1,1).
 // ROW/COL true = ungerade Gitterlage, bestimmt die Spiegelung am Rand.

@@ -33,7 +33,7 @@ constexpr size_t WIN_H = TILE_H + 2 * HALO;
 constexpr size_t WIN_W = TILE_W + 2 * HALO;
 constexpr size_t PLANES = 4;
 
-constexpr int CURVE_OFFSET = 32768; // Mitte des Wavelet-Wertebereichs
+constexpr int CURVE_OFFSET = NRAW_GPU_CURVE_OFFSET;
 
 // Ebenen im Fenster; die Namen sind die Klassen im 2x2-Block (Zeile, Spalte): R(0,0) P(0,1) Q(1,0) S(1,1).
 enum Plane { PR, PP, PQ, PS };

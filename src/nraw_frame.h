@@ -9,15 +9,15 @@
 
 namespace nraw {
 
-constexpr size_t WGT_COUNT = 25;
+constexpr size_t WGT_COUNT = NRAW_GPU_WGT;
 constexpr size_t PREC_HDR = 12;   // Lprc (3), Q, R, 7 Byte Zusatz
-constexpr size_t PKT_HDR = 7;     // Ldat 20, Lcnt 20, Lsgn 15 Bit
-constexpr size_t SIG_BYTES = 9;   // Signifikanz-Bits des Pakets
+constexpr size_t PKT_HDR = NRAW_GPU_PKT_HDR;     // Ldat 20, Lcnt 20, Lsgn 15 Bit
+constexpr size_t SIG_BYTES = NRAW_GPU_SIG_BYTES;   // Signifikanz-Bits des Pakets
 constexpr size_t PKT_FIXED = PKT_HDR + SIG_BYTES;
-constexpr int PACKETS = 8;
-constexpr int MAX_BANDS = 6;
-constexpr size_t GROUP = 4;       // Koeffizienten je Gruppe
-constexpr size_t SIG_RUN = 8;     // Gruppen je Signifikanz-Bit
+constexpr int PACKETS = NRAW_GPU_PACKETS;
+constexpr int MAX_BANDS = NRAW_GPU_BANDS;
+constexpr size_t GROUP = NRAW_GPU_GROUP;       // Koeffizienten je Gruppe
+constexpr size_t SIG_RUN = NRAW_GPU_SIG_RUN;     // Gruppen je Signifikanz-Bit
 
 enum class Kind { Low, High, One };
 
@@ -30,9 +30,19 @@ struct PacketDef {
 // K0 Helligkeit, K1/K3 Farbdifferenzen, K2 ohne Wavelet.
 enum Comp { K0, K1, K2, K3, COMPS };
 
+// Art und WGT-Eintrag stehen in nraw_gpu.h (gemeinsam mit der GPU), hier nur die Komponente.
+constexpr int PACKET_KIND[] = NRAW_GPU_PACKET_KIND;
+constexpr int PACKET_WGT[] = NRAW_GPU_PACKET_WGT;
+static_assert(sizeof PACKET_KIND / sizeof *PACKET_KIND == PACKETS && sizeof PACKET_WGT / sizeof *PACKET_WGT == PACKETS,
+              "Pakettabellen: ein Eintrag je Paket");
+static_assert(int(Kind::Low) == NRAW_GPU_LOW && int(Kind::High) == NRAW_GPU_HIGH && int(Kind::One) == NRAW_GPU_ONE,
+              "Kind und NrawGpuKind müssen übereinstimmen");
+
 constexpr PacketDef PACKET_DEF[PACKETS] = {
-    {Kind::Low, 0, K0},  {Kind::Low, 6, K1},  {Kind::One, 12, K2},  {Kind::Low, 13, K3},
-    {Kind::High, 19, K0}, {Kind::High, 21, K1}, {Kind::One, 12, K2}, {Kind::High, 23, K3},
+    {Kind(PACKET_KIND[0]), PACKET_WGT[0], K0}, {Kind(PACKET_KIND[1]), PACKET_WGT[1], K1},
+    {Kind(PACKET_KIND[2]), PACKET_WGT[2], K2}, {Kind(PACKET_KIND[3]), PACKET_WGT[3], K3},
+    {Kind(PACKET_KIND[4]), PACKET_WGT[4], K0}, {Kind(PACKET_KIND[5]), PACKET_WGT[5], K1},
+    {Kind(PACKET_KIND[6]), PACKET_WGT[6], K2}, {Kind(PACKET_KIND[7]), PACKET_WGT[7], K3},
 };
 
 struct Header {

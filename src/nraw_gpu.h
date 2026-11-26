@@ -46,9 +46,33 @@ enum NrawGpuStatus {
 
 // Paketarten: tief (LL5, HL5..HL1), hoch (LH1, HH1), eins (K2 ohne Wavelet).
 enum NrawGpuKind { NRAW_GPU_LOW, NRAW_GPU_HIGH, NRAW_GPU_ONE, NRAW_GPU_KINDS };
+
+// Feste Zahlen des Formats: einzige Quelle für CPU, CUDA-Steuerung und Kernel.
 #define NRAW_GPU_BANDS 6
-#define NRAW_GPU_PACKETS 8   // Pakete je Precinct
-#define NRAW_GPU_WGT 25      // Einträge der Abschneidetabelle je Precinct
+#define NRAW_GPU_PACKETS 8     // Pakete je Precinct
+#define NRAW_GPU_WGT 25        // Einträge der Abschneidetabelle je Precinct
+#define NRAW_GPU_SLICE_PRECS 16 // Precincts je Slice
+#define NRAW_GPU_CHAINS 7      // parallele Ketten je Slice
+#define NRAW_GPU_GROUP 4       // Koeffizienten je Gruppe
+#define NRAW_GPU_PLANE_SETS 8  // Ebenen im Upload (Stufe A) und im Arbeitsspeicher
+#define NRAW_GPU_PKT_HDR 7     // Bytes des Paketkopfs
+#define NRAW_GPU_SIG_BYTES 9   // Signifikanz-Bytes des Pakets
+#define NRAW_GPU_SIG_RUN 8     // Gruppen je Signifikanz-Bit
+#define NRAW_GPU_FQ_SHIFT 4
+#define NRAW_GPU_MAX_GCLI 18   // Bw
+#define NRAW_GPU_PACKET_K2A 2  // K2 Zeile 0
+#define NRAW_GPU_PACKET_K2B 6  // K2 Zeile 1
+#define NRAW_GPU_CURVE_OFFSET 32768 // Mitte des Wavelet-Wertebereichs
+
+// Pakettabelle (Index = Paketnummer). Art, erster Eintrag der Abschneidetabelle, Ebenensatz im
+// Puffer (K0 tief 0, K0 hoch 1, K1 tief 2, K1 hoch 3, K3 tief 4, K3 hoch 5, K2 6) und die ersten
+// Pakete der Ketten (2 = die Pakete 2 und 6 zusammen).
+#define NRAW_GPU_PACKET_KIND                                                                      \
+    { NRAW_GPU_LOW, NRAW_GPU_LOW, NRAW_GPU_ONE, NRAW_GPU_LOW, NRAW_GPU_HIGH, NRAW_GPU_HIGH,       \
+      NRAW_GPU_ONE, NRAW_GPU_HIGH }
+#define NRAW_GPU_PACKET_WGT { 0, 6, 12, 13, 19, 21, 12, 23 }
+#define NRAW_GPU_PACKET_SET { 0, 2, 6, 4, 1, 3, 6, 5 }
+#define NRAW_GPU_CHAIN_FIRST { 0, 1, 2, 3, 4, 5, 7 }
 
 // Bänder je Paketart: Gruppenzahl (4 Koeffizienten) und gültige Koeffizienten.
 struct NrawGpuLayout {

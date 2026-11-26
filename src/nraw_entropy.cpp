@@ -12,11 +12,11 @@ namespace nraw {
 
 namespace {
 
-constexpr int MAX_GCLI = 18; // Bw
+constexpr int MAX_GCLI = NRAW_GPU_MAX_GCLI;
 constexpr int MAX_TRUNC = 15;
-constexpr int FQ_SHIFT = 4;
-constexpr int PACKET_K2A = 2; // K2 Zeile 0
-constexpr int PACKET_K2B = 6; // K2 Zeile 1
+constexpr int FQ_SHIFT = NRAW_GPU_FQ_SHIFT;
+constexpr int PACKET_K2A = NRAW_GPU_PACKET_K2A;
+constexpr int PACKET_K2B = NRAW_GPU_PACKET_K2B;
 
 // Bitleser, MSB zuerst. Hinter dem Ende liefert er 0 und merkt es sich (bad): ein solcher Strom
 // ist beschädigt, die danach gelesenen Werte zählen nicht.
