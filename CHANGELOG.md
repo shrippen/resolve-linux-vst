@@ -3,7 +3,7 @@
 The release notes of resolve-linux-vst, newest first. Each section is the text of the release on
 Gitea and GitHub and of its entry in `#changes` on the landing page (`docs/index.html`).
 
-## [2.0.0] — 2026-11-26
+## [2.0.0] — 2026-11-27
 
 ### English
 
