@@ -99,9 +99,19 @@ jobs:
       - name: Release notes from CHANGELOG.md
         run: scripts/release-notes.sh "${GITHUB_REF_NAME#v}" > "$RUNNER_TEMP/notes.md"
       - run: sudo apt-get update -qq && sudo apt-get install -y -qq nasm
+      # nvcc for the N-RAW GPU library. CUDA 12.0 writes PTX 8.0, which every
+      # driver from 525 on compiles; a newer toolkit would raise that minimum.
+      - name: CUDA compiler
+        run: |
+          wget -q https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb
+          sudo dpkg -i cuda-keyring_1.1-1_all.deb
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends cuda-nvcc-12-0 cuda-driver-dev-12-0
+      # Without nvcc the Makefile skips the GPU library; the release must not.
       - name: Build archive
         run: |
-          make -j"$(nproc)" dist VERSION="${GITHUB_REF_NAME#v}" MAKEFLAGS=-j"$(nproc)"
+          make -j"$(nproc)" dist VERSION="${GITHUB_REF_NAME#v}" NVCC=/usr/local/cuda-12.0/bin/nvcc MAKEFLAGS=-j"$(nproc)"
+          tar -tzf "build/dist/resolve-linux-vst-${GITHUB_REF_NAME#v}-x86_64.tar.gz" | grep -q 'libresolve-linux-vst-nraw-cuda.so$'
           cp "build/dist/resolve-linux-vst-${GITHUB_REF_NAME#v}-x86_64.tar.gz" resolve-linux-vst-x86_64.tar.gz
           sha256sum resolve-linux-vst-x86_64.tar.gz > resolve-linux-vst-x86_64.tar.gz.sha256
       # GitHub gets the notes from CHANGELOG.md, the archive and the FFmpeg

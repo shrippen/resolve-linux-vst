@@ -6,10 +6,11 @@
 //                   ▲
 //                   └─ hier: Sprung auf nrawDecode; das Original bleibt über ein Trampolin erreichbar
 //
-// RESOLVE_LINUX_VST_NRAW_DECODE=1: der eigene Decoder (nraw_decode.h) dekodiert statt fastticolib,
+// Standard: der eigene Decoder (nraw_decode.h) dekodiert statt fastticolib,
 // die ersten Bilder und jedes 500. dekodiert zusätzlich RED zum Vergleich; bei einer Abweichung
-// oder jedem Fehler dekodiert RED. =probe: Messmodus (nraw_probe.h), ruft immer das Original und
-// protokolliert, womit es gerufen wird, was es verändert, wie oft und wie parallel es läuft.
+// oder jedem Fehler dekodiert RED. RESOLVE_LINUX_VST_NRAW_DECODE=0: nur RED. =probe: Messmodus
+// (nraw_probe.h), ruft immer das Original und protokolliert, womit es gerufen wird, was es
+// verändert, wie oft und wie parallel es läuft.
 // Fremden Speicher liest der Ersatz nur über process_vm_readv: Ein ungültiger Zeiger kostet
 // eine Messung, keinen Absturz.
 
@@ -37,7 +38,7 @@ namespace {
 
 constexpr const char *kEnvMode = "RESOLVE_LINUX_VST_NRAW_DECODE";
 constexpr const char *kModeProbe = "probe";
-constexpr const char *kModeOwn = "1";
+constexpr const char *kModeOff = "0";
 constexpr const char *kLibSuffix = "REDR3D-x64.so";
 
 DecodeFn gOriginal = nullptr;
@@ -50,13 +51,10 @@ Mode mode()
 {
     static const Mode m = [] {
         const char *env = getenv(kEnvMode);
-        if (!isResolveMain() || !env) {
+        if (!isResolveMain() || (env && strcmp(env, kModeOff) == 0)) {
             return Mode::Off;
         }
-        if (strcmp(env, kModeProbe) == 0) {
-            return Mode::Probe;
-        }
-        return strcmp(env, kModeOwn) == 0 ? Mode::Own : Mode::Off;
+        return env && strcmp(env, kModeProbe) == 0 ? Mode::Probe : Mode::Own;
     }();
     return m;
 }
